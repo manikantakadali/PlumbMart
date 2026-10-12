@@ -133,9 +133,6 @@ app.post('/api/auth/send-otp', async (req, res) => {
     // For non-customer roles (Dealer, Plumber, Admin demo testing), include demoOtp to preserve testing
     if (selectedRole !== 'customer') {
       responsePayload.demoOtp = otp;
-    } else if (!process.env.OTP_PROVIDER_API_KEY) {
-      // In local development when 3rd-party SMS credits are not set, provide devCode for testing
-      responsePayload.devCode = otp;
     }
 
     return res.json(responsePayload);
@@ -177,8 +174,6 @@ app.post('/api/auth/resend-otp', async (req, res) => {
 
     if (selectedRole !== 'customer') {
       responsePayload.demoOtp = otp;
-    } else if (!process.env.OTP_PROVIDER_API_KEY) {
-      responsePayload.devCode = otp;
     }
 
     return res.json(responsePayload);

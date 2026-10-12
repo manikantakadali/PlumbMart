@@ -321,8 +321,8 @@ export default function App() {
         setDemoOtp(res.demoOtp);
         setOtpInput(res.demoOtp);
       } else {
-        setDemoOtp(res.devCode || res.demoOtp || null);
-        setOtpInput(''); // Customer enters code
+        setDemoOtp(null);
+        setOtpInput(''); // Customer enters code from phone SMS
       }
       setAuthStep('OTP');
     } catch (err) {

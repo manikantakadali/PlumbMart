@@ -86,14 +86,12 @@ export default function OtpVerificationScreen({
         </span>
       </div>
 
-      {/* Dev / Test helper badge */}
-      {demoOtp && (
+      {/* Demo helper badge - ONLY for non-customer roles (Dealer, Plumber, Admin) */}
+      {!isCustomer && demoOtp && (
         <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between">
           <span className="flex items-center gap-1.5">
             <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="text-[11px] font-semibold">
-              {isCustomer ? 'Verification Code (Dev Fallback):' : `${role.toUpperCase()} Demo Code:`}
-            </span>
+            <span className="text-[11px] font-semibold">{role.toUpperCase()} Demo Code:</span>
           </span>
           <span className="font-mono font-black text-sm text-amber-300 bg-amber-900/80 px-2 py-0.5 rounded border border-amber-500/50">
             {demoOtp}
