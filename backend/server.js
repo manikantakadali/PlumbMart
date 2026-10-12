@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { getStore, saveStore, resetStore } = require('./store');
@@ -7,6 +8,7 @@ const {
   zohoInventoryService,
   zohoDealerService
 } = require('./services/zoho');
+const { checkConnection } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -15,11 +17,18 @@ app.use(cors());
 app.use(express.json());
 
 // Health & System Overview
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
   const store = getStore();
+  const dbStatus = await checkConnection();
   res.json({
     status: 'OK',
     service: 'PlumbMart API Server',
+    database: {
+      provider: 'Supabase PostgreSQL',
+      connected: dbStatus.connected,
+      serverTime: dbStatus.time || null,
+      error: dbStatus.error || null
+    },
     zohoSync: store.zohoMeta
   });
 });
@@ -978,6 +987,12 @@ app.post('/api/admin/reset-demo', (req, res) => {
   res.json({ success: true, message: 'Demo store reset to initial state.', store: fresh });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`PlumbMart Backend API running on http://localhost:${PORT}`);
+  const dbStatus = await checkConnection();
+  if (dbStatus.connected) {
+    console.log(`Connected to Supabase PostgreSQL (Server Time: ${dbStatus.time})`);
+  } else {
+    console.log(`Supabase Database Status: ${dbStatus.error || 'Not configured'}`);
+  }
 });
