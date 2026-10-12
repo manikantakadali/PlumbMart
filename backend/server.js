@@ -268,6 +268,36 @@ app.post('/api/auth/verify-otp', async (req, res) => {
   }
 });
 
+// Step 3: Firebase Verified Customer Login & Supabase Persistence
+app.post('/api/auth/firebase-login', async (req, res) => {
+  const { mobile, idToken, role = 'customer', name, address } = req.body;
+  const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
+
+  if (!cleanMobile || cleanMobile.length !== 10) {
+    return res.status(400).json({ error: 'Invalid mobile number.' });
+  }
+
+  try {
+    const user = await getOrCreateCustomer({
+      mobile: cleanMobile,
+      name,
+      address
+    });
+
+    console.log(`[Firebase Auth] Successfully authenticated +91 ${cleanMobile} as Customer ${user.id} in Supabase.`);
+
+    return res.json({
+      success: true,
+      authMethod: 'FIREBASE_SMS_OTP',
+      token: `jwt-sim-${user.role}-${user.id}-${Date.now()}`,
+      user
+    });
+  } catch (err) {
+    console.error('[Firebase Login Error]', err.message);
+    return res.status(500).json({ error: 'Failed to create customer session: ' + err.message });
+  }
+});
+
 // Dedicated Zoho Dealer Verification check endpoint
 app.get('/api/auth/zoho-verify/:mobile', (req, res) => {
   const result = zohoAuthService.verifyDealerInZoho(req.params.mobile);

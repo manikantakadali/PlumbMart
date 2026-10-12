@@ -61,6 +61,7 @@ import PlumberNotifications from './components/plumber/PlumberNotifications';
 // Admin Portal & Blueprint
 import AdminPortal from './components/AdminPortal';
 import BlueprintAndComparison from './components/BlueprintAndComparison';
+import { sendFirebaseOtp, verifyFirebaseOtp } from './firebase';
 
 export default function App() {
   const [mainView, setMainView] = useState('mobile'); // 'mobile' | 'admin' | 'blueprint'
@@ -291,13 +292,27 @@ export default function App() {
     }
   };
 
-  // Auth: Send OTP
-  // Auth: Send OTP via SMS
+  // Auth: Send OTP via SMS (Firebase Phone Auth with Backend Gateway Fallback)
   const handleSendOtp = async (e) => {
     if (e) e.preventDefault();
     setAuthError(null);
     setSmsNotice('');
     setOtpInput('');
+
+    // If customer, try Firebase Phone Auth first for live Google SMS delivery
+    if (selectedRole === 'customer') {
+      try {
+        console.log(`[Firebase Auth] Dispatching SMS to +91 ${mobileInput}...`);
+        await sendFirebaseOtp(mobileInput, 'recaptcha-container');
+        setSmsNotice(`Real SMS OTP sent via Firebase to +91 ${mobileInput}`);
+        setDemoOtp(null);
+        setOtpInput('');
+        setAuthStep('OTP');
+        return;
+      } catch (fbErr) {
+        console.warn('[Firebase Auth] Notice:', fbErr.message, 'Proceeding with backend SMS dispatch...');
+      }
+    }
 
     try {
       const res = await zohoAuthService.requestOtp(mobileInput, selectedRole, nameInput);
@@ -307,7 +322,7 @@ export default function App() {
         setOtpInput(res.demoOtp);
       } else {
         setDemoOtp(null);
-        setOtpInput(''); // Customer enters real OTP received on actual phone
+        setOtpInput(''); // Customer enters real OTP received on phone
       }
       setAuthStep('OTP');
     } catch (err) {
@@ -318,6 +333,17 @@ export default function App() {
   // Auth: Resend OTP via SMS with cooldown
   const handleResendOtp = async () => {
     setAuthError(null);
+
+    if (selectedRole === 'customer') {
+      try {
+        await sendFirebaseOtp(mobileInput, 'recaptcha-container');
+        setSmsNotice(`Fresh SMS OTP sent via Firebase to +91 ${mobileInput}`);
+        return;
+      } catch (fbResendErr) {
+        console.warn('Firebase resend notice:', fbResendErr.message);
+      }
+    }
+
     try {
       const res = await zohoAuthService.resendOtp(mobileInput, selectedRole, nameInput);
       setSmsNotice(res.message);
@@ -338,6 +364,25 @@ export default function App() {
     setAuthError(null);
     setIsVerifying(true);
     try {
+      // 1. If Firebase session is active, confirm with Firebase
+      if (selectedRole === 'customer' && window.confirmationResult) {
+        try {
+          const fbResult = await verifyFirebaseOtp(otpInput);
+          const res = await zohoAuthService.firebaseLogin({
+            mobile: mobileInput,
+            idToken: fbResult.idToken,
+            role: 'customer',
+            name: nameInput
+          });
+          window.confirmationResult = null;
+          await loginSuccess(res.user);
+          return;
+        } catch (fbVerifyErr) {
+          console.warn('[Firebase Verify] Confirmation notice:', fbVerifyErr.message, 'Falling back to backend verification...');
+        }
+      }
+
+      // 2. Standard / Backend OTP verification
       const res = await zohoAuthService.verifyOtp(
         mobileInput,
         otpInput,
@@ -880,6 +925,9 @@ export default function App() {
 
               {/* Scrollable Screen Body */}
               <div className="flex-1 overflow-y-auto p-4 flex flex-col">
+                {/* Invisible reCAPTCHA container for Firebase Phone Auth */}
+                <div id="recaptcha-container"></div>
+
                 {/* 1. Splash */}
                 {authStep === 'SPLASH' && (
                   <SplashScreen onStart={() => setAuthStep('LOGIN')} />

@@ -41,5 +41,15 @@ export const zohoAuthService = {
       method: 'POST',
       body: JSON.stringify({ mobile, role, name })
     });
+  },
+
+  /**
+   * Complete Firebase Phone Authentication & session setup in backend
+   */
+  firebaseLogin: async ({ mobile, idToken, role = 'customer', name, address }) => {
+    return await apiRequest('/api/auth/firebase-login', {
+      method: 'POST',
+      body: JSON.stringify({ mobile, idToken, role, name, address })
+    });
   }
 };
