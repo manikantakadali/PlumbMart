@@ -27,6 +27,12 @@ export function setupRecaptcha(containerId = 'recaptcha-container') {
   if (typeof window === 'undefined') return null;
 
   try {
+    const container = document.getElementById(containerId);
+    if (!container) {
+      console.warn(`reCAPTCHA container #${containerId} not found in DOM.`);
+      return null;
+    }
+
     if (window.recaptchaVerifier) {
       try {
         window.recaptchaVerifier.clear();
@@ -36,7 +42,7 @@ export function setupRecaptcha(containerId = 'recaptcha-container') {
     window.recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
       size: 'invisible',
       callback: () => {
-        // reCAPTCHA solved - allow signInWithPhoneNumber
+        // reCAPTCHA solved
       },
       'expired-callback': () => {
         console.warn('reCAPTCHA expired, resetting...');
@@ -68,7 +74,24 @@ export async function sendFirebaseOtp(rawMobile, containerId = 'recaptcha-contai
     throw new Error('reCAPTCHA verifier could not be initialized.');
   }
 
-  const confirmationResult = await signInWithPhoneNumber(auth, formattedPhone, appVerifier);
+  // 5-second timeout to prevent hanging if Google scripts are blocked by network or adblocker
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(
+      () =>
+        reject(
+          new Error(
+            'Firebase Phone Auth timed out (Network blocked apis.google.com or Phone Auth not enabled in console).'
+          )
+        ),
+      5000
+    )
+  );
+
+  const confirmationResult = await Promise.race([
+    signInWithPhoneNumber(auth, formattedPhone, appVerifier),
+    timeoutPromise
+  ]);
+
   window.confirmationResult = confirmationResult;
   return confirmationResult;
 }

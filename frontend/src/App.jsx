@@ -321,8 +321,8 @@ export default function App() {
         setDemoOtp(res.demoOtp);
         setOtpInput(res.demoOtp);
       } else {
-        setDemoOtp(null);
-        setOtpInput(''); // Customer enters real OTP received on phone
+        setDemoOtp(res.devCode || res.demoOtp || null);
+        setOtpInput(''); // Customer enters code
       }
       setAuthStep('OTP');
     } catch (err) {
@@ -965,7 +965,7 @@ export default function App() {
                     role={selectedRole}
                     otpInput={otpInput}
                     onChangeOtp={setOtpInput}
-                    demoOtp={selectedRole !== 'customer' ? demoOtp : null}
+                    demoOtp={demoOtp}
                     error={authError}
                     smsNotice={smsNotice}
                     isVerifying={isVerifying}
