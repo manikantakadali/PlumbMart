@@ -1,0 +1,174 @@
+import React from 'react';
+import {
+  Truck,
+  CheckCircle2,
+  Clock,
+  Package,
+  Wrench,
+  MapPin,
+  Calendar,
+  CreditCard
+} from 'lucide-react';
+
+export default function CustomerOrderTracking({ orders, activeOrder, onSelectOrder }) {
+  const current = activeOrder || (orders && orders[0]) || null;
+
+  if (!orders || orders.length === 0) {
+    return (
+      <div className="p-8 text-center bg-slate-950 rounded-2xl border border-slate-800 my-4 space-y-2">
+        <Truck className="w-8 h-8 text-slate-600 mx-auto" />
+        <h3 className="text-sm font-bold text-white">No Orders Found</h3>
+        <p className="text-xs text-slate-400">You have not placed any orders yet.</p>
+      </div>
+    );
+  }
+
+  const steps = ['Placed', 'Confirmed', 'Processing', 'Shipped', 'Delivered'];
+
+  return (
+    <div className="space-y-4 py-2">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">
+          Order Tracking ({orders.length})
+        </h2>
+      </div>
+
+      {/* Order Selector Chips if multiple orders */}
+      {orders.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {orders.map((ord) => (
+            <button
+              key={ord.id}
+              onClick={() => onSelectOrder(ord)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold whitespace-nowrap transition ${
+                current?.id === ord.id
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
+              }`}
+            >
+              {ord.id}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {current && (
+        <div className="space-y-4">
+          {/* Order Details Header Card */}
+          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="font-mono font-bold text-sm text-blue-400">{current.id}</span>
+                <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                  <span>
+                    {current.orderDate ? new Date(current.orderDate).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric'
+                    }) : 'Recent'}
+                  </span>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                {current.orderStatus}
+              </span>
+            </div>
+
+            {/* Required details: Products, Quantity, Amount, Payment status */}
+            <div className="pt-2 border-t border-slate-900 space-y-2 text-xs">
+              <div className="font-semibold text-slate-300">Purchased Products:</div>
+              <div className="space-y-1">
+                {current.items.map((item, idx) => (
+                  <div key={idx} className="flex justify-between text-[11px]">
+                    <span className="text-slate-300">
+                      {item.name} <strong className="text-white font-mono">(Qty: {item.qty})</strong>
+                    </span>
+                    <span className="font-mono text-emerald-400 font-semibold">
+                      ₹{item.total.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-2 border-t border-slate-900 flex justify-between font-bold text-sm">
+                <span className="text-slate-300">Total Order Amount:</span>
+                <span className="text-emerald-400 font-mono">
+                  ₹{current.totalAmount.toLocaleString('en-IN')}
+                </span>
+              </div>
+
+              <div className="flex justify-between text-[11px] text-slate-400">
+                <span className="flex items-center gap-1">
+                  <CreditCard className="w-3.5 h-3.5 text-emerald-400" /> Payment Status:
+                </span>
+                <span className="font-semibold text-emerald-400">
+                  {current.paymentStatus} ({current.paymentSubType})
+                </span>
+              </div>
+            </div>
+
+            {/* Assigned Plumber Section */}
+            {current.assignedPlumberName && (
+              <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-500/30 flex items-start gap-2.5 text-xs">
+                <Wrench className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-purple-200">
+                    Assigned Installation Partner: {current.assignedPlumberName}
+                  </div>
+                  <div className="text-[11px] text-slate-300 mt-0.5">
+                    {current.plumberNotes || 'Site inspection and installation support assigned.'}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Stepper Timeline (Placed -> Confirmed -> Processing -> Shipped -> Delivered) */}
+          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Delivery &amp; Installation Progress
+            </h3>
+
+            <div className="space-y-4 pt-1">
+              {(current.trackingTimeline || []).map((step, idx) => (
+                <div key={idx} className="flex items-start gap-3 relative">
+                  {/* Step Icon */}
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-xs font-bold z-10 ${
+                      step.done
+                        ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30'
+                        : 'bg-slate-800 text-slate-500 border border-slate-700'
+                    }`}
+                  >
+                    {step.done ? '✓' : idx + 1}
+                  </div>
+
+                  <div className="flex-1 pb-1">
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`text-xs font-bold ${
+                          step.done ? 'text-white' : 'text-slate-500'
+                        }`}
+                      >
+                        {step.step}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">{step.time}</span>
+                    </div>
+                    <p
+                      className={`text-[11px] mt-0.5 ${
+                        step.done ? 'text-slate-300' : 'text-slate-600'
+                      }`}
+                    >
+                      {step.detail}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

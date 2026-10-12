@@ -1,6 +1,12 @@
 const express = require('express');
 const cors = require('cors');
 const { getStore, saveStore, resetStore } = require('./store');
+const {
+  zohoAuthService,
+  zohoProductService,
+  zohoInventoryService,
+  zohoDealerService
+} = require('./services/zoho');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -8,7 +14,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Health & Overview
+// Health & System Overview
 app.get('/api/health', (req, res) => {
   const store = getStore();
   res.json({
@@ -18,7 +24,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Demo accounts helper endpoint for quick interview testing
+// Demo accounts endpoint for quick testing
 app.get('/api/auth/demo-accounts', (req, res) => {
   const store = getStore();
   res.json({
@@ -29,7 +35,11 @@ app.get('/api/auth/demo-accounts', (req, res) => {
   });
 });
 
-// 1. LOGIN & REGISTRATION (OTP ONLY)
+// =========================================================================
+// 1 & 2. AUTHENTICATION & REGISTRATION (OTP ONLY + ZOHO / KYC VERIFICATION)
+// =========================================================================
+
+// Step 1: Send OTP
 app.post('/api/auth/send-otp', (req, res) => {
   const { mobile, role, name } = req.body;
   if (!mobile || !/^\d{10}$/.test(String(mobile).trim())) {
@@ -40,46 +50,48 @@ app.post('/api/auth/send-otp', (req, res) => {
   const selectedRole = (role || 'customer').toLowerCase();
   const store = getStore();
 
-  // Role-specific pre-checks before sending OTP
+  // DEALER: Check Zoho CRM Verification before issuing OTP
   if (selectedRole === 'dealer') {
-    const dealer = store.users.dealers.find((d) => d.mobile === cleanMobile);
-    if (!dealer) {
+    const verification = zohoAuthService.verifyDealerInZoho(cleanMobile);
+    if (!verification.isRegistered) {
       return res.status(403).json({
         code: 'ZOHO_NOT_REGISTERED',
-        error: 'Dealer mobile number not found in Zoho CRM / Workbook registry. Dealers can login ONLY if registered in Zoho.'
+        error: 'Dealer mobile number not registered in Zoho CRM. Dealers can login ONLY if pre-registered in Zoho.'
       });
     }
-    if (!dealer.zohoVerified) {
+    if (!verification.isVerified) {
       return res.status(403).json({
         code: 'ZOHO_NOT_VERIFIED',
-        dealerName: dealer.name,
-        zohoContactId: dealer.zohoContactId,
-        error: `Dealer "${dealer.name}" is registered (${dealer.zohoContactId}) but NOT YET VERIFIED in Zoho. Please ask Admin to approve Zoho Verification.`
+        dealerName: verification.dealerName,
+        zohoContactId: verification.zohoContactId,
+        error: verification.message
       });
     }
   }
 
+  // PLUMBER: Check trade registration
   if (selectedRole === 'plumber') {
     const plumber = store.users.plumbers.find((p) => p.mobile === cleanMobile);
     if (!plumber) {
       return res.status(403).json({
         code: 'PLUMBER_NOT_FOUND',
-        error: 'Plumber mobile number is not registered in the Plumber Verification Portal.'
+        error: 'Plumber mobile number is not registered in the Plumber Verification Registry.'
       });
     }
   }
 
+  // ADMIN: Check admin registry
   if (selectedRole === 'admin') {
     const admin = store.users.admins.find((a) => a.mobile === cleanMobile);
     if (!admin) {
       return res.status(403).json({
         code: 'ADMIN_NOT_FOUND',
-        error: 'Unauthorized admin mobile number.'
+        error: 'Unauthorized mobile number for Admin access.'
       });
     }
   }
 
-  // Generate 6-digit OTP (default 123456 for smooth interview testing)
+  // Generate OTP (123456 for interview demo convenience)
   const otp = '123456';
   store.otpSessions[cleanMobile] = {
     mobile: cleanMobile,
@@ -98,6 +110,7 @@ app.post('/api/auth/send-otp', (req, res) => {
   });
 });
 
+// Step 2: Verify OTP & Return User Profile
 app.post('/api/auth/verify-otp', (req, res) => {
   const { mobile, otp, role, name, address } = req.body;
   const cleanMobile = String(mobile || '').trim();
@@ -106,7 +119,7 @@ app.post('/api/auth/verify-otp', (req, res) => {
 
   const session = store.otpSessions[cleanMobile];
   if (!session || (otp !== '123456' && otp !== session.otp)) {
-    return res.status(400).json({ error: 'Invalid OTP. Use demo OTP 123456.' });
+    return res.status(400).json({ error: 'Invalid OTP. Please enter demo OTP 123456.' });
   }
 
   let user = null;
@@ -114,26 +127,37 @@ app.post('/api/auth/verify-otp', (req, res) => {
   if (selectedRole === 'customer') {
     user = store.users.customers.find((c) => c.mobile === cleanMobile);
     if (!user) {
-      // Auto-register new Customer via mobile OTP
+      // Auto-register new customer via mobile OTP
       user = {
         id: `CUST-0${store.users.customers.length + 1}`,
         role: 'customer',
         name: name?.trim() || `Customer (${cleanMobile.slice(-4)})`,
         mobile: cleanMobile,
         email: `user${cleanMobile.slice(-4)}@example.com`,
-        address: address?.trim() || 'Plot 12, Jubilee Hills, Hyderabad - 500033',
-        createdAt: new Date().toISOString()
+        address: address?.trim() || 'Flat 402, Green Valley Residency, Madhapur, Hyderabad',
+        createdAt: new Date().toISOString(),
+        notifications: [
+          {
+            id: `NOTIF-CUST-${Date.now()}`,
+            type: 'GENERAL',
+            title: 'Welcome to PlumbMart!',
+            message: 'Your account is ready. Browse high quality CPVC pipes & plumbing fittings.',
+            time: 'Just now',
+            read: false
+          }
+        ]
       };
       store.users.customers.push(user);
     }
   } else if (selectedRole === 'dealer') {
-    user = store.users.dealers.find((d) => d.mobile === cleanMobile);
-    if (!user || !user.zohoVerified) {
+    const verification = zohoAuthService.verifyDealerInZoho(cleanMobile);
+    if (!verification.isVerified) {
       return res.status(403).json({
         code: 'ZOHO_VERIFICATION_FAILED',
-        error: 'Dealer login blocked: Mobile number must be registered and verified in Zoho.'
+        error: 'Dealer access denied: Must be registered and verified in Zoho CRM.'
       });
     }
+    user = store.users.dealers.find((d) => d.mobile === cleanMobile);
   } else if (selectedRole === 'plumber') {
     user = store.users.plumbers.find((p) => p.mobile === cleanMobile);
     if (!user) {
@@ -156,139 +180,68 @@ app.post('/api/auth/verify-otp', (req, res) => {
   });
 });
 
-// 2. PRODUCTS & PRICING (SYNCHRONISED FROM ZOHO WORKBOOK)
-// Role-aware endpoint:
-// - Customers see customerPrice and availability status, NEVER stockQuantity!
-// - Dealers see dealerPrice, customerPrice, and exact stockQuantity!
+// Dedicated Zoho Dealer Verification check endpoint (showcasing Zoho integration)
+app.get('/api/auth/zoho-verify/:mobile', (req, res) => {
+  const result = zohoAuthService.verifyDealerInZoho(req.params.mobile);
+  res.json(result);
+});
+
+// =========================================================================
+// 6. PRODUCTS & PRICING (FETCHED/SYNCHRONISED FROM ZOHO WORKBOOK)
+// =========================================================================
+// STRICT ROLE-BASED VISIBILITY:
+// CUSTOMER: Product YES, Price YES, Stock Quantity NO (stripped at API level)
+// DEALER: Product YES, Price YES, Stock Quantity YES
+// PLUMBER: Show technical installation requirements
+// ADMIN: Full visibility
 app.get('/api/products', (req, res) => {
   const role = (req.query.role || 'customer').toLowerCase();
-  const categoryId = req.query.categoryId;
-  const search = (req.query.search || '').toLowerCase().trim();
+  const categoryId = req.query.categoryId || 'all';
+  const search = req.query.search || '';
 
   const store = getStore();
-  let list = [...store.zohoWorkbookProducts];
-
-  if (categoryId && categoryId !== 'all') {
-    list = list.filter((p) => p.categoryId === categoryId);
-  }
-  if (search) {
-    list = list.filter(
-      (p) =>
-        p.name.toLowerCase().includes(search) ||
-        p.sku.toLowerCase().includes(search) ||
-        p.brand.toLowerCase().includes(search) ||
-        p.categoryName.toLowerCase().includes(search)
-    );
-  }
-
-  const transformed = list.map((p) => {
-    if (role === 'customer') {
-      // STRICT REQUIREMENT: Customers can view products and prices but CANNOT see stock quantity
-      return {
-        id: p.id,
-        sku: p.sku,
-        name: p.name,
-        categoryId: p.categoryId,
-        categoryName: p.categoryName,
-        brand: p.brand,
-        unit: p.unit,
-        price: p.customerPrice,
-        mrp: p.mrp,
-        inStock: p.stockQuantity > 0,
-        stockVisibility: 'HIDDEN_FOR_CUSTOMER',
-        specifications: p.specifications,
-        image: p.image
-      };
-    }
-
-    if (role === 'dealer') {
-      // STRICT REQUIREMENT: Dealers can view available stock quantity & wholesale pricing
-      return {
-        id: p.id,
-        sku: p.sku,
-        zohoRowId: p.zohoRowId,
-        name: p.name,
-        categoryId: p.categoryId,
-        categoryName: p.categoryName,
-        brand: p.brand,
-        unit: p.unit,
-        price: p.dealerPrice,
-        dealerPrice: p.dealerPrice,
-        customerPrice: p.customerPrice,
-        mrp: p.mrp,
-        stockQuantity: p.stockQuantity,
-        inStock: p.stockQuantity > 0,
-        minDealerOrderQty: p.minDealerOrderQty,
-        stockVisibility: 'VISIBLE_FOR_DEALER',
-        specifications: p.specifications,
-        image: p.image
-      };
-    }
-
-    // Plumber or Admin
-    return {
-      ...p,
-      price: role === 'plumber' ? p.customerPrice : p.dealerPrice,
-      inStock: p.stockQuantity > 0
-    };
-  });
+  const products = zohoProductService.getProductsByRole(role, categoryId, search);
 
   res.json({
     role,
     zohoMeta: store.zohoMeta,
     categories: store.categories,
-    products: transformed
+    products
   });
 });
 
-// Zoho Workbook Sync & Live Row Update (for Admin & Zoho Integration showcase)
+// Zoho Workbook Sync trigger
 app.post('/api/zoho/sync', (req, res) => {
-  const store = getStore();
-  store.zohoMeta.lastSyncedAt = new Date().toISOString();
-  store.zohoMeta.totalSyncedRows = store.zohoWorkbookProducts.length;
-  store.zohoMeta.syncStatus = 'SYNCED_OK';
-  saveStore(store);
-
+  const result = zohoProductService.synchroniseWorkbook();
   res.json({
     success: true,
-    message: 'Synchronised products, pricing, and stock quantities from Zoho Workbook.',
-    zohoMeta: store.zohoMeta,
-    products: store.zohoWorkbookProducts
+    message: 'Synchronised products, pricing, and stock from Zoho Workbook.',
+    ...result
   });
 });
 
+// Edit Zoho Workbook Product Row
 app.put('/api/zoho/workbook/:productId', (req, res) => {
-  const { productId } = req.params;
-  const { customerPrice, dealerPrice, stockQuantity, minDealerOrderQty, name } = req.body;
-  const store = getStore();
-
-  const product = store.zohoWorkbookProducts.find((p) => p.id === productId);
-  if (!product) {
-    return res.status(404).json({ error: 'Product row not found in Zoho Workbook.' });
+  const updated = zohoProductService.updateProductInWorkbook(req.params.productId, req.body);
+  if (!updated) {
+    return res.status(404).json({ error: 'Product not found in Zoho Workbook.' });
   }
-
-  if (customerPrice !== undefined) product.customerPrice = Number(customerPrice);
-  if (dealerPrice !== undefined) product.dealerPrice = Number(dealerPrice);
-  if (stockQuantity !== undefined) product.stockQuantity = Number(stockQuantity);
-  if (minDealerOrderQty !== undefined) product.minDealerOrderQty = Number(minDealerOrderQty);
-  if (name !== undefined) product.name = name;
-
-  store.zohoMeta.lastSyncedAt = new Date().toISOString();
-  saveStore(store);
-
+  const store = getStore();
   res.json({
     success: true,
-    message: `Zoho Workbook Row (${product.zohoRowId}) updated & synced live.`,
-    product,
+    message: `Updated Zoho Workbook Row (${updated.zohoRowId}). Synced live.`,
+    product: updated,
     zohoMeta: store.zohoMeta
   });
 });
 
-// 3 & 4. CUSTOMER & DEALER ORDER CHECKOUT FLOW
+// =========================================================================
+// 9 & 10. ORDER FLOW & PAYMENTS (CUSTOMER & DEALER CHECKOUT)
+// =========================================================================
 app.post('/api/orders', (req, res) => {
   const { userId, role, items, paymentMethod, paymentSubType, shippingAddress } = req.body;
   if (!items || !Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: 'Cart is empty.' });
+    return res.status(400).json({ error: 'Cart is empty. Please add products.' });
   }
 
   const store = getStore();
@@ -304,21 +257,19 @@ app.post('/api/orders', (req, res) => {
     }
   }
 
-  // Calculate totals & validate stock
+  // 1. Check Zoho Workbook stock availability
+  const stockCheck = zohoInventoryService.checkStockAvailability(items);
+  if (!stockCheck.available) {
+    return res.status(400).json({ error: stockCheck.error });
+  }
+
+  // 2. Calculate totals
   let totalAmount = 0;
   const enrichedItems = [];
 
   for (const item of items) {
     const product = store.zohoWorkbookProducts.find((p) => p.id === item.productId);
-    if (!product) {
-      return res.status(400).json({ error: `Product ${item.productId} not found.` });
-    }
     const qty = Number(item.qty || 1);
-    if (product.stockQuantity < qty) {
-      return res.status(400).json({
-        error: `Insufficient stock in Zoho Workbook for ${product.name}. Available: ${product.stockQuantity}`
-      });
-    }
     const unitPrice = orderRole === 'dealer' ? product.dealerPrice : product.customerPrice;
     const lineTotal = unitPrice * qty;
     totalAmount += lineTotal;
@@ -331,59 +282,35 @@ app.post('/api/orders', (req, res) => {
     });
   }
 
-  // Validate Dealer Payment & Credit Rules
-  let paymentStatus = 'PAID';
+  // 3. Validate Dealer Payment and Credit Permissions
+  let paymentStatus = 'Successful';
   let creditDays = 0;
   let dueDate = 'Immediate';
 
   if (orderRole === 'dealer') {
-    if (paymentMethod === 'CREDIT_30_DAYS') {
-      if (!user.creditEligible || !user.credit30DaysAllowed) {
-        return res.status(403).json({
-          error: '30-Day Credit Payment is not enabled for your dealer account. Contact Admin.'
-        });
-      }
-      creditDays = 30;
-      const d = new Date();
-      d.setDate(d.getDate() + 30);
-      dueDate = d.toISOString().split('T')[0];
-      paymentStatus = 'CREDIT_ACTIVE (Due in 30 Days)';
-    } else if (paymentMethod === 'CREDIT_90_DAYS') {
-      if (!user.creditEligible || !user.credit90DaysAllowed) {
-        return res.status(403).json({
-          error: '90-Day Credit Payment is restricted to selected/approved dealers only.'
-        });
-      }
-      creditDays = 90;
-      const d = new Date();
-      d.setDate(d.getDate() + 90);
-      dueDate = d.toISOString().split('T')[0];
-      paymentStatus = 'CREDIT_ACTIVE (Due in 90 Days)';
+    const eligibility = zohoDealerService.validatePaymentEligibility(user.id, paymentMethod, totalAmount);
+    if (!eligibility.allowed) {
+      return res.status(403).json({ error: eligibility.error });
+    }
+    if (eligibility.creditDays) {
+      creditDays = eligibility.creditDays;
+      dueDate = eligibility.dueDate;
+      paymentStatus = 'Credit / Outstanding';
+      // Deduct available credit in Zoho Books ledger
+      zohoDealerService.utilizeCredit(user.id, totalAmount);
     } else {
-      paymentStatus = 'PAID (Upfront Dealer Settlement)';
-    }
-
-    if (creditDays > 0) {
-      const availableCredit = user.creditLimit - user.creditUsed;
-      if (totalAmount > availableCredit) {
-        return res.status(400).json({
-          error: `Order exceeds available Zoho Credit Limit (Available: ₹${availableCredit.toLocaleString('en-IN')}).`
-        });
-      }
-      user.creditUsed += totalAmount;
+      paymentStatus = 'Successful';
     }
   }
 
-  // Deduct stock in Zoho Workbook
-  for (const item of enrichedItems) {
-    const product = store.zohoWorkbookProducts.find((p) => p.id === item.productId);
-    if (product) {
-      product.stockQuantity = Math.max(0, product.stockQuantity - item.qty);
-    }
-  }
+  // 4. Deduct stock in Zoho Workbook
+  zohoInventoryService.deductStock(enrichedItems);
 
+  // 5. Create Order with Placed -> Confirmed -> Processing -> Shipped -> Delivered timeline
   const newOrderId = `ORD-2026-${100 + store.orders.length + 1}`;
-  const nowStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const dateStr = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
   const newOrder = {
     id: newOrderId,
@@ -394,38 +321,40 @@ app.post('/api/orders', (req, res) => {
     items: enrichedItems,
     totalAmount,
     paymentMethod: paymentMethod || (orderRole === 'customer' ? 'DIRECT_PAYMENT' : 'UPFRONT'),
-    paymentSubType: paymentSubType || (orderRole === 'customer' ? 'UPI / Online Direct Payment' : 'Dealer Checkout'),
-    paymentStatus,
+    paymentSubType: paymentSubType || (orderRole === 'customer' ? 'UPI Direct Payment' : 'Dealer Order'),
+    paymentStatus, // Pending | Successful | Failed | Credit / Outstanding
+    orderStatus: 'Confirmed', // Placed -> Confirmed -> Processing -> Shipped -> Delivered
     creditDays,
     dueDate,
-    orderStatus: 'CONFIRMED',
     assignedPlumberId: orderRole === 'customer' ? 'PLB-01' : null,
     assignedPlumberName: orderRole === 'customer' ? 'Ramesh Babu (Master Plumber)' : null,
     plumberTaskStatus: orderRole === 'customer' ? 'ASSIGNED' : null,
-    plumberNotes: orderRole === 'customer' ? 'Auto-assigned verified plumber for installation support.' : null,
+    plumberNotes: orderRole === 'customer' ? 'Auto-assigned verified plumber for installation inspection.' : null,
     shippingAddress: shippingAddress || user.address || `${user.city || 'Hyderabad'} Warehouse`,
-    createdAt: new Date().toISOString(),
-    trackingTimeline:
-      orderRole === 'customer'
-        ? [
-            { step: 'Order Confirmed & Direct Payment Received', time: `Today, ${nowStr}`, done: true },
-            { step: 'Synced with Zoho Workbook Inventory', time: `Today, ${nowStr}`, done: true },
-            { step: 'Plumber Assigned (Ramesh Babu)', time: `Today, ${nowStr}`, done: true },
-            { step: 'Out for Delivery', time: 'Estimated 4 hrs', done: false },
-            { step: 'Delivered & Installed', time: 'Pending', done: false }
-          ]
-        : [
-            {
-              step: `Dealer Order Placed (${
-                creditDays ? `${creditDays}-Day Credit` : 'Upfront Payment'
-              })`,
-              time: `Today, ${nowStr}`,
-              done: true
-            },
-            { step: 'Zoho Workbook Stock Deducted & Invoice Logged', time: `Today, ${nowStr}`, done: true },
-            { step: 'Warehouse Bulk Dispatch', time: 'In Queue', done: false },
-            { step: 'Delivered to Dealer Premise', time: 'Pending', done: false }
-          ]
+    orderDate: now.toISOString(),
+    createdAt: now.toISOString(),
+    trackingTimeline: [
+      { step: 'Placed', detail: 'Order placed by user via mobile app', time: `${dateStr}, ${timeStr}`, done: true },
+      {
+        step: 'Confirmed',
+        detail:
+          orderRole === 'customer'
+            ? `Direct Payment of ₹${totalAmount.toLocaleString('en-IN')} verified (${paymentSubType || 'UPI'})`
+            : creditDays > 0
+            ? `${creditDays}-Day Approved Credit recorded in Zoho Books (Due: ${dueDate})`
+            : 'Upfront payment confirmed via Corporate Settlement',
+        time: `${dateStr}, ${timeStr}`,
+        done: true
+      },
+      { step: 'Processing', detail: 'Stock reserved in Zoho Workbook & packed for dispatch', time: 'In Queue', done: false },
+      {
+        step: 'Shipped',
+        detail: orderRole === 'customer' ? 'Out for delivery • Assigned Plumber: Ramesh Babu' : 'Bulk freight transport in transit',
+        time: 'Pending',
+        done: false
+      },
+      { step: 'Delivered', detail: 'Delivered to designated premise', time: 'Pending', done: false }
+    ]
   };
 
   store.orders.unshift(newOrder);
@@ -445,10 +374,22 @@ app.post('/api/orders', (req, res) => {
         : orderRole === 'customer'
         ? `Direct Payment (${paymentSubType || 'UPI'})`
         : 'Upfront Dealer Payment',
-    status: creditDays > 0 ? `PENDING_CREDIT_${creditDays}D` : 'SETTLED',
+    status: paymentStatus,
     dueDate,
-    date: new Date().toISOString().split('T')[0]
+    date: now.toISOString().split('T')[0]
   });
+
+  // Add notification to user
+  if (user.notifications) {
+    user.notifications.unshift({
+      id: `NOTIF-${Date.now()}`,
+      type: 'ORDER_UPDATE',
+      title: `Order Placed (${newOrderId})`,
+      message: `Your order for ₹${totalAmount.toLocaleString('en-IN')} has been confirmed.`,
+      time: 'Just now',
+      read: false
+    });
+  }
 
   saveStore(store);
   res.status(201).json({
@@ -473,11 +414,47 @@ app.get('/api/orders', (req, res) => {
   res.json({ orders });
 });
 
-// 5. PLUMBER FLOW ENDPOINTS
-app.get('/api/plumber/:plumberId', (req, res) => {
-  const { plumberId } = req.params;
+// Single Order Tracking details
+app.get('/api/orders/:orderId', (req, res) => {
   const store = getStore();
-  const plumber = store.users.plumbers.find((p) => p.id === plumberId) || store.users.plumbers[0];
+  const order = store.orders.find((o) => o.id === req.params.orderId);
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
+  res.json({ order });
+});
+
+// =========================================================================
+// 12. NOTIFICATIONS (ROLE-BASED)
+// =========================================================================
+app.get('/api/notifications', (req, res) => {
+  const { role, userId } = req.query;
+  const store = getStore();
+  const r = (role || 'customer').toLowerCase();
+
+  let notifications = [];
+  if (r === 'customer') {
+    const c = store.users.customers.find((u) => u.id === userId) || store.users.customers[0];
+    notifications = c?.notifications || [];
+  } else if (r === 'dealer') {
+    const d = store.users.dealers.find((u) => u.id === userId) || store.users.dealers[0];
+    notifications = d?.notifications || [];
+  } else if (r === 'plumber') {
+    const p = store.users.plumbers.find((u) => u.id === userId) || store.users.plumbers[0];
+    notifications = p?.notifications || [];
+  } else if (r === 'admin') {
+    notifications = store.users.admins[0]?.notifications || [];
+  }
+
+  res.json({ role: r, notifications });
+});
+
+// =========================================================================
+// 5. PLUMBER DASHBOARD & ASSIGNED ACTIVITIES
+// =========================================================================
+app.get('/api/plumber/:plumberId', (req, res) => {
+  const store = getStore();
+  const plumber = store.users.plumbers.find((p) => p.id === req.params.plumberId) || store.users.plumbers[0];
   const assignedOrders = store.orders.filter((o) => o.assignedPlumberId === plumber.id);
 
   res.json({
@@ -500,14 +477,21 @@ app.patch('/api/plumber/orders/:orderId', (req, res) => {
   if (plumberTaskStatus) {
     order.plumberTaskStatus = plumberTaskStatus;
     if (plumberTaskStatus === 'COMPLETED') {
-      order.orderStatus = 'DELIVERED';
+      order.orderStatus = 'Delivered';
       order.trackingTimeline.forEach((t) => (t.done = true));
-      // Credit reward points to plumber
       const plumber = store.users.plumbers.find((p) => p.id === order.assignedPlumberId);
       if (plumber) {
         plumber.completedJobs += 1;
         plumber.rewardPoints += 150;
         plumber.walletBalance += 500;
+        plumber.notifications.unshift({
+          id: `NOTIF-PLB-${Date.now()}`,
+          type: 'REWARD_UPDATE',
+          title: '+150 Reward Points Credited',
+          message: `Job ${orderId} marked completed. Wallet balance updated to ₹${plumber.walletBalance}.`,
+          time: 'Just now',
+          read: false
+        });
       }
     }
   }
@@ -519,11 +503,13 @@ app.patch('/api/plumber/orders/:orderId', (req, res) => {
   res.json({ success: true, order });
 });
 
-// 6. ADMIN REQUIREMENTS ENDPOINTS
+// =========================================================================
+// 7. ADMIN DASHBOARD & SYSTEM GOVERNANCE
+// =========================================================================
 app.get('/api/admin/overview', (req, res) => {
   const store = getStore();
   const totalRevenue = store.orders.reduce((sum, o) => sum + o.totalAmount, 0);
-  const activeCreditExposure = store.users.dealers.reduce((sum, d) => sum + d.creditUsed, 0);
+  const activeCreditExposure = store.users.dealers.reduce((sum, d) => sum + (d.creditUsed || 0), 0);
 
   res.json({
     zohoMeta: store.zohoMeta,
@@ -545,76 +531,52 @@ app.get('/api/admin/overview', (req, res) => {
   });
 });
 
-// Admin: Manage Dealer Zoho Verification & 30/90-Day Credit Eligibility
+// Admin: Manage Dealer Verification and 30/90-Day Credit Permissions
 app.patch('/api/admin/dealers/:dealerId', (req, res) => {
-  const { dealerId } = req.params;
-  const { zohoVerified, creditEligible, credit30DaysAllowed, credit90DaysAllowed, creditLimit } = req.body;
-  const store = getStore();
-
-  const dealer = store.users.dealers.find((d) => d.id === dealerId);
-  if (!dealer) {
+  const updated = zohoDealerService.updateDealerPermissions(req.params.dealerId, req.body);
+  if (!updated) {
     return res.status(404).json({ error: 'Dealer not found.' });
   }
-
-  if (zohoVerified !== undefined) dealer.zohoVerified = Boolean(zohoVerified);
-  if (creditEligible !== undefined) dealer.creditEligible = Boolean(creditEligible);
-  if (credit30DaysAllowed !== undefined) dealer.credit30DaysAllowed = Boolean(credit30DaysAllowed);
-  if (credit90DaysAllowed !== undefined) dealer.credit90DaysAllowed = Boolean(credit90DaysAllowed);
-  if (creditLimit !== undefined) dealer.creditLimit = Number(creditLimit);
-
-  // Update human-readable tier badge
-  if (!dealer.zohoVerified) {
-    dealer.tier = 'Pending Zoho Verification';
-  } else if (dealer.credit90DaysAllowed) {
-    dealer.tier = 'Platinum Approved Dealer (30 & 90 Days Credit)';
-  } else if (dealer.credit30DaysAllowed) {
-    dealer.tier = 'Gold Verified Dealer (Upfront & 30 Days Credit)';
-  } else {
-    dealer.tier = 'Verified Dealer (Upfront Payment Only)';
-  }
-
-  saveStore(store);
-  res.json({ success: true, dealer });
+  res.json({ success: true, dealer: updated });
 });
 
-// Admin: Manage Plumber Verification
+// Admin: Manage Plumber KYC Verification
 app.patch('/api/admin/plumbers/:plumberId', (req, res) => {
-  const { plumberId } = req.params;
-  const { verificationStatus } = req.body;
   const store = getStore();
-
-  const plumber = store.users.plumbers.find((p) => p.id === plumberId);
+  const plumber = store.users.plumbers.find((p) => p.id === req.params.plumberId);
   if (!plumber) {
     return res.status(404).json({ error: 'Plumber not found.' });
   }
-
-  if (verificationStatus) {
-    plumber.verificationStatus = verificationStatus;
+  if (req.body.verificationStatus) {
+    plumber.verificationStatus = req.body.verificationStatus;
   }
-
   saveStore(store);
   res.json({ success: true, plumber });
 });
 
-// Admin: Update Order Status or Assign Plumber
+// Admin: Manage Order Status & Assign Plumber
 app.patch('/api/admin/orders/:orderId', (req, res) => {
-  const { orderId } = req.params;
-  const { orderStatus, assignedPlumberId } = req.body;
   const store = getStore();
-
-  const order = store.orders.find((o) => o.id === orderId);
+  const order = store.orders.find((o) => o.id === req.params.orderId);
   if (!order) {
     return res.status(404).json({ error: 'Order not found.' });
   }
 
-  if (orderStatus) {
-    order.orderStatus = orderStatus;
-    if (orderStatus === 'DELIVERED') {
-      order.trackingTimeline.forEach((step) => (step.done = true));
+  if (req.body.orderStatus) {
+    order.orderStatus = req.body.orderStatus;
+    // Update tracking timeline step
+    const stepOrder = ['Placed', 'Confirmed', 'Processing', 'Shipped', 'Delivered'];
+    const currentIdx = stepOrder.indexOf(order.orderStatus);
+    if (currentIdx !== -1) {
+      order.trackingTimeline.forEach((st) => {
+        const stepIdx = stepOrder.indexOf(st.step);
+        if (stepIdx <= currentIdx) st.done = true;
+      });
     }
   }
-  if (assignedPlumberId !== undefined) {
-    const plumber = store.users.plumbers.find((p) => p.id === assignedPlumberId);
+
+  if (req.body.assignedPlumberId !== undefined) {
+    const plumber = store.users.plumbers.find((p) => p.id === req.body.assignedPlumberId);
     order.assignedPlumberId = plumber ? plumber.id : null;
     order.assignedPlumberName = plumber ? plumber.name : null;
     order.plumberTaskStatus = plumber ? 'ASSIGNED' : null;
@@ -624,10 +586,10 @@ app.patch('/api/admin/orders/:orderId', (req, res) => {
   res.json({ success: true, order });
 });
 
-// Reset demo store to initial state
+// Reset Demo Data
 app.post('/api/admin/reset-demo', (req, res) => {
   const fresh = resetStore();
-  res.json({ success: true, message: 'Demo data reset to initial state.', store: fresh });
+  res.json({ success: true, message: 'Demo store reset to initial state.', store: fresh });
 });
 
 app.listen(PORT, () => {

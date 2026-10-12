@@ -16,11 +16,10 @@ const initialData = {
   categories: [
     { id: 'cat-pipes', name: 'CPVC & UPVC Pipes', icon: 'Cylinder', count: 2, description: 'High-pressure hot & cold water distribution pipes' },
     { id: 'cat-faucets', name: 'Luxury Faucets & Mixers', icon: 'Droplets', count: 2, description: 'Chrome-plated brass basin & wall mixers' },
-    { id: 'cat-valves', name: 'Industrial Valves & Fittings', icon: 'Wrench', count: '2', description: 'Heavy-duty brass ball valves, elbows & tees' },
+    { id: 'cat-valves', name: 'Industrial Valves & Fittings', icon: 'Wrench', count: 2, description: 'Heavy-duty brass ball valves, elbows & tees' },
     { id: 'cat-pumps', name: 'Pressure Booster Pumps', icon: 'Gauge', count: 1, description: 'Automatic domestic & commercial hydro-pneumatic pumps' },
     { id: 'cat-sanitary', name: 'Sanitaryware & Cisterns', icon: 'Bath', count: 1, description: 'Concealed flushing cisterns & wall-hung systems' }
   ],
-  // Master Zoho Workbook rows (Source of Truth for Products, Pricing & Stock)
   zohoWorkbookProducts: [
     {
       id: 'PRD-1001',
@@ -184,7 +183,33 @@ const initialData = {
         mobile: '9876543210',
         email: 'rahul.sharma@example.com',
         address: 'Flat 402, Green Valley Residency, Madhapur, Hyderabad - 500081',
-        createdAt: '2026-09-15T10:00:00Z'
+        createdAt: '2026-09-15T10:00:00Z',
+        notifications: [
+          {
+            id: 'NOTIF-CUST-1',
+            type: 'ORDER_UPDATE',
+            title: 'Order Dispatched (ORD-2026-101)',
+            message: 'Your plumbing items are out for delivery with Plumber Ramesh Babu assigned for installation.',
+            time: '2 hours ago',
+            read: false
+          },
+          {
+            id: 'NOTIF-CUST-2',
+            type: 'PAYMENT_UPDATE',
+            title: 'Payment Confirmed: ₹12,199',
+            message: 'Direct payment via UPI (PhonePe) was settled successfully.',
+            time: '1 day ago',
+            read: true
+          },
+          {
+            id: 'NOTIF-CUST-3',
+            type: 'GENERAL',
+            title: 'Zoho Inventory Sync Complete',
+            message: 'New CPVC and Sanitary products added to PlumbMart catalog.',
+            time: '3 days ago',
+            read: true
+          }
+        ]
       },
       {
         id: 'CUST-02',
@@ -193,7 +218,17 @@ const initialData = {
         mobile: '9848011223',
         email: 'priya.nair@example.com',
         address: 'Villa 18, Palm Meadows, Whitefield, Bengaluru - 560066',
-        createdAt: '2026-09-22T14:30:00Z'
+        createdAt: '2026-09-22T14:30:00Z',
+        notifications: [
+          {
+            id: 'NOTIF-CUST-4',
+            type: 'GENERAL',
+            title: 'Welcome to PlumbMart',
+            message: 'Browse premium CPVC pipes & bathroom fittings with free installation support.',
+            time: '5 days ago',
+            read: true
+          }
+        ]
       }
     ],
     dealers: [
@@ -208,11 +243,29 @@ const initialData = {
         zohoVerified: true,
         creditEligible: true,
         credit30DaysAllowed: true,
-        credit90DaysAllowed: true, // Approved for 90-day credit!
+        credit90DaysAllowed: true, // Selected & approved for 90-day credit!
         creditLimit: 500000,
         creditUsed: 112400,
         city: 'Hyderabad',
-        tier: 'Platinum Approved Dealer (30 & 90 Days Credit)'
+        tier: 'Platinum Approved Dealer (30 & 90 Days Credit)',
+        notifications: [
+          {
+            id: 'NOTIF-DLR-1',
+            type: 'CREDIT_UPDATE',
+            title: '90-Day Credit Approved by Admin',
+            message: 'Your dealership has been granted 90-Day Credit Line up to ₹5,00,000 via Zoho Books.',
+            time: '1 day ago',
+            read: false
+          },
+          {
+            id: 'NOTIF-DLR-2',
+            type: 'ORDER_UPDATE',
+            title: 'Bulk Order Placed (ORD-2026-102)',
+            message: 'Order of ₹78,000 confirmed under 90-Day Credit terms. Due on 2027-01-10.',
+            time: '2 days ago',
+            read: true
+          }
+        ]
       },
       {
         id: 'DLR-02',
@@ -225,11 +278,21 @@ const initialData = {
         zohoVerified: true,
         creditEligible: true,
         credit30DaysAllowed: true,
-        credit90DaysAllowed: false, // Standard dealer: Upfront + 30 Days only (90 Days locked)
+        credit90DaysAllowed: false, // Standard dealer: 90 Days is locked!
         creditLimit: 200000,
         creditUsed: 45000,
         city: 'Vijayawada',
-        tier: 'Gold Verified Dealer (Upfront & 30 Days Credit)'
+        tier: 'Gold Verified Dealer (Upfront & 30 Days Credit)',
+        notifications: [
+          {
+            id: 'NOTIF-DLR-3',
+            type: 'ELIGIBILITY_UPDATE',
+            title: '30-Day Credit Active',
+            message: '30-Day Credit is enabled for your account. 90-Day credit requires Admin review.',
+            time: '3 days ago',
+            read: true
+          }
+        ]
       },
       {
         id: 'DLR-03',
@@ -239,14 +302,24 @@ const initialData = {
         mobile: '9000033333',
         gstin: '37AADCC9920D1Z8',
         zohoContactId: 'ZCRM-DLR-PENDING',
-        zohoVerified: false, // Cannot login until Admin verifies in Zoho!
+        zohoVerified: false, // Blocked at login until Admin approves in Zoho!
         creditEligible: false,
         credit30DaysAllowed: false,
         credit90DaysAllowed: false,
         creditLimit: 0,
         creditUsed: 0,
         city: 'Visakhapatnam',
-        tier: 'Pending Zoho Verification'
+        tier: 'Pending Zoho Verification',
+        notifications: [
+          {
+            id: 'NOTIF-DLR-4',
+            type: 'VERIFICATION_UPDATE',
+            title: 'Zoho CRM Verification Required',
+            message: 'Your dealer registration is submitted. Please wait for PlumbMart Admin to verify your GST & Zoho Contact.',
+            time: '1 hour ago',
+            read: false
+          }
+        ]
       }
     ],
     plumbers: [
@@ -266,18 +339,20 @@ const initialData = {
         city: 'Hyderabad',
         notifications: [
           {
-            id: 'NOTIF-1',
+            id: 'NOTIF-PLB-1',
+            type: 'ASSIGNED_ACTIVITY',
             title: 'New Installation Assigned: ORD-2026-101',
-            message: 'Assigned to Rahul Sharma (Madhapur) for Kohler Thermostatic Diverter & CPVC piping check.',
-            time: '10 mins ago',
-            unread: true
+            message: 'Assigned to customer Rahul Sharma (Madhapur) for Kohler Diverter & Astral CPVC installation.',
+            time: '2 hours ago',
+            read: false
           },
           {
-            id: 'NOTIF-2',
-            title: 'Zoho Reward Points Credited (+120 pts)',
+            id: 'NOTIF-PLB-2',
+            type: 'REWARD_UPDATE',
+            title: '+120 Zoho Reward Points Credited',
             message: 'Points added for verified product installation scan SKU: ZW-FAUCET-THERM.',
-            time: '2 hours ago',
-            unread: false
+            time: '1 day ago',
+            read: true
           }
         ]
       },
@@ -297,11 +372,12 @@ const initialData = {
         city: 'Bengaluru',
         notifications: [
           {
-            id: 'NOTIF-3',
-            title: 'KYC Verification Under Review',
-            message: 'Admin is verifying your Plumbing Trade Certificate.',
-            time: '1 day ago',
-            unread: true
+            id: 'NOTIF-PLB-3',
+            type: 'VERIFICATION_UPDATE',
+            title: 'Trade Certificate Under Review',
+            message: 'Admin is reviewing your Plumbing Trade Certificate.',
+            time: '2 days ago',
+            read: false
           }
         ]
       }
@@ -312,10 +388,37 @@ const initialData = {
         role: 'admin',
         name: 'Manikanta (Super Admin)',
         mobile: '9999999999',
-        email: 'admin@plumbmart.in'
+        email: 'admin@plumbmart.in',
+        notifications: [
+          {
+            id: 'NOTIF-ADM-1',
+            type: 'ALERT',
+            title: 'Zoho Sync: 8 Products Synced',
+            message: 'Master inventory and pricing refreshed from Zoho Workbook.',
+            time: 'Just now',
+            read: false
+          },
+          {
+            id: 'NOTIF-ADM-2',
+            type: 'DEALER_ALERT',
+            title: 'New Dealer Verification Request',
+            message: 'Coastal Builders Mart (9000033333) requested Zoho CRM verification.',
+            time: '1 hour ago',
+            read: false
+          },
+          {
+            id: 'NOTIF-ADM-3',
+            type: 'PAYMENT_ALERT',
+            title: 'Dealer Credit Payment Logged',
+            message: 'ORD-2026-102 booked under 90-Day Credit (₹78,000).',
+            time: '1 day ago',
+            read: true
+          }
+        ]
       }
     ]
   },
+  // Orders with standard statuses: Placed -> Confirmed -> Processing -> Shipped -> Delivered
   orders: [
     {
       id: 'ORD-2026-101',
@@ -329,21 +432,22 @@ const initialData = {
       ],
       totalAmount: 12199,
       paymentMethod: 'DIRECT_PAYMENT',
-      paymentSubType: 'UPI (PhonePe / GPay)',
-      paymentStatus: 'PAID',
-      orderStatus: 'OUT_FOR_DELIVERY',
+      paymentSubType: 'UPI (PhonePe)',
+      paymentStatus: 'Successful', // Status: Pending | Successful | Failed | Credit / Outstanding
+      orderStatus: 'Shipped', // Status: Placed -> Confirmed -> Processing -> Shipped -> Delivered
       assignedPlumberId: 'PLB-01',
       assignedPlumberName: 'Ramesh Babu (Master Plumber)',
       plumberTaskStatus: 'IN_PROGRESS',
       plumberNotes: 'Site visit scheduled at 4:00 PM today for concealed diverter pressure test.',
       shippingAddress: 'Flat 402, Green Valley Residency, Madhapur, Hyderabad - 500081',
+      orderDate: '2026-10-11T09:30:00Z',
       createdAt: '2026-10-11T09:30:00Z',
       trackingTimeline: [
-        { step: 'Order Confirmed & Direct Payment Received', time: '11 Oct, 09:30 AM', done: true },
-        { step: 'Synced with Zoho Inventory & Packed', time: '11 Oct, 11:15 AM', done: true },
-        { step: 'Dispatched & Plumber Assigned (Ramesh Babu)', time: '12 Oct, 08:45 AM', done: true },
-        { step: 'Out for Delivery & On-Site Installation', time: '12 Oct, 01:15 PM', done: true },
-        { step: 'Delivered & Installation Verified', time: 'Pending', done: false }
+        { step: 'Placed', detail: 'Order placed by customer via mobile app', time: '11 Oct, 09:30 AM', done: true },
+        { step: 'Confirmed', detail: 'Direct payment of ₹12,199 verified via UPI', time: '11 Oct, 09:32 AM', done: true },
+        { step: 'Processing', detail: 'Stock allocated in Zoho Workbook & packed', time: '11 Oct, 11:15 AM', done: true },
+        { step: 'Shipped', detail: 'Out for delivery • Assigned Plumber: Ramesh Babu', time: '12 Oct, 08:45 AM', done: true },
+        { step: 'Delivered', detail: 'On-site installation and testing complete', time: 'Pending', done: false }
       ]
     },
     {
@@ -358,20 +462,22 @@ const initialData = {
       ],
       totalAmount: 78000,
       paymentMethod: 'CREDIT_90_DAYS',
-      paymentSubType: 'Zoho Approved 90-Day Dealer Credit Line',
-      paymentStatus: 'CREDIT_ACTIVE (Due in 90 Days)',
+      paymentSubType: '90-Day Approved Dealer Credit Line',
+      paymentStatus: 'Credit / Outstanding',
       creditDays: 90,
       dueDate: '2027-01-10',
-      orderStatus: 'DISPATCHED',
+      orderStatus: 'Processing',
       assignedPlumberId: null,
       assignedPlumberName: null,
       shippingAddress: 'Plot 44, Auto Nagar Industrial Estate, Hyderabad',
+      orderDate: '2026-10-10T16:20:00Z',
       createdAt: '2026-10-10T16:20:00Z',
       trackingTimeline: [
-        { step: 'Dealer Order Placed (90-Day Credit Approved)', time: '10 Oct, 04:20 PM', done: true },
-        { step: 'Zoho Books Credit Ledger Updated', time: '10 Oct, 04:22 PM', done: true },
-        { step: 'Bulk Stock Allocated & Dispatched', time: '11 Oct, 10:00 AM', done: true },
-        { step: 'Delivered to Dealer Warehouse', time: 'Pending', done: false }
+        { step: 'Placed', detail: 'Dealer wholesale bulk order placed', time: '10 Oct, 04:20 PM', done: true },
+        { step: 'Confirmed', detail: 'Approved 90-Day Credit applied (Due: 2027-01-10)', time: '10 Oct, 04:22 PM', done: true },
+        { step: 'Processing', detail: 'Zoho Inventory stock reserved at Regional Warehouse', time: '11 Oct, 10:00 AM', done: true },
+        { step: 'Shipped', detail: 'Dispatched via Heavy Transport', time: 'Pending', done: false },
+        { step: 'Delivered', detail: 'Received at Dealer Warehouse', time: 'Pending', done: false }
       ]
     },
     {
@@ -386,18 +492,21 @@ const initialData = {
       totalAmount: 43800,
       paymentMethod: 'CREDIT_30_DAYS',
       paymentSubType: 'Standard 30-Day Dealer Credit',
-      paymentStatus: 'CREDIT_ACTIVE (Due in 30 Days)',
+      paymentStatus: 'Credit / Outstanding',
       creditDays: 30,
       dueDate: '2026-11-11',
-      orderStatus: 'CONFIRMED',
+      orderStatus: 'Confirmed',
       assignedPlumberId: null,
       assignedPlumberName: null,
       shippingAddress: 'MG Road Commercial Complex, Vijayawada',
+      orderDate: '2026-10-12T07:45:00Z',
       createdAt: '2026-10-12T07:45:00Z',
       trackingTimeline: [
-        { step: 'Dealer Order Placed (30-Day Credit)', time: '12 Oct, 07:45 AM', done: true },
-        { step: 'Zoho Books Invoice Generated', time: '12 Oct, 07:46 AM', done: true },
-        { step: 'Warehouse Dispatch Pending', time: 'Pending', done: false }
+        { step: 'Placed', detail: 'Dealer order placed via mobile app', time: '12 Oct, 07:45 AM', done: true },
+        { step: 'Confirmed', detail: '30-Day Credit ledger verified in Zoho Books', time: '12 Oct, 07:46 AM', done: true },
+        { step: 'Processing', detail: 'Order queued for warehouse packing', time: 'Pending', done: false },
+        { step: 'Shipped', detail: 'Awaiting transport pickup', time: 'Pending', done: false },
+        { step: 'Delivered', detail: 'Awaiting delivery', time: 'Pending', done: false }
       ]
     }
   ],
@@ -409,7 +518,7 @@ const initialData = {
       role: 'customer',
       amount: 12199,
       mode: 'Direct Payment (UPI)',
-      status: 'SETTLED',
+      status: 'Successful', // Pending | Successful | Failed | Credit / Outstanding
       dueDate: 'Immediate',
       date: '2026-10-11'
     },
@@ -420,7 +529,7 @@ const initialData = {
       role: 'dealer',
       amount: 78000,
       mode: 'Credit Payment – 90 Days',
-      status: 'PENDING_CREDIT_90D',
+      status: 'Credit / Outstanding',
       dueDate: '2027-01-10',
       date: '2026-10-10'
     },
@@ -431,7 +540,7 @@ const initialData = {
       role: 'dealer',
       amount: 43800,
       mode: 'Credit Payment – 30 Days',
-      status: 'PENDING_CREDIT_30D',
+      status: 'Credit / Outstanding',
       dueDate: '2026-11-11',
       date: '2026-10-12'
     }
