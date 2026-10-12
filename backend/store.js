@@ -231,6 +231,12 @@ const initialData = {
     ],
     'CUST-02': []
   },
+  dealerCarts: {
+    'DLR-01': [
+      { productId: 'PRD-1001', qty: 10, addedAt: '2026-10-12T10:00:00Z' }
+    ],
+    'DLR-02': []
+  },
   users: {
     customers: [
       {
@@ -410,23 +416,51 @@ const initialData = {
         role: 'plumber',
         name: 'Ramesh Babu (Master Plumber)',
         mobile: '9111122222',
+        email: 'ramesh.babu@plumbmart.in',
+        avatar: 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?auto=format&fit=crop&w=200&q=80',
         licenseNo: 'IPA-HYD-2024-0891',
         verificationStatus: 'VERIFIED',
+        status: 'ACTIVE',
         experienceYears: 9,
         specialization: 'High-Rise CPVC Piping, Booster Pumps & Concealed Diverters',
+        skills: ['CPVC & UPVC Piping', 'Thermostatic Diverters', 'Booster Pumps', 'Hydro Pressure Testing', 'SDR 11 Jointing'],
+        serviceArea: 'Madhapur, Hitec City, Kondapur, Gachibowli',
+        address: 'Plot 12, Sri Ram Nagar, Kondapur, Hyderabad - 500084',
         rating: 4.9,
         completedJobs: 142,
         rewardPoints: 1840,
         walletBalance: 4250,
         city: 'Hyderabad',
+        settings: {
+          jobAlerts: true,
+          productAlerts: true,
+          rewardAlerts: true,
+          isAvailableForJobs: true
+        },
         notifications: [
           {
             id: 'NOTIF-PLB-1',
             type: 'ASSIGNED_ACTIVITY',
-            title: 'New Installation Assigned: ORD-2026-101',
+            title: 'New Installation Assigned: ACT-2026-101',
             message: 'Assigned to customer Rahul Sharma (Madhapur) for diverter & pipe installation.',
             time: '2 hours ago',
             read: false
+          },
+          {
+            id: 'NOTIF-PLB-2',
+            type: 'REQUEST_UPDATE',
+            title: 'Product Requirement REQ-PLB-501 Approved',
+            message: 'Your request for 4x Forged Brass Ball Valves has been approved for Madhapur site.',
+            time: '1 day ago',
+            read: true
+          },
+          {
+            id: 'NOTIF-PLB-3',
+            type: 'REWARD_UPDATE',
+            title: '+150 Reward Points Credited',
+            message: 'Job ACT-2026-098 marked completed. ₹500 credited to wallet.',
+            time: '3 days ago',
+            read: true
           }
         ]
       },
@@ -435,15 +469,27 @@ const initialData = {
         role: 'plumber',
         name: 'Srinivas Rao',
         mobile: '9111133333',
+        email: 'srinivas.rao@plumbmart.in',
+        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
         licenseNo: 'IPA-BLR-2025-1102',
         verificationStatus: 'PENDING_VERIFICATION',
+        status: 'ACTIVE',
         experienceYears: 4,
         specialization: 'Sanitaryware & Domestic Water Systems',
+        skills: ['Sanitaryware Installation', 'Dual Flush Cisterns', 'Basin Mixers'],
+        serviceArea: 'Whitefield, Indiranagar, Marathahalli',
+        address: 'House 24, Outer Ring Road, Bengaluru - 560037',
         rating: 4.6,
         completedJobs: 38,
         rewardPoints: 420,
         walletBalance: 1100,
         city: 'Bengaluru',
+        settings: {
+          jobAlerts: true,
+          productAlerts: true,
+          rewardAlerts: true,
+          isAvailableForJobs: false
+        },
         notifications: []
       }
     ],
@@ -593,6 +639,107 @@ const initialData = {
       date: '2026-10-12'
     }
   ],
+  activities: [
+    {
+      id: 'ACT-2026-101',
+      orderId: 'ORD-2026-101',
+      assignedPlumberId: 'PLB-01',
+      assignedPlumberName: 'Ramesh Babu (Master Plumber)',
+      customerName: 'Rahul Sharma',
+      customerMobile: '9876543210',
+      location: 'Flat 402, Green Valley Residency, Madhapur, Hyderabad - 500081',
+      requiredWork: 'Concealed Diverter Fitting & CPVC Header Line Pressure Test',
+      requiredProducts: [
+        { productId: 'PRD-1003', name: 'Kohler-Style Thermostatic High-Flow Diverter Mixer', qty: 1 },
+        { productId: 'PRD-1001', name: 'Astral ProFlow CPVC Pipe 25mm (SDR 11 - 3m)', qty: 2 }
+      ],
+      scheduledDate: '2026-10-12',
+      scheduledTime: '04:00 PM',
+      instructions: 'Verify wall cavity depth between 55mm and 75mm before tiling. Test line at 10 Bar for 15 mins.',
+      status: 'IN_PROGRESS',
+      remarks: 'Site visit scheduled at 4:00 PM today for concealed diverter pressure test.',
+      createdAt: '2026-10-11T09:30:00Z',
+      completedDate: null
+    },
+    {
+      id: 'ACT-2026-102',
+      orderId: null,
+      assignedPlumberId: 'PLB-01',
+      assignedPlumberName: 'Ramesh Babu (Master Plumber)',
+      customerName: 'Kavita Varma',
+      customerMobile: '9949123456',
+      location: 'Villa 12, Rainbow Vistas, Hitec City, Hyderabad - 500018',
+      requiredWork: 'Dual Flush Concealed Cistern Installation & Testing',
+      requiredProducts: [
+        { productId: 'PRD-1008', name: 'Slimline Concealed Dual-Flush Cistern Frame System', qty: 1 }
+      ],
+      scheduledDate: '2026-10-13',
+      scheduledTime: '10:30 AM',
+      instructions: 'Anchor frame bolts into solid masonry slab. Verify 180mm WC bolt pitch before sealing.',
+      status: 'ASSIGNED',
+      remarks: 'New activity assigned by dispatch.',
+      createdAt: '2026-10-12T06:00:00Z',
+      completedDate: null
+    },
+    {
+      id: 'ACT-2026-098',
+      orderId: null,
+      assignedPlumberId: 'PLB-01',
+      assignedPlumberName: 'Ramesh Babu (Master Plumber)',
+      customerName: 'Ananya Deshmukh',
+      customerMobile: '9849098765',
+      location: 'Villa 45, Jubilee Hills, Hyderabad - 500033',
+      requiredWork: '1.0 HP Pressure Booster Pump Installation & Vibration Dampening',
+      requiredProducts: [
+        { productId: 'PRD-1007', name: 'Grundfos-Grade 1.0 HP Silent Pressure Booster Pump', qty: 1 },
+        { productId: 'PRD-1005', name: 'Forged Brass Full-Bore Ball Valve 25mm (PN25)', qty: 2 }
+      ],
+      scheduledDate: '2026-10-09',
+      scheduledTime: '11:00 AM',
+      instructions: 'Install NRV on suction side, mount on rubber vibration pads, verify 3.2 Bar cut-off pressure.',
+      status: 'COMPLETED',
+      remarks: 'Pump installed and commissioned. Cut-off pressure calibrated at 3.2 Bar. Customer tested and verified.',
+      createdAt: '2026-10-08T14:00:00Z',
+      completedDate: '2026-10-09T13:30:00Z',
+      rewardPointsEarned: 150
+    }
+  ],
+  productRequests: [
+    {
+      id: 'REQ-PLB-501',
+      plumberId: 'PLB-01',
+      plumberName: 'Ramesh Babu (Master Plumber)',
+      productId: 'PRD-1005',
+      productName: 'Forged Brass Full-Bore Ball Valve 25mm (PN25)',
+      sku: 'ZW-VALVE-BRASS-25',
+      categoryName: 'Industrial Valves & Fittings',
+      quantity: 4,
+      reason: 'Urgent replacement of worn-out valves on Madhapur site header line',
+      activityId: 'ACT-2026-101',
+      remarks: 'Need heavy PN25 brass valves for high-rise riser pressure stability.',
+      status: 'APPROVED',
+      createdAt: '2026-10-11T12:00:00Z',
+      updatedAt: '2026-10-11T15:30:00Z',
+      adminNotes: 'Approved for Madhapur site inspection job.'
+    },
+    {
+      id: 'REQ-PLB-502',
+      plumberId: 'PLB-01',
+      plumberName: 'Ramesh Babu (Master Plumber)',
+      productId: 'PRD-1006',
+      productName: 'Precision Brass Pressure Reducing Valve w/ Gauge (20mm)',
+      sku: 'ZW-VALVE-PRV-20',
+      categoryName: 'Industrial Valves & Fittings',
+      quantity: 2,
+      reason: 'Excessive water inlet pressure damaging customer fittings',
+      activityId: 'ACT-2026-101',
+      remarks: 'Inlet pressure exceeds 5.5 Bar; PRV required to reduce to 3.0 Bar.',
+      status: 'PENDING',
+      createdAt: '2026-10-12T08:00:00Z',
+      updatedAt: '2026-10-12T08:00:00Z',
+      adminNotes: ''
+    }
+  ],
   otpSessions: {}
 };
 
@@ -608,7 +755,37 @@ function ensureStore() {
 function getStore() {
   ensureStore();
   const raw = fs.readFileSync(STORE_PATH, 'utf8');
-  return JSON.parse(raw);
+  const data = JSON.parse(raw);
+
+  // Auto-heal / populate activities and productRequests if not present in saved store.json
+  let modified = false;
+  if (!data.activities) {
+    data.activities = initialData.activities;
+    modified = true;
+  }
+  if (!data.productRequests) {
+    data.productRequests = initialData.productRequests;
+    modified = true;
+  }
+  // Auto-heal plumbers if missing new fields
+  if (data.users?.plumbers) {
+    data.users.plumbers.forEach((p, idx) => {
+      const initP = initialData.users.plumbers[idx];
+      if (initP && p.id === initP.id) {
+        if (!p.skills) { p.skills = initP.skills; modified = true; }
+        if (!p.serviceArea) { p.serviceArea = initP.serviceArea; modified = true; }
+        if (!p.settings) { p.settings = initP.settings; modified = true; }
+        if (!p.status) { p.status = initP.status; modified = true; }
+        if (!p.email) { p.email = initP.email; modified = true; }
+        if (!p.avatar) { p.avatar = initP.avatar; modified = true; }
+        if (!p.address) { p.address = initP.address; modified = true; }
+      }
+    });
+  }
+  if (modified) {
+    fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 2), 'utf8');
+  }
+  return data;
 }
 
 function saveStore(data) {

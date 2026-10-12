@@ -105,6 +105,7 @@ const zohoProductService = {
           mrp: p.mrp,
           image: p.image,
           stockQuantity: p.stockQuantity, // Visible to Dealer
+          availableStock: p.stockQuantity, // Explicit alias for available stock
           availability: p.stockQuantity > 0 ? `${p.stockQuantity} ${p.unit} Available` : 'Out of Stock',
           inStock: p.stockQuantity > 0,
           minDealerOrderQty: p.minDealerOrderQty || 1,

@@ -14,17 +14,19 @@ const zohoInventoryService = {
   checkStockAvailability: (items) => {
     const store = getStore();
     for (const item of items) {
-      const product = store.zohoWorkbookProducts.find((p) => p.id === item.productId);
+      const pId = item.productId || item.product?.id || item.id;
+      const product = store.zohoWorkbookProducts.find((p) => p.id === pId);
+      const qty = Number(item.qty || item.quantity || 1);
       if (!product) {
         return {
           available: false,
-          error: `Product ${item.productId} was not found in Zoho Inventory.`
+          error: `Product ${pId} was not found in Zoho Inventory.`
         };
       }
-      if (product.stockQuantity < item.qty) {
+      if (product.stockQuantity < qty) {
         return {
           available: false,
-          error: `Insufficient stock in Zoho Workbook for "${product.name}". Available: ${product.stockQuantity}, Requested: ${item.qty}`
+          error: `Insufficient stock in Zoho Workbook for "${product.name}". Available: ${product.stockQuantity}, Requested: ${qty}`
         };
       }
     }
@@ -39,9 +41,11 @@ const zohoInventoryService = {
   deductStock: (items) => {
     const store = getStore();
     for (const item of items) {
-      const product = store.zohoWorkbookProducts.find((p) => p.id === item.productId);
+      const pId = item.productId || item.product?.id || item.id;
+      const product = store.zohoWorkbookProducts.find((p) => p.id === pId);
+      const qty = Number(item.qty || item.quantity || 1);
       if (product) {
-        product.stockQuantity = Math.max(0, product.stockQuantity - Number(item.qty || 1));
+        product.stockQuantity = Math.max(0, product.stockQuantity - qty);
       }
     }
     store.zohoMeta.lastSyncedAt = new Date().toISOString();

@@ -2,7 +2,7 @@
   "zohoMeta": {
     "workbookId": "ZOHO-WB-PLUMBMART-2026",
     "workbookName": "PlumbMart_Master_Inventory_Pricing_v4.xlsx",
-    "lastSyncedAt": "2026-10-12T10:01:13.593Z",
+    "lastSyncedAt": "2026-10-12T10:50:57.733Z",
     "syncStatus": "CONNECTED",
     "webhookActive": true,
     "totalSyncedRows": 8
@@ -256,7 +256,8 @@
         "addedAt": "2026-10-12T10:05:00Z"
       }
     ],
-    "CUST-02": []
+    "CUST-02": [],
+    "CUST-6117-0966": []
   },
   "users": {
     "customers": [
@@ -346,6 +347,37 @@
             "read": true
           }
         ]
+      },
+      {
+        "id": "CUST-6117-0966",
+        "role": "customer",
+        "name": "manikanta",
+        "mobile": "9347486117",
+        "email": "customer.6117@plumbmart.in",
+        "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80",
+        "address": "Flat 402, Green Valley Residency, Madhapur, Hyderabad",
+        "addresses": [
+          {
+            "id": "ADDR-1791802720966",
+            "label": "Primary Delivery Address",
+            "addressLine": "Flat 402, Green Valley Residency, Madhapur, Hyderabad",
+            "city": "Hyderabad",
+            "state": "Telangana",
+            "pincode": "500081",
+            "isDefault": true
+          }
+        ],
+        "createdAt": "2026-10-12T10:58:40.966Z",
+        "notifications": [
+          {
+            "id": "NOTIF-CUST-1791802720966",
+            "type": "GENERAL",
+            "title": "Welcome to PlumbMart!",
+            "message": "Your account is ready. Browse high quality CPVC pipes & plumbing fittings.",
+            "time": "Just now",
+            "read": false
+          }
+        ]
       }
     ],
     "dealers": [
@@ -366,6 +398,22 @@
         "city": "Hyderabad",
         "tier": "Platinum Approved Dealer (30 & 90 Days Credit)",
         "notifications": [
+          {
+            "id": "NOTIF-1791819378591",
+            "type": "ORDER_UPDATE",
+            "title": "Order Placed (ORD-2026-105)",
+            "message": "Your order for ₹21,900 has been confirmed.",
+            "time": "Just now",
+            "read": false
+          },
+          {
+            "id": "NOTIF-1791816813725",
+            "type": "ORDER_UPDATE",
+            "title": "Order Placed (ORD-2026-104)",
+            "message": "Your order for ₹14,600 has been confirmed.",
+            "time": "Just now",
+            "read": false
+          },
           {
             "id": "NOTIF-DLR-1",
             "type": "CREDIT_UPDATE",
@@ -455,7 +503,25 @@
             "time": "2 hours ago",
             "read": false
           }
-        ]
+        ],
+        "skills": [
+          "CPVC & UPVC Piping",
+          "Thermostatic Diverters",
+          "Booster Pumps",
+          "Hydro Pressure Testing",
+          "SDR 11 Jointing"
+        ],
+        "serviceArea": "Madhapur, Hitec City, Kondapur, Gachibowli",
+        "settings": {
+          "jobAlerts": true,
+          "productAlerts": true,
+          "rewardAlerts": true,
+          "isAvailableForJobs": true
+        },
+        "status": "ACTIVE",
+        "email": "ramesh.babu@plumbmart.in",
+        "avatar": "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?auto=format&fit=crop&w=200&q=80",
+        "address": "Plot 12, Sri Ram Nagar, Kondapur, Hyderabad - 500084"
       },
       {
         "id": "PLB-02",
@@ -471,7 +537,23 @@
         "rewardPoints": 420,
         "walletBalance": 1100,
         "city": "Bengaluru",
-        "notifications": []
+        "notifications": [],
+        "skills": [
+          "Sanitaryware Installation",
+          "Dual Flush Cisterns",
+          "Basin Mixers"
+        ],
+        "serviceArea": "Whitefield, Indiranagar, Marathahalli",
+        "settings": {
+          "jobAlerts": true,
+          "productAlerts": true,
+          "rewardAlerts": true,
+          "isAvailableForJobs": false
+        },
+        "status": "ACTIVE",
+        "email": "srinivas.rao@plumbmart.in",
+        "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
+        "address": "House 24, Outer Ring Road, Bengaluru - 560037"
       }
     ],
     "admins": [
@@ -495,6 +577,130 @@
     ]
   },
   "orders": [
+    {
+      "id": "ORD-2026-105",
+      "orderRole": "dealer",
+      "userId": "DLR-01",
+      "userName": "Sri Venkateswara Sanitary & Hardware Distributors",
+      "userMobile": "9000011111",
+      "items": [
+        {
+          "productId": "PRD-1001",
+          "name": "Astral ProFlow CPVC Pipe 25mm (SDR 11 - 3m)",
+          "qty": 10,
+          "unitPrice": 2190,
+          "total": 21900
+        }
+      ],
+      "totalAmount": 21900,
+      "paymentMethod": "CREDIT_90_DAYS",
+      "paymentSubType": "Dealer Order",
+      "paymentStatus": "Credit / Outstanding",
+      "orderStatus": "Confirmed",
+      "creditDays": 90,
+      "dueDate": "2027-01-10",
+      "assignedPlumberId": null,
+      "assignedPlumberName": null,
+      "plumberTaskStatus": null,
+      "plumberNotes": null,
+      "shippingAddress": "Hyderabad Site",
+      "orderDate": "2026-10-12T15:36:18.562Z",
+      "createdAt": "2026-10-12T15:36:18.562Z",
+      "trackingTimeline": [
+        {
+          "step": "Placed",
+          "detail": "Order placed by user via mobile app",
+          "time": "12 Oct, 09:06 pm",
+          "done": true
+        },
+        {
+          "step": "Confirmed",
+          "detail": "90-Day Approved Credit recorded in Zoho Books (Due: 2027-01-10)",
+          "time": "12 Oct, 09:06 pm",
+          "done": true
+        },
+        {
+          "step": "Processing",
+          "detail": "Stock reserved in Zoho Workbook & packed for dispatch",
+          "time": "In Queue",
+          "done": false
+        },
+        {
+          "step": "Shipped",
+          "detail": "Bulk freight transport in transit",
+          "time": "Pending",
+          "done": false
+        },
+        {
+          "step": "Delivered",
+          "detail": "Delivered to designated premise",
+          "time": "Pending",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "ORD-2026-104",
+      "orderRole": "dealer",
+      "userId": "DLR-01",
+      "userName": "Sri Venkateswara Sanitary & Hardware Distributors",
+      "userMobile": "9000011111",
+      "items": [
+        {
+          "productId": "PRD-1007",
+          "name": "Grundfos-Grade 1.0 HP Silent Pressure Booster Pump",
+          "qty": 1,
+          "unitPrice": 14600,
+          "total": 14600
+        }
+      ],
+      "totalAmount": 14600,
+      "paymentMethod": "UPFRONT",
+      "paymentSubType": "Upfront Corporate Payment",
+      "paymentStatus": "Successful",
+      "orderStatus": "Confirmed",
+      "creditDays": 0,
+      "dueDate": "Immediate",
+      "assignedPlumberId": null,
+      "assignedPlumberName": null,
+      "plumberTaskStatus": null,
+      "plumberNotes": null,
+      "shippingAddress": "Hyderabad Site",
+      "orderDate": "2026-10-12T14:53:33.661Z",
+      "createdAt": "2026-10-12T14:53:33.661Z",
+      "trackingTimeline": [
+        {
+          "step": "Placed",
+          "detail": "Order placed by user via mobile app",
+          "time": "12 Oct, 08:23 pm",
+          "done": true
+        },
+        {
+          "step": "Confirmed",
+          "detail": "Upfront payment confirmed via Corporate Settlement",
+          "time": "12 Oct, 08:23 pm",
+          "done": true
+        },
+        {
+          "step": "Processing",
+          "detail": "Stock reserved in Zoho Workbook & packed for dispatch",
+          "time": "In Queue",
+          "done": false
+        },
+        {
+          "step": "Shipped",
+          "detail": "Bulk freight transport in transit",
+          "time": "Pending",
+          "done": false
+        },
+        {
+          "step": "Delivered",
+          "detail": "Delivered to designated premise",
+          "time": "Pending",
+          "done": false
+        }
+      ]
+    },
     {
       "id": "ORD-2026-101",
       "orderRole": "customer",
@@ -692,6 +898,28 @@
   ],
   "payments": [
     {
+      "id": "PAY-9005",
+      "orderId": "ORD-2026-105",
+      "partyName": "Sri Venkateswara Sanitary & Hardware Distributors",
+      "role": "dealer",
+      "amount": 21900,
+      "mode": "Credit Payment – 90 Days",
+      "status": "Credit / Outstanding",
+      "dueDate": "2027-01-10",
+      "date": "2026-10-12"
+    },
+    {
+      "id": "PAY-9004",
+      "orderId": "ORD-2026-104",
+      "partyName": "Sri Venkateswara Sanitary & Hardware Distributors",
+      "role": "dealer",
+      "amount": 14600,
+      "mode": "Upfront Dealer Payment",
+      "status": "Successful",
+      "dueDate": "Immediate",
+      "date": "2026-10-12"
+    },
+    {
       "id": "PAY-9001",
       "orderId": "ORD-2026-101",
       "partyName": "Rahul Sharma",
@@ -725,5 +953,170 @@
       "date": "2026-10-12"
     }
   ],
-  "otpSessions": {}
+  "otpSessions": {
+    "9347486117": {
+      "mobile": "9347486117",
+      "role": "customer",
+      "name": "manikanta",
+      "otp": "401079",
+      "attempts": 1,
+      "resendCount": 5,
+      "lastSentAt": "2026-10-12T11:41:40.225Z",
+      "expiresAt": "2026-10-12T11:46:40.225Z"
+    },
+    "7777777777": {
+      "mobile": "7777777777",
+      "role": "customer",
+      "name": "",
+      "otp": "163892",
+      "attempts": 0,
+      "resendCount": 1,
+      "lastSentAt": "2026-10-12T14:47:07.409Z",
+      "expiresAt": "2026-10-12T14:52:07.409Z"
+    },
+    "9876543210": {
+      "mobile": "9876543210",
+      "role": "customer",
+      "name": "",
+      "otp": "232140",
+      "attempts": 1,
+      "resendCount": 1,
+      "lastSentAt": "2026-10-12T15:26:01.362Z",
+      "expiresAt": "2026-10-12T15:31:01.362Z"
+    },
+    "9000033333": {
+      "mobile": "9000033333",
+      "role": "dealer",
+      "name": "",
+      "otp": "624880",
+      "attempts": 0,
+      "resendCount": 2,
+      "lastSentAt": "2026-10-12T15:36:18.610Z",
+      "expiresAt": "2026-10-12T15:41:18.610Z"
+    }
+  },
+  "dealerCarts": {
+    "DLR-01": []
+  },
+  "activities": [
+    {
+      "id": "ACT-2026-101",
+      "orderId": "ORD-2026-101",
+      "assignedPlumberId": "PLB-01",
+      "assignedPlumberName": "Ramesh Babu (Master Plumber)",
+      "customerName": "Rahul Sharma",
+      "customerMobile": "9876543210",
+      "location": "Flat 402, Green Valley Residency, Madhapur, Hyderabad - 500081",
+      "requiredWork": "Concealed Diverter Fitting & CPVC Header Line Pressure Test",
+      "requiredProducts": [
+        {
+          "productId": "PRD-1003",
+          "name": "Kohler-Style Thermostatic High-Flow Diverter Mixer",
+          "qty": 1
+        },
+        {
+          "productId": "PRD-1001",
+          "name": "Astral ProFlow CPVC Pipe 25mm (SDR 11 - 3m)",
+          "qty": 2
+        }
+      ],
+      "scheduledDate": "2026-10-12",
+      "scheduledTime": "04:00 PM",
+      "instructions": "Verify wall cavity depth between 55mm and 75mm before tiling. Test line at 10 Bar for 15 mins.",
+      "status": "IN_PROGRESS",
+      "remarks": "Site visit scheduled at 4:00 PM today for concealed diverter pressure test.",
+      "createdAt": "2026-10-11T09:30:00Z",
+      "completedDate": null
+    },
+    {
+      "id": "ACT-2026-102",
+      "orderId": null,
+      "assignedPlumberId": "PLB-01",
+      "assignedPlumberName": "Ramesh Babu (Master Plumber)",
+      "customerName": "Kavita Varma",
+      "customerMobile": "9949123456",
+      "location": "Villa 12, Rainbow Vistas, Hitec City, Hyderabad - 500018",
+      "requiredWork": "Dual Flush Concealed Cistern Installation & Testing",
+      "requiredProducts": [
+        {
+          "productId": "PRD-1008",
+          "name": "Slimline Concealed Dual-Flush Cistern Frame System",
+          "qty": 1
+        }
+      ],
+      "scheduledDate": "2026-10-13",
+      "scheduledTime": "10:30 AM",
+      "instructions": "Anchor frame bolts into solid masonry slab. Verify 180mm WC bolt pitch before sealing.",
+      "status": "ASSIGNED",
+      "remarks": "New activity assigned by dispatch.",
+      "createdAt": "2026-10-12T06:00:00Z",
+      "completedDate": null
+    },
+    {
+      "id": "ACT-2026-098",
+      "orderId": null,
+      "assignedPlumberId": "PLB-01",
+      "assignedPlumberName": "Ramesh Babu (Master Plumber)",
+      "customerName": "Ananya Deshmukh",
+      "customerMobile": "9849098765",
+      "location": "Villa 45, Jubilee Hills, Hyderabad - 500033",
+      "requiredWork": "1.0 HP Pressure Booster Pump Installation & Vibration Dampening",
+      "requiredProducts": [
+        {
+          "productId": "PRD-1007",
+          "name": "Grundfos-Grade 1.0 HP Silent Pressure Booster Pump",
+          "qty": 1
+        },
+        {
+          "productId": "PRD-1005",
+          "name": "Forged Brass Full-Bore Ball Valve 25mm (PN25)",
+          "qty": 2
+        }
+      ],
+      "scheduledDate": "2026-10-09",
+      "scheduledTime": "11:00 AM",
+      "instructions": "Install NRV on suction side, mount on rubber vibration pads, verify 3.2 Bar cut-off pressure.",
+      "status": "COMPLETED",
+      "remarks": "Pump installed and commissioned. Cut-off pressure calibrated at 3.2 Bar. Customer tested and verified.",
+      "createdAt": "2026-10-08T14:00:00Z",
+      "completedDate": "2026-10-09T13:30:00Z",
+      "rewardPointsEarned": 150
+    }
+  ],
+  "productRequests": [
+    {
+      "id": "REQ-PLB-501",
+      "plumberId": "PLB-01",
+      "plumberName": "Ramesh Babu (Master Plumber)",
+      "productId": "PRD-1005",
+      "productName": "Forged Brass Full-Bore Ball Valve 25mm (PN25)",
+      "sku": "ZW-VALVE-BRASS-25",
+      "categoryName": "Industrial Valves & Fittings",
+      "quantity": 4,
+      "reason": "Urgent replacement of worn-out valves on Madhapur site header line",
+      "activityId": "ACT-2026-101",
+      "remarks": "Need heavy PN25 brass valves for high-rise riser pressure stability.",
+      "status": "APPROVED",
+      "createdAt": "2026-10-11T12:00:00Z",
+      "updatedAt": "2026-10-11T15:30:00Z",
+      "adminNotes": "Approved for Madhapur site inspection job."
+    },
+    {
+      "id": "REQ-PLB-502",
+      "plumberId": "PLB-01",
+      "plumberName": "Ramesh Babu (Master Plumber)",
+      "productId": "PRD-1006",
+      "productName": "Precision Brass Pressure Reducing Valve w/ Gauge (20mm)",
+      "sku": "ZW-VALVE-PRV-20",
+      "categoryName": "Industrial Valves & Fittings",
+      "quantity": 2,
+      "reason": "Excessive water inlet pressure damaging customer fittings",
+      "activityId": "ACT-2026-101",
+      "remarks": "Inlet pressure exceeds 5.5 Bar; PRV required to reduce to 3.0 Bar.",
+      "status": "PENDING",
+      "createdAt": "2026-10-12T08:00:00Z",
+      "updatedAt": "2026-10-12T08:00:00Z",
+      "adminNotes": ""
+    }
+  ]
 }

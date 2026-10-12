@@ -6,7 +6,8 @@ import {
   Truck,
   User,
   ClipboardList,
-  BookOpen
+  BookOpen,
+  Bell
 } from 'lucide-react';
 
 export default function MobileBottomNav({ role, activeTab, onSelectTab }) {
@@ -29,10 +30,11 @@ export default function MobileBottomNav({ role, activeTab, onSelectTab }) {
     ];
   } else if (role === 'plumber') {
     navItems = [
-      { id: 'DASHBOARD', label: 'Overview', icon: LayoutDashboard },
-      { id: 'ASSIGNED_JOBS', label: 'Assigned Jobs', icon: ClipboardList },
-      { id: 'PRODUCT_GUIDE', label: 'Product Specs', icon: BookOpen },
-      { id: 'PROFILE', label: 'KYC & Wallet', icon: User }
+      { id: 'DASHBOARD', label: 'Home', icon: LayoutDashboard },
+      { id: 'ACTIVITIES', label: 'Activities', icon: ClipboardList, aliases: ['ASSIGNED_JOBS', 'ACTIVITY_DETAIL'] },
+      { id: 'PRODUCTS', label: 'Products', icon: Package, aliases: ['PRODUCT_GUIDE', 'PRODUCT_DETAIL', 'PRODUCT_REQUESTS'] },
+      { id: 'NOTIFICATIONS', label: 'Alerts', icon: Bell },
+      { id: 'PROFILE', label: 'Profile', icon: User }
     ];
   }
 
@@ -40,7 +42,7 @@ export default function MobileBottomNav({ role, activeTab, onSelectTab }) {
     <div className="bg-slate-950 border-t border-slate-800 px-3 py-2 flex items-center justify-around sticky bottom-0 z-20">
       {navItems.map((item) => {
         const Icon = item.icon;
-        const active = activeTab === item.id;
+        const active = activeTab === item.id || (item.aliases && item.aliases.includes(activeTab));
         return (
           <button
             key={item.id}

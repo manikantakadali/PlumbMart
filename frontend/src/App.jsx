@@ -19,6 +19,7 @@ import {
   zohoDealerService
 } from './services/zoho';
 import { customerService } from './services/customerService';
+import { plumberService } from './services/plumberService';
 import { apiRequest } from './services/api';
 
 // Navigation Components
@@ -51,10 +52,10 @@ import DealerOrders from './components/dealer/DealerOrders';
 import DealerProfile from './components/dealer/DealerProfile';
 import DealerNotifications from './components/dealer/DealerNotifications';
 
-// Plumber Screens
+// Plumber Screens (Fully Dynamic Role)
 import PlumberDashboard from './components/plumber/PlumberDashboard';
-import PlumberAssignedActivities from './components/plumber/PlumberAssignedActivities';
-import PlumberProductRequirements from './components/plumber/PlumberProductRequirements';
+import PlumberActivities from './components/plumber/PlumberActivities';
+import PlumberProducts from './components/plumber/PlumberProducts';
 import PlumberProfile from './components/plumber/PlumberProfile';
 import PlumberNotifications from './components/plumber/PlumberNotifications';
 
@@ -130,6 +131,14 @@ export default function App() {
 
   // Plumber Data & Admin Data
   const [plumberData, setPlumberData] = useState(null);
+  const [plumberDashboardData, setPlumberDashboardData] = useState(null);
+  const [plumberActivities, setPlumberActivities] = useState([]);
+  const [plumberProducts, setPlumberProducts] = useState([]);
+  const [plumberCategories, setPlumberCategories] = useState([]);
+  const [plumberProductRequests, setPlumberProductRequests] = useState([]);
+  const [isPlumberLoading, setIsPlumberLoading] = useState(false);
+  const [plumberError, setPlumberError] = useState(null);
+  const [activePlumberActivity, setActivePlumberActivity] = useState(null);
   const [adminData, setAdminData] = useState(null);
   const [zohoMeta, setZohoMeta] = useState(null);
 
@@ -179,6 +188,15 @@ export default function App() {
           });
           setProducts(res.products || []);
           if (res.categories) setCategories(res.categories);
+        } else if (role === 'dealer') {
+          const res = await zohoDealerService.getProducts({
+            categoryId: catId,
+            search,
+            sort,
+            filter
+          });
+          setProducts(res.products || []);
+          if (res.categories) setCategories(res.categories);
         } else {
           const res = await zohoProductService.getProductsByRole(role, catId, search);
           setProducts(res.products || []);
@@ -207,6 +225,25 @@ export default function App() {
       setCartCount(res.itemCount || 0);
     } catch (err) {
       setCartError('Failed to sync shopping cart.');
+    } finally {
+      setIsCartLoading(false);
+    }
+  }, []);
+
+  // 5b. Fetch Dealer Wholesale Cart from Backend
+  const fetchDealerCart = useCallback(async (dealerId) => {
+    if (!dealerId) return;
+    setIsCartLoading(true);
+    setCartError(null);
+    try {
+      const res = await zohoDealerService.getCart(dealerId);
+      setCartItems(res.items || []);
+      setCartSubtotal(res.subtotal || 0);
+      setCartDeliveryCharge(res.deliveryCharge || 0);
+      setCartTotalAmount(res.totalAmount || 0);
+      setCartCount(res.itemCount || 0);
+    } catch (err) {
+      setCartError('Failed to sync wholesale cart.');
     } finally {
       setIsCartLoading(false);
     }
@@ -256,7 +293,7 @@ export default function App() {
     }
   }, []);
 
-  // 9. Fetch Plumber Info
+  // 9. Fetch Plumber Info & Dynamic Role Data
   const fetchPlumberInfo = useCallback(async (plumberId) => {
     try {
       const data = await apiRequest(`/api/plumber/${plumberId || 'PLB-01'}`);
@@ -265,6 +302,71 @@ export default function App() {
       console.error('Error fetching plumber info:', err);
     }
   }, []);
+
+  const fetchPlumberDashboard = useCallback(async (user) => {
+    const u = user || currentUser;
+    if (!u || u.role !== 'plumber') return;
+    setIsPlumberLoading(true);
+    setPlumberError(null);
+    try {
+      const data = await plumberService.getDashboard(u);
+      setPlumberDashboardData(data);
+      if (data.plumber) {
+        setPlumberData({ plumber: data.plumber });
+      }
+    } catch (err) {
+      console.error('Error fetching plumber dashboard:', err);
+      setPlumberError('Failed to load plumber dashboard.');
+    } finally {
+      setIsPlumberLoading(false);
+    }
+  }, [currentUser]);
+
+  const fetchPlumberActivities = useCallback(async (user, filter = 'all', search = '') => {
+    const u = user || currentUser;
+    if (!u || u.role !== 'plumber') return;
+    try {
+      const data = await plumberService.getActivities(u, filter, search);
+      setPlumberActivities(data.activities || []);
+    } catch (err) {
+      console.error('Error fetching plumber activities:', err);
+    }
+  }, [currentUser]);
+
+  const fetchPlumberProducts = useCallback(async (user, { categoryId = 'all', search = '', sort = '', filter = '' } = {}) => {
+    const u = user || currentUser;
+    if (!u || u.role !== 'plumber') return;
+    try {
+      const data = await plumberService.getProducts(u, { categoryId, search, sort, filter });
+      setPlumberProducts(data.products || []);
+      if (data.categories) setPlumberCategories(data.categories);
+    } catch (err) {
+      console.error('Error fetching plumber products:', err);
+    }
+  }, [currentUser]);
+
+  const fetchPlumberProductRequests = useCallback(async (user, status = 'all') => {
+    const u = user || currentUser;
+    if (!u || u.role !== 'plumber') return;
+    try {
+      const data = await plumberService.getProductRequests(u, status);
+      setPlumberProductRequests(data.requests || []);
+    } catch (err) {
+      console.error('Error fetching plumber product requests:', err);
+    }
+  }, [currentUser]);
+
+  const fetchPlumberNotifications = useCallback(async (user) => {
+    const u = user || currentUser;
+    if (!u || u.role !== 'plumber') return;
+    try {
+      const data = await plumberService.getNotifications(u);
+      setNotifications(data.notifications || []);
+      setUnreadNotificationsCount(data.unreadCount || 0);
+    } catch (err) {
+      console.error('Error fetching plumber notifications:', err);
+    }
+  }, [currentUser]);
 
   // Initial Load
   useEffect(() => {
@@ -405,6 +507,11 @@ export default function App() {
 
       await loginSuccess(res.user);
     } catch (err) {
+      if (selectedRole === 'dealer' && err.data?.code === 'ZOHO_VERIFICATION_FAILED' && err.data?.user) {
+        setPendingDealerVerification(err.data.user);
+        setAuthStep('ZOHO_VERIFY');
+        return;
+      }
       setAuthError(err.data ? err.data.error : err.message);
     } finally {
       setIsVerifying(false);
@@ -427,17 +534,19 @@ export default function App() {
       await fetchCustomerNotifications(user.id);
       await fetchDynamicProducts('customer', 'all', '', '', '');
     } else if (user.role === 'dealer') {
-      await fetchDynamicProducts('dealer', 'all', '');
+      await fetchCategories();
+      await fetchDynamicProducts('dealer', 'all', '', '', '');
+      await fetchDealerCart(user.id);
       const dealerOrders = await apiRequest(`/api/orders?role=dealer&userId=${user.id}`);
       setOrders(dealerOrders.orders || []);
       const dNotifs = await apiRequest(`/api/notifications?role=dealer&userId=${user.id}`);
       setNotifications(dNotifs.notifications || []);
-      setCartItems([]);
-      setCartCount(0);
     } else if (user.role === 'plumber') {
-      await fetchPlumberInfo(user.id);
-      const pNotifs = await apiRequest(`/api/notifications?role=plumber&userId=${user.id}`);
-      setNotifications(pNotifs.notifications || []);
+      await fetchPlumberDashboard(user);
+      await fetchPlumberActivities(user);
+      await fetchPlumberProducts(user);
+      await fetchPlumberProductRequests(user);
+      await fetchPlumberNotifications(user);
     }
 
     await fetchOverview();
@@ -496,7 +605,7 @@ export default function App() {
     setCartCount(0);
   };
 
-  // Customer Dynamic Cart Actions
+  // Dynamic Cart Actions (Customer & Dealer Backend Persistence)
   const handleAddToCart = async (product, qty = 1) => {
     if (currentUser?.role === 'customer') {
       try {
@@ -509,22 +618,24 @@ export default function App() {
       } catch (err) {
         console.error('Error adding to backend cart:', err);
       }
-    } else {
-      // Dealer local cart for bulk quotes
-      const minQty = product.minDealerOrderQty || 1;
-      const addQty = qty || minQty;
-      setCartItems((prev) => {
-        const exists = prev.find((i) => i.product.id === product.id);
-        if (exists) {
-          return prev.map((i) =>
-            i.product.id === product.id ? { ...i, qty: i.qty + addQty } : i
-          );
-        }
-        return [...prev, { product, qty: addQty }];
-      });
-      setCartCount((c) => c + addQty);
+    } else if (currentUser?.role === 'dealer') {
+      try {
+        const minQty = product.minDealerOrderQty || 1;
+        const addQty = Math.max(minMoqIfAny(minQty), Number(qty || minQty));
+        const res = await zohoDealerService.addToCart(currentUser.id, product.id, addQty);
+        setCartItems(res.items || []);
+        setCartSubtotal(res.subtotal || 0);
+        setCartDeliveryCharge(res.deliveryCharge || 0);
+        setCartTotalAmount(res.totalAmount || 0);
+        setCartCount(res.itemCount || 0);
+      } catch (err) {
+        console.error('Error adding wholesale product to backend cart:', err);
+        setCartError(err.data ? err.data.error : err.message);
+      }
     }
   };
+
+  const minMoqIfAny = (moq) => moq || 1;
 
   const handleUpdateCartQty = async (productId, delta) => {
     if (currentUser?.role === 'customer') {
@@ -538,16 +649,17 @@ export default function App() {
       } catch (err) {
         console.error('Error updating cart qty:', err);
       }
-    } else {
-      setCartItems((prev) =>
-        prev
-          .map((item) => {
-            if (item.product.id !== productId) return item;
-            const next = item.qty + delta;
-            return next > 0 ? { ...item, qty: next } : null;
-          })
-          .filter(Boolean)
-      );
+    } else if (currentUser?.role === 'dealer') {
+      try {
+        const res = await zohoDealerService.updateCartQty(currentUser.id, productId, delta);
+        setCartItems(res.items || []);
+        setCartSubtotal(res.subtotal || 0);
+        setCartDeliveryCharge(res.deliveryCharge || 0);
+        setCartTotalAmount(res.totalAmount || 0);
+        setCartCount(res.itemCount || 0);
+      } catch (err) {
+        console.error('Error updating dealer wholesale cart qty:', err);
+      }
     }
   };
 
@@ -559,8 +671,13 @@ export default function App() {
       } catch (err) {
         console.error('Error removing cart item:', err);
       }
-    } else {
-      setCartItems((prev) => prev.filter((i) => i.product.id !== productId));
+    } else if (currentUser?.role === 'dealer') {
+      try {
+        await zohoDealerService.removeCartItem(currentUser.id, productId);
+        await fetchDealerCart(currentUser.id);
+      } catch (err) {
+        console.error('Error removing dealer wholesale cart item:', err);
+      }
     }
   };
 
@@ -576,9 +693,17 @@ export default function App() {
       } catch (err) {
         console.error('Error clearing cart:', err);
       }
-    } else {
-      setCartItems([]);
-      setCartCount(0);
+    } else if (currentUser?.role === 'dealer') {
+      try {
+        await zohoDealerService.clearCart(currentUser.id);
+        setCartItems([]);
+        setCartSubtotal(0);
+        setCartDeliveryCharge(0);
+        setCartTotalAmount(0);
+        setCartCount(0);
+      } catch (err) {
+        console.error('Error clearing dealer wholesale cart:', err);
+      }
     }
   };
 
@@ -633,10 +758,12 @@ export default function App() {
         await fetchCustomerCart(currentUser.id);
         await fetchCustomerOrders(currentUser.id);
         await fetchCustomerNotifications(currentUser.id);
-      } else {
-        setCartItems([]);
+      } else if (currentUser.role === 'dealer') {
+        await fetchDealerCart(currentUser.id);
         const dealerOrders = await apiRequest(`/api/orders?role=dealer&userId=${currentUser.id}`);
         setOrders(dealerOrders.orders || []);
+        const dNotifs = await apiRequest(`/api/notifications?role=dealer&userId=${currentUser.id}`);
+        setNotifications(dNotifs.notifications || []);
       }
 
       setActiveOrder(res.order);
@@ -668,15 +795,72 @@ export default function App() {
     await fetchCustomerNotifications(currentUser.id);
   };
 
-  // Plumber Actions
-  const handlePlumberStatusUpdate = async (orderId, status) => {
-    await apiRequest(`/api/plumber/orders/${orderId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ plumberTaskStatus: status })
-    });
-    await fetchPlumberInfo(currentUser?.id);
-    await fetchCustomerNotifications(currentUser?.id);
+  // Plumber Actions (100% Dynamic & Role-Secured)
+  const handlePlumberStatusUpdate = async (activityId, status, remarks = '') => {
+    if (!currentUser) return;
+    const res = await plumberService.updateActivityStatus(currentUser, activityId, status, remarks);
+    if (res.plumber) {
+      setCurrentUser(res.plumber);
+      setPlumberDashboardData((prev) => (prev ? { ...prev, plumber: res.plumber } : null));
+    }
+    await fetchPlumberDashboard(currentUser);
+    await fetchPlumberActivities(currentUser);
+    await fetchPlumberNotifications(currentUser);
     await fetchOverview();
+    return res;
+  };
+
+  const handlePlumberUpdateRemarks = async (activityId, remarks) => {
+    if (!currentUser) return;
+    const res = await plumberService.updateActivityRemarks(currentUser, activityId, remarks);
+    await fetchPlumberActivities(currentUser);
+    return res;
+  };
+
+  const handlePlumberSubmitRequest = async (reqData) => {
+    if (!currentUser) return;
+    const res = await plumberService.createProductRequest(currentUser, reqData);
+    await fetchPlumberProductRequests(currentUser);
+    await fetchPlumberDashboard(currentUser);
+    await fetchPlumberNotifications(currentUser);
+    return res;
+  };
+
+  const handlePlumberCancelRequest = async (requestId) => {
+    if (!currentUser) return;
+    const res = await plumberService.cancelProductRequest(currentUser, requestId);
+    await fetchPlumberProductRequests(currentUser);
+    await fetchPlumberDashboard(currentUser);
+    await fetchPlumberNotifications(currentUser);
+    return res;
+  };
+
+  const handlePlumberMarkNotificationRead = async (notifId) => {
+    if (!currentUser) return;
+    await plumberService.markNotificationRead(currentUser, notifId);
+    await fetchPlumberNotifications(currentUser);
+  };
+
+  const handlePlumberMarkAllNotificationsRead = async () => {
+    if (!currentUser) return;
+    await plumberService.markAllNotificationsRead(currentUser);
+    await fetchPlumberNotifications(currentUser);
+  };
+
+  const handlePlumberUpdateProfile = async (profileData) => {
+    if (!currentUser) return;
+    const res = await plumberService.updateProfile(currentUser, profileData);
+    if (res.plumber) {
+      setCurrentUser(res.plumber);
+      setPlumberDashboardData((prev) => (prev ? { ...prev, plumber: res.plumber } : null));
+      setPlumberData({ plumber: res.plumber });
+    }
+    return res;
+  };
+
+  const handlePlumberUpdateSettings = async (settingsData) => {
+    if (!currentUser) return;
+    return await plumberService.updateSettings(currentUser, settingsData);
   };
 
   // Admin Actions
@@ -1205,22 +1389,38 @@ export default function App() {
                           <DealerDashboard
                             dealer={currentUser}
                             products={products}
+                            categories={categories}
                             orders={orders}
+                            cartCount={cartCount}
                             onNavigate={navigateTo}
+                            onSelectCategory={(catId) => {
+                              setSelectedCategory(catId);
+                              fetchDynamicProducts('dealer', catId, searchQuery, sortOption, activeFilter);
+                            }}
                           />
                         )}
 
                         {mobileScreen === 'PRODUCTS' && (
                           <DealerProductList
                             products={products}
+                            categories={categories}
+                            selectedCategory={selectedCategory}
+                            onSelectCategory={(catId) => {
+                              setSelectedCategory(catId);
+                              fetchDynamicProducts('dealer', catId, searchQuery, sortOption, activeFilter);
+                            }}
                             searchQuery={searchQuery}
                             onSearchChange={(q) => {
                               setSearchQuery(q);
-                              fetchDynamicProducts('dealer', selectedCategory, q);
+                              fetchDynamicProducts('dealer', selectedCategory, q, sortOption, activeFilter);
+                            }}
+                            sortOption={sortOption}
+                            onSortChange={(s) => {
+                              setSortOption(s);
+                              fetchDynamicProducts('dealer', selectedCategory, searchQuery, s, activeFilter);
                             }}
                             onAddToCart={(prod, qty) => {
                               handleAddToCart(prod, qty);
-                              navigateTo('CART');
                             }}
                             onOpenCart={() => navigateTo('CART')}
                           />
@@ -1229,10 +1429,14 @@ export default function App() {
                         {mobileScreen === 'CART' && (
                           <DealerCart
                             cart={cartItems}
+                            isLoading={isCartLoading}
+                            error={cartError}
                             onUpdateQty={handleUpdateCartQty}
+                            onRemoveItem={handleRemoveCartItem}
                             onClearCart={handleClearCart}
                             onProceedToCheckout={() => navigateTo('CHECKOUT')}
                             onContinueShopping={() => navigateTo('PRODUCTS')}
+                            onRetry={() => fetchDealerCart(currentUser.id)}
                           />
                         )}
 
@@ -1276,39 +1480,84 @@ export default function App() {
                       </>
                     )}
 
-                    {/* PLUMBER SIDE */}
-                    {currentUser.role === 'plumber' && plumberData && (
+                    {/* PLUMBER SIDE (100% DYNAMIC & FULL ROLE IMPLEMENTATION) */}
+                    {currentUser.role === 'plumber' && (
                       <>
                         {mobileScreen === 'DASHBOARD' && (
                           <PlumberDashboard
-                            plumber={plumberData.plumber}
-                            assignedOrders={plumberData.assignedOrders}
+                            plumber={plumberDashboardData?.plumber || currentUser}
+                            dashboardData={plumberDashboardData}
+                            isLoading={isPlumberLoading}
+                            error={plumberError}
+                            onRetry={() => {
+                              fetchPlumberDashboard(currentUser);
+                              fetchPlumberActivities(currentUser);
+                              fetchPlumberProducts(currentUser);
+                              fetchPlumberProductRequests(currentUser);
+                              fetchPlumberNotifications(currentUser);
+                            }}
                             onNavigateTab={navigateTo}
+                            onOpenActivity={(act) => {
+                              setActivePlumberActivity(act);
+                              navigateTo('ACTIVITIES');
+                            }}
+                            onOpenProduct={() => navigateTo('PRODUCTS')}
                           />
                         )}
 
-                        {mobileScreen === 'ASSIGNED_JOBS' && (
-                          <PlumberAssignedActivities
-                            assignedOrders={plumberData.assignedOrders}
+                        {(mobileScreen === 'ACTIVITIES' || mobileScreen === 'ASSIGNED_JOBS') && (
+                          <PlumberActivities
+                            activities={plumberActivities}
+                            isLoading={isPlumberLoading}
+                            error={plumberError}
+                            onRetry={() => fetchPlumberActivities(currentUser)}
                             onUpdateStatus={handlePlumberStatusUpdate}
+                            onUpdateRemarks={handlePlumberUpdateRemarks}
                           />
                         )}
 
-                        {mobileScreen === 'PRODUCT_GUIDE' && (
-                          <PlumberProductRequirements
-                            technicalCatalog={plumberData.technicalCatalog}
+                        {(mobileScreen === 'PRODUCTS' || mobileScreen === 'PRODUCT_GUIDE' || mobileScreen === 'PRODUCT_REQUESTS') && (
+                          <PlumberProducts
+                            products={plumberProducts}
+                            categories={plumberCategories.length > 0 ? plumberCategories : categories}
+                            productRequests={plumberProductRequests}
+                            activeActivities={(plumberActivities || []).filter((a) => a.status !== 'COMPLETED')}
+                            isLoading={isPlumberLoading}
+                            error={plumberError}
+                            onRetry={() => {
+                              fetchPlumberProducts(currentUser);
+                              fetchPlumberProductRequests(currentUser);
+                            }}
+                            onSelectCategory={(catId) => {
+                              setSelectedCategory(catId);
+                              fetchPlumberProducts(currentUser, { categoryId: catId, search: searchQuery });
+                            }}
+                            selectedCategory={selectedCategory}
+                            searchQuery={searchQuery}
+                            onSearchChange={(q) => {
+                              setSearchQuery(q);
+                              fetchPlumberProducts(currentUser, { categoryId: selectedCategory, search: q });
+                            }}
+                            onSubmitRequest={handlePlumberSubmitRequest}
+                            onCancelRequest={handlePlumberCancelRequest}
                           />
                         )}
 
                         {mobileScreen === 'PROFILE' && (
                           <PlumberProfile
-                            plumber={plumberData.plumber}
+                            plumber={plumberDashboardData?.plumber || currentUser}
+                            onUpdateProfile={handlePlumberUpdateProfile}
+                            onUpdateSettings={handlePlumberUpdateSettings}
                             onLogout={handleLogout}
                           />
                         )}
 
                         {mobileScreen === 'NOTIFICATIONS' && (
-                          <PlumberNotifications notifications={notifications} />
+                          <PlumberNotifications
+                            notifications={notifications}
+                            onMarkAsRead={handlePlumberMarkNotificationRead}
+                            onMarkAllAsRead={handlePlumberMarkAllNotificationsRead}
+                          />
                         )}
                       </>
                     )}
