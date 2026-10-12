@@ -31,5 +31,15 @@ export const zohoAuthService = {
       method: 'POST',
       body: JSON.stringify({ mobile, otp, role, name, address })
     });
+  },
+
+  /**
+   * Resend fresh OTP with cooldown and rate-limit handling
+   */
+  resendOtp: async (mobile, role, name) => {
+    return await apiRequest('/api/auth/resend-otp', {
+      method: 'POST',
+      body: JSON.stringify({ mobile, role, name })
+    });
   }
 };

@@ -9,6 +9,12 @@ const {
   zohoDealerService
 } = require('./services/zoho');
 const { checkConnection } = require('./db');
+const { generateSecureOtp, sendSmsOtp } = require('./services/smsService');
+const {
+  saveOtpSession,
+  verifyOtpSession,
+  getOrCreateCustomer
+} = require('./services/customerDbService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -48,14 +54,15 @@ app.get('/api/auth/demo-accounts', (req, res) => {
 // 1 & 2. AUTHENTICATION & REGISTRATION (OTP ONLY + ZOHO / KYC VERIFICATION)
 // =========================================================================
 
-// Step 1: Send OTP
-app.post('/api/auth/send-otp', (req, res) => {
+// Step 1: Send OTP via SMS
+app.post('/api/auth/send-otp', async (req, res) => {
   const { mobile, role, name } = req.body;
-  if (!mobile || !/^\d{10}$/.test(String(mobile).trim())) {
+  const cleanMobile = String(mobile || '').replace(/\D/g, '');
+
+  if (!cleanMobile || cleanMobile.length !== 10) {
     return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number.' });
   }
 
-  const cleanMobile = String(mobile).trim();
   const selectedRole = (role || 'customer').toLowerCase();
   const store = getStore();
 
@@ -100,109 +107,165 @@ app.post('/api/auth/send-otp', (req, res) => {
     }
   }
 
-  // Generate OTP (123456 for interview demo convenience)
-  const otp = '123456';
-  store.otpSessions[cleanMobile] = {
-    mobile: cleanMobile,
-    role: selectedRole,
-    name: name || '',
-    otp,
-    expiresAt: Date.now() + 5 * 60 * 1000
-  };
-  saveStore(store);
+  try {
+    // Generate secure dynamic 6-digit OTP
+    const otp = generateSecureOtp();
 
-  res.json({
-    success: true,
-    message: `OTP sent successfully to +91 ${cleanMobile}`,
-    demoOtp: otp,
-    role: selectedRole
-  });
+    // Save session in Supabase PostgreSQL & store (validates cooldown & limits)
+    const sessionInfo = await saveOtpSession({
+      mobile: cleanMobile,
+      otp,
+      role: selectedRole,
+      name: name || ''
+    });
+
+    // Send real SMS to actual mobile number
+    const smsDispatch = await sendSmsOtp(cleanMobile, otp);
+
+    const responsePayload = {
+      success: true,
+      message: `OTP sent successfully to +91 ${cleanMobile}`,
+      role: selectedRole,
+      cooldownSeconds: sessionInfo.cooldownSeconds || 30,
+      smsProvider: smsDispatch.provider
+    };
+
+    // For non-customer roles (Dealer, Plumber, Admin demo testing), include demoOtp to preserve testing
+    if (selectedRole !== 'customer') {
+      responsePayload.demoOtp = otp;
+    }
+
+    // Customer OTP is NEVER returned in the response or displayed on frontend
+    return res.json(responsePayload);
+  } catch (err) {
+    console.error('[Send OTP Error]', err.message);
+    return res.status(400).json({ error: err.message });
+  }
 });
 
-// Step 2: Verify OTP & Return User Profile
-app.post('/api/auth/verify-otp', (req, res) => {
-  const { mobile, otp, role, name, address } = req.body;
-  const cleanMobile = String(mobile || '').trim();
+// Resend OTP endpoint with cooldown & abuse protection
+app.post('/api/auth/resend-otp', async (req, res) => {
+  const { mobile, role, name } = req.body;
+  const cleanMobile = String(mobile || '').replace(/\D/g, '');
+
+  if (!cleanMobile || cleanMobile.length !== 10) {
+    return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number.' });
+  }
+
   const selectedRole = (role || 'customer').toLowerCase();
+
+  try {
+    const otp = generateSecureOtp();
+    const sessionInfo = await saveOtpSession({
+      mobile: cleanMobile,
+      otp,
+      role: selectedRole,
+      name: name || ''
+    });
+
+    const smsDispatch = await sendSmsOtp(cleanMobile, otp);
+
+    const responsePayload = {
+      success: true,
+      message: `A fresh OTP has been sent via SMS to +91 ${cleanMobile}`,
+      role: selectedRole,
+      cooldownSeconds: sessionInfo.cooldownSeconds || 30,
+      smsProvider: smsDispatch.provider
+    };
+
+    if (selectedRole !== 'customer') {
+      responsePayload.demoOtp = otp;
+    }
+
+    return res.json(responsePayload);
+  } catch (err) {
+    return res.status(429).json({ error: err.message });
+  }
+});
+
+// Step 2: Verify OTP & Return Authenticated User Profile
+app.post('/api/auth/verify-otp', async (req, res) => {
+  const { mobile, otp, role, name, address } = req.body;
+  const cleanMobile = String(mobile || '').replace(/\D/g, '');
+  const selectedRole = (role || 'customer').toLowerCase();
+  const cleanOtp = String(otp || '').trim();
+
+  if (!cleanMobile || cleanMobile.length !== 10) {
+    return res.status(400).json({ error: 'Invalid mobile number.' });
+  }
+  if (!cleanOtp || cleanOtp.length !== 6) {
+    return res.status(400).json({ error: 'Please enter the 6-digit verification code.' });
+  }
+
   const store = getStore();
 
-  const session = store.otpSessions[cleanMobile];
-  if (!session || (otp !== '123456' && otp !== session.otp)) {
-    return res.status(400).json({ error: 'Invalid OTP. Please enter demo OTP 123456.' });
-  }
+  try {
+    // CUSTOMER: Strict backend verification & Supabase PostgreSQL user persistence
+    if (selectedRole === 'customer') {
+      await verifyOtpSession({ mobile: cleanMobile, otp: cleanOtp, role: selectedRole });
 
-  let user = null;
-
-  if (selectedRole === 'customer') {
-    user = store.users.customers.find((c) => c.mobile === cleanMobile);
-    if (!user) {
-      // Auto-register new customer via mobile OTP
-      const newCustId = `CUST-0${store.users.customers.length + 1}`;
-      const defaultAddr = address?.trim() || 'Flat 402, Green Valley Residency, Madhapur, Hyderabad';
-      user = {
-        id: newCustId,
-        role: 'customer',
-        name: name?.trim() || `Customer (${cleanMobile.slice(-4)})`,
+      // Fetch or dynamically create Customer in Supabase PostgreSQL & store
+      const user = await getOrCreateCustomer({
         mobile: cleanMobile,
-        email: `user${cleanMobile.slice(-4)}@example.com`,
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
-        address: defaultAddr,
-        addresses: [
-          {
-            id: `ADDR-${Date.now()}`,
-            label: 'Primary Delivery Address',
-            addressLine: defaultAddr,
-            city: 'Hyderabad',
-            state: 'Telangana',
-            pincode: '500081',
-            isDefault: true
-          }
-        ],
-        createdAt: new Date().toISOString(),
-        notifications: [
-          {
-            id: `NOTIF-CUST-${Date.now()}`,
-            type: 'GENERAL',
-            title: 'Welcome to PlumbMart!',
-            message: 'Your account is ready. Browse high quality CPVC pipes & plumbing fittings.',
-            time: 'Just now',
-            read: false
-          }
-        ]
-      };
-      store.users.customers.push(user);
-      if (!store.customerCarts) store.customerCarts = {};
-      store.customerCarts[newCustId] = [];
-    }
-  } else if (selectedRole === 'dealer') {
-    const verification = zohoAuthService.verifyDealerInZoho(cleanMobile);
-    if (!verification.isVerified) {
-      return res.status(403).json({
-        code: 'ZOHO_VERIFICATION_FAILED',
-        error: 'Dealer access denied: Must be registered and verified in Zoho CRM.'
+        name,
+        address
+      });
+
+      return res.json({
+        success: true,
+        token: `jwt-sim-${user.role}-${user.id}-${Date.now()}`,
+        user
       });
     }
-    user = store.users.dealers.find((d) => d.mobile === cleanMobile);
-  } else if (selectedRole === 'plumber') {
-    user = store.users.plumbers.find((p) => p.mobile === cleanMobile);
-    if (!user) {
-      return res.status(403).json({ error: 'Plumber account not found.' });
+
+    // DEALER / PLUMBER / ADMIN: Preserves existing verification and accounts
+    const session = store.otpSessions?.[cleanMobile];
+    const isMatchingOtp = (session && (cleanOtp === session.otp || cleanOtp === session.otp_code)) || cleanOtp === '123456';
+
+    if (!isMatchingOtp) {
+      return res.status(400).json({ error: 'Invalid OTP. Please check the code sent to your phone or demo credentials.' });
     }
-  } else if (selectedRole === 'admin') {
-    user = store.users.admins.find((a) => a.mobile === cleanMobile);
-    if (!user) {
-      return res.status(403).json({ error: 'Admin account not found.' });
+
+    let user = null;
+    if (selectedRole === 'dealer') {
+      const verification = zohoAuthService.verifyDealerInZoho(cleanMobile);
+      if (!verification.isVerified) {
+        return res.status(403).json({
+          code: 'ZOHO_VERIFICATION_FAILED',
+          error: 'Dealer access denied: Must be registered and verified in Zoho CRM.'
+        });
+      }
+      user = store.users.dealers.find((d) => d.mobile === cleanMobile);
+    } else if (selectedRole === 'plumber') {
+      user = store.users.plumbers.find((p) => p.mobile === cleanMobile);
+      if (!user) {
+        return res.status(403).json({ error: 'Plumber account not found.' });
+      }
+    } else if (selectedRole === 'admin') {
+      user = store.users.admins.find((a) => a.mobile === cleanMobile);
+      if (!user) {
+        return res.status(403).json({ error: 'Admin account not found.' });
+      }
     }
+
+    if (!user) {
+      return res.status(404).json({ error: 'Account not found for the specified role.' });
+    }
+
+    if (store.otpSessions?.[cleanMobile]) {
+      delete store.otpSessions[cleanMobile];
+      saveStore(store);
+    }
+
+    return res.json({
+      success: true,
+      token: `jwt-sim-${user.role}-${user.id}-${Date.now()}`,
+      user
+    });
+  } catch (err) {
+    console.error('[Verify OTP Error]', err.message);
+    return res.status(400).json({ error: err.message });
   }
-
-  delete store.otpSessions[cleanMobile];
-  saveStore(store);
-
-  res.json({
-    success: true,
-    token: `jwt-sim-${user.role}-${user.id}-${Date.now()}`,
-    user
-  });
 });
 
 // Dedicated Zoho Dealer Verification check endpoint
@@ -992,6 +1055,12 @@ app.listen(PORT, async () => {
   const dbStatus = await checkConnection();
   if (dbStatus.connected) {
     console.log(`Connected to Supabase PostgreSQL (Server Time: ${dbStatus.time})`);
+    try {
+      const { initDatabase } = require('./init-db');
+      await initDatabase();
+    } catch (e) {
+      console.warn('Database init note:', e.message);
+    }
   } else {
     console.log(`Supabase Database Status: ${dbStatus.error || 'Not configured'}`);
   }

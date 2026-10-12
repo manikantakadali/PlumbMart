@@ -69,10 +69,13 @@ export default function App() {
   // Auth State
   const [authStep, setAuthStep] = useState('LOGIN'); // 'SPLASH' | 'LOGIN' | 'OTP' | 'ZOHO_VERIFY' | 'AUTHENTICATED'
   const [selectedRole, setSelectedRole] = useState('customer');
-  const [mobileInput, setMobileInput] = useState('9876543210');
-  const [nameInput, setNameInput] = useState('Rahul Sharma');
-  const [otpInput, setOtpInput] = useState('123456');
+  const [mobileInput, setMobileInput] = useState('');
+  const [nameInput, setNameInput] = useState('');
+  const [otpInput, setOtpInput] = useState('');
   const [authError, setAuthError] = useState(null);
+  const [smsNotice, setSmsNotice] = useState('');
+  const [demoOtp, setDemoOtp] = useState(null);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [pendingDealerVerification, setPendingDealerVerification] = useState(null);
 
@@ -289,27 +292,43 @@ export default function App() {
   };
 
   // Auth: Send OTP
+  // Auth: Send OTP via SMS
   const handleSendOtp = async (e) => {
     if (e) e.preventDefault();
     setAuthError(null);
-
-    if (selectedRole === 'admin') {
-      try {
-        const res = await zohoAuthService.requestOtp(mobileInput, 'admin');
-        setOtpInput(res.demoOtp || '123456');
-        setAuthStep('OTP');
-      } catch (err) {
-        setAuthError(err.data || { error: err.message });
-      }
-      return;
-    }
+    setSmsNotice('');
+    setOtpInput('');
 
     try {
       const res = await zohoAuthService.requestOtp(mobileInput, selectedRole, nameInput);
-      setOtpInput(res.demoOtp || '123456');
+      setSmsNotice(res.message || `Verification code sent via SMS to +91 ${mobileInput}`);
+      if (selectedRole !== 'customer' && res.demoOtp) {
+        setDemoOtp(res.demoOtp);
+        setOtpInput(res.demoOtp);
+      } else {
+        setDemoOtp(null);
+        setOtpInput(''); // Customer enters real OTP received on actual phone
+      }
       setAuthStep('OTP');
     } catch (err) {
-      setAuthError(err.data || { error: err.message });
+      setAuthError(err.data ? err.data.error : err.message);
+    }
+  };
+
+  // Auth: Resend OTP via SMS with cooldown
+  const handleResendOtp = async () => {
+    setAuthError(null);
+    try {
+      const res = await zohoAuthService.resendOtp(mobileInput, selectedRole, nameInput);
+      setSmsNotice(res.message);
+      if (selectedRole !== 'customer' && res.demoOtp) {
+        setDemoOtp(res.demoOtp);
+      }
+      return res;
+    } catch (err) {
+      const errMsg = err.data ? err.data.error : err.message;
+      setAuthError(errMsg);
+      throw new Error(errMsg);
     }
   };
 
@@ -317,6 +336,7 @@ export default function App() {
   const handleVerifyOtp = async (e) => {
     if (e) e.preventDefault();
     setAuthError(null);
+    setIsVerifying(true);
     try {
       const res = await zohoAuthService.verifyOtp(
         mobileInput,
@@ -341,6 +361,8 @@ export default function App() {
       await loginSuccess(res.user);
     } catch (err) {
       setAuthError(err.data ? err.data.error : err.message);
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -388,6 +410,11 @@ export default function App() {
       const adminUser = adminData?.users?.admins[0] || { id: 'ADM-01', role: 'admin', name: 'Manikanta (Super Admin)' };
       setCurrentUser(adminUser);
       setMainView('admin');
+      return;
+    }
+
+    if (role === 'customer') {
+      setAuthStep('LOGIN');
       return;
     }
 
@@ -865,7 +892,10 @@ export default function App() {
                     onSelectRole={(r) => {
                       setSelectedRole(r);
                       setAuthError(null);
-                      if (r === 'customer') setMobileInput('9876543210');
+                      if (r === 'customer') {
+                        setMobileInput('');
+                        setNameInput('');
+                      }
                       if (r === 'dealer') setMobileInput('9000011111');
                       if (r === 'plumber') setMobileInput('9111122222');
                       if (r === 'admin') setMobileInput('9999999999');
@@ -887,10 +917,13 @@ export default function App() {
                     role={selectedRole}
                     otpInput={otpInput}
                     onChangeOtp={setOtpInput}
-                    demoOtp="123456"
+                    demoOtp={selectedRole !== 'customer' ? demoOtp : null}
                     error={authError}
+                    smsNotice={smsNotice}
+                    isVerifying={isVerifying}
                     onBack={() => setAuthStep('LOGIN')}
                     onVerify={handleVerifyOtp}
+                    onResendOtp={handleResendOtp}
                   />
                 )}
 
