@@ -128,13 +128,27 @@ app.post('/api/auth/verify-otp', (req, res) => {
     user = store.users.customers.find((c) => c.mobile === cleanMobile);
     if (!user) {
       // Auto-register new customer via mobile OTP
+      const newCustId = `CUST-0${store.users.customers.length + 1}`;
+      const defaultAddr = address?.trim() || 'Flat 402, Green Valley Residency, Madhapur, Hyderabad';
       user = {
-        id: `CUST-0${store.users.customers.length + 1}`,
+        id: newCustId,
         role: 'customer',
         name: name?.trim() || `Customer (${cleanMobile.slice(-4)})`,
         mobile: cleanMobile,
         email: `user${cleanMobile.slice(-4)}@example.com`,
-        address: address?.trim() || 'Flat 402, Green Valley Residency, Madhapur, Hyderabad',
+        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+        address: defaultAddr,
+        addresses: [
+          {
+            id: `ADDR-${Date.now()}`,
+            label: 'Primary Delivery Address',
+            addressLine: defaultAddr,
+            city: 'Hyderabad',
+            state: 'Telangana',
+            pincode: '500081',
+            isDefault: true
+          }
+        ],
         createdAt: new Date().toISOString(),
         notifications: [
           {
@@ -148,6 +162,8 @@ app.post('/api/auth/verify-otp', (req, res) => {
         ]
       };
       store.users.customers.push(user);
+      if (!store.customerCarts) store.customerCarts = {};
+      store.customerCarts[newCustId] = [];
     }
   } else if (selectedRole === 'dealer') {
     const verification = zohoAuthService.verifyDealerInZoho(cleanMobile);
@@ -180,34 +196,161 @@ app.post('/api/auth/verify-otp', (req, res) => {
   });
 });
 
-// Dedicated Zoho Dealer Verification check endpoint (showcasing Zoho integration)
+// Dedicated Zoho Dealer Verification check endpoint
 app.get('/api/auth/zoho-verify/:mobile', (req, res) => {
   const result = zohoAuthService.verifyDealerInZoho(req.params.mobile);
   res.json(result);
 });
 
 // =========================================================================
-// 6. PRODUCTS & PRICING (FETCHED/SYNCHRONISED FROM ZOHO WORKBOOK)
+// CUSTOMER DYNAMIC BANNERS
 // =========================================================================
-// STRICT ROLE-BASED VISIBILITY:
-// CUSTOMER: Product YES, Price YES, Stock Quantity NO (stripped at API level)
-// DEALER: Product YES, Price YES, Stock Quantity YES
-// PLUMBER: Show technical installation requirements
-// ADMIN: Full visibility
+app.get('/api/customer/banners', (req, res) => {
+  const store = getStore();
+  res.json({ banners: store.banners || [] });
+});
+
+// =========================================================================
+// CUSTOMER DYNAMIC PROFILE & ADDRESSES
+// =========================================================================
+app.get('/api/customer/profile', (req, res) => {
+  const { customerId } = req.query;
+  const store = getStore();
+  const customer = store.users.customers.find((c) => c.id === customerId) || store.users.customers[0];
+  if (!customer) {
+    return res.status(404).json({ error: 'Customer not found' });
+  }
+  res.json({ customer });
+});
+
+app.patch('/api/customer/profile', (req, res) => {
+  const { customerId, name, email, address } = req.body;
+  const store = getStore();
+  const customer = store.users.customers.find((c) => c.id === customerId);
+  if (!customer) {
+    return res.status(404).json({ error: 'Customer not found' });
+  }
+
+  if (name !== undefined) customer.name = name.trim();
+  if (email !== undefined) customer.email = email.trim();
+  if (address !== undefined) {
+    customer.address = address.trim();
+    if (customer.addresses && customer.addresses.length > 0) {
+      customer.addresses[0].addressLine = address.trim();
+    }
+  }
+
+  saveStore(store);
+  res.json({ success: true, customer });
+});
+
+// Addresses
+app.get('/api/customer/addresses', (req, res) => {
+  const { customerId } = req.query;
+  const store = getStore();
+  const customer = store.users.customers.find((c) => c.id === customerId) || store.users.customers[0];
+  res.json({ addresses: customer?.addresses || [] });
+});
+
+app.post('/api/customer/addresses', (req, res) => {
+  const { customerId, label, addressLine, city, state, pincode, isDefault } = req.body;
+  if (!addressLine || !pincode) {
+    return res.status(400).json({ error: 'Address line and pincode are required.' });
+  }
+  const store = getStore();
+  const customer = store.users.customers.find((c) => c.id === customerId);
+  if (!customer) {
+    return res.status(404).json({ error: 'Customer not found' });
+  }
+
+  if (!customer.addresses) customer.addresses = [];
+
+  if (isDefault) {
+    customer.addresses.forEach((a) => (a.isDefault = false));
+  }
+
+  const newAddr = {
+    id: `ADDR-${Date.now()}`,
+    label: label?.trim() || 'Site Address',
+    addressLine: addressLine.trim(),
+    city: city?.trim() || 'Hyderabad',
+    state: state?.trim() || 'Telangana',
+    pincode: pincode.trim(),
+    isDefault: Boolean(isDefault) || customer.addresses.length === 0
+  };
+
+  customer.addresses.push(newAddr);
+  if (newAddr.isDefault) {
+    customer.address = `${newAddr.addressLine}, ${newAddr.city} - ${newAddr.pincode}`;
+  }
+  saveStore(store);
+  res.status(201).json({ success: true, addresses: customer.addresses, newAddress: newAddr });
+});
+
+app.delete('/api/customer/addresses/:addressId', (req, res) => {
+  const { addressId } = req.params;
+  const { customerId } = req.query;
+  const store = getStore();
+  const customer = store.users.customers.find((c) => c.id === customerId);
+  if (!customer) {
+    return res.status(404).json({ error: 'Customer not found' });
+  }
+
+  customer.addresses = (customer.addresses || []).filter((a) => a.id !== addressId);
+  saveStore(store);
+  res.json({ success: true, addresses: customer.addresses });
+});
+
+// =========================================================================
+// DYNAMIC CATEGORIES (with live productCount)
+// =========================================================================
+app.get('/api/categories', (req, res) => {
+  const store = getStore();
+  const categoriesWithCounts = store.categories.map((cat) => {
+    const count = store.zohoWorkbookProducts.filter((p) => p.categoryId === cat.id).length;
+    return {
+      ...cat,
+      productCount: count
+    };
+  });
+  res.json({ categories: categoriesWithCounts });
+});
+
+// =========================================================================
+// PRODUCTS & PRICING (FETCHED/SYNCHRONISED FROM ZOHO WORKBOOK)
+// =========================================================================
 app.get('/api/products', (req, res) => {
   const role = (req.query.role || 'customer').toLowerCase();
   const categoryId = req.query.categoryId || 'all';
   const search = req.query.search || '';
+  const sort = req.query.sort || '';
+  const filter = req.query.filter || '';
 
   const store = getStore();
-  const products = zohoProductService.getProductsByRole(role, categoryId, search);
+  const products = zohoProductService.getProductsByRole(role, categoryId, search, sort, filter);
+
+  // Derive counts for categories dynamically
+  const categoriesWithCounts = store.categories.map((cat) => {
+    const count = store.zohoWorkbookProducts.filter((p) => p.categoryId === cat.id).length;
+    return { ...cat, productCount: count };
+  });
 
   res.json({
     role,
     zohoMeta: store.zohoMeta,
-    categories: store.categories,
-    products
+    categories: categoriesWithCounts,
+    products,
+    totalCount: products.length
   });
+});
+
+app.get('/api/products/:productId', (req, res) => {
+  const role = (req.query.role || 'customer').toLowerCase();
+  const product = zohoProductService.getProductById(req.params.productId, role);
+  if (!product) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+  res.json({ product });
 });
 
 // Zoho Workbook Sync trigger
@@ -236,7 +379,221 @@ app.put('/api/zoho/workbook/:productId', (req, res) => {
 });
 
 // =========================================================================
-// 9 & 10. ORDER FLOW & PAYMENTS (CUSTOMER & DEALER CHECKOUT)
+// DYNAMIC CART (BACKEND PERSISTENCE PER CUSTOMER)
+// =========================================================================
+app.get('/api/cart', (req, res) => {
+  const customerId = req.query.customerId || 'CUST-01';
+  const store = getStore();
+  if (!store.customerCarts) store.customerCarts = {};
+  const rawCart = store.customerCarts[customerId] || [];
+
+  // Enrich cart items dynamically with live product info and calculate totals
+  let subtotal = 0;
+  const enrichedCart = [];
+
+  for (const item of rawCart) {
+    const product = store.zohoWorkbookProducts.find((p) => p.id === item.productId);
+    if (product) {
+      const unitPrice = product.customerPrice;
+      const itemSubtotal = unitPrice * item.qty;
+      subtotal += itemSubtotal;
+
+      enrichedCart.push({
+        product: {
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          categoryId: product.categoryId,
+          categoryName: product.categoryName,
+          brand: product.brand,
+          unit: product.unit,
+          price: unitPrice,
+          mrp: product.mrp,
+          image: product.image,
+          specifications: product.specifications,
+          availability: product.stockQuantity > 0 ? 'In Stock' : 'Out of Stock'
+        },
+        qty: item.qty,
+        itemSubtotal
+      });
+    }
+  }
+
+  const deliveryCharge = subtotal > 5000 || subtotal === 0 ? 0 : 250;
+  const totalAmount = subtotal + deliveryCharge;
+
+  res.json({
+    customerId,
+    items: enrichedCart,
+    itemCount: enrichedCart.reduce((acc, i) => acc + i.qty, 0),
+    subtotal,
+    deliveryCharge,
+    totalAmount
+  });
+});
+
+// Add to Cart
+app.post('/api/cart', (req, res) => {
+  const { customerId, productId, qty } = req.body;
+  if (!productId) {
+    return res.status(400).json({ error: 'Product ID is required.' });
+  }
+
+  const custId = customerId || 'CUST-01';
+  const quantity = Math.max(1, Number(qty || 1));
+  const store = getStore();
+  if (!store.customerCarts) store.customerCarts = {};
+  if (!store.customerCarts[custId]) store.customerCarts[custId] = [];
+
+  const existing = store.customerCarts[custId].find((item) => item.productId === productId);
+  if (existing) {
+    existing.qty += quantity;
+  } else {
+    store.customerCarts[custId].push({
+      productId,
+      qty: quantity,
+      addedAt: new Date().toISOString()
+    });
+  }
+
+  saveStore(store);
+
+  // Return updated enriched cart
+  const rawCart = store.customerCarts[custId];
+  let subtotal = 0;
+  const enrichedCart = [];
+
+  for (const item of rawCart) {
+    const product = store.zohoWorkbookProducts.find((p) => p.id === item.productId);
+    if (product) {
+      const unitPrice = product.customerPrice;
+      const itemSubtotal = unitPrice * item.qty;
+      subtotal += itemSubtotal;
+      enrichedCart.push({
+        product: {
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          price: unitPrice,
+          mrp: product.mrp,
+          unit: product.unit,
+          image: product.image
+        },
+        qty: item.qty,
+        itemSubtotal
+      });
+    }
+  }
+
+  const deliveryCharge = subtotal > 5000 || subtotal === 0 ? 0 : 250;
+  res.status(201).json({
+    success: true,
+    items: enrichedCart,
+    itemCount: enrichedCart.reduce((acc, i) => acc + i.qty, 0),
+    subtotal,
+    deliveryCharge,
+    totalAmount: subtotal + deliveryCharge
+  });
+});
+
+// Update Cart Quantity
+app.patch('/api/cart/:productId', (req, res) => {
+  const { productId } = req.params;
+  const { customerId, qty, delta } = req.body;
+  const custId = customerId || 'CUST-01';
+  const store = getStore();
+
+  if (!store.customerCarts || !store.customerCarts[custId]) {
+    return res.status(404).json({ error: 'Cart not found' });
+  }
+
+  const itemIndex = store.customerCarts[custId].findIndex((i) => i.productId === productId);
+  if (itemIndex === -1) {
+    return res.status(404).json({ error: 'Item not in cart' });
+  }
+
+  if (delta !== undefined) {
+    store.customerCarts[custId][itemIndex].qty += Number(delta);
+  } else if (qty !== undefined) {
+    store.customerCarts[custId][itemIndex].qty = Number(qty);
+  }
+
+  // Remove if qty <= 0
+  if (store.customerCarts[custId][itemIndex].qty <= 0) {
+    store.customerCarts[custId].splice(itemIndex, 1);
+  }
+
+  saveStore(store);
+
+  // Return updated enriched cart
+  const rawCart = store.customerCarts[custId];
+  let subtotal = 0;
+  const enrichedCart = [];
+
+  for (const item of rawCart) {
+    const product = store.zohoWorkbookProducts.find((p) => p.id === item.productId);
+    if (product) {
+      const unitPrice = product.customerPrice;
+      const itemSubtotal = unitPrice * item.qty;
+      subtotal += itemSubtotal;
+      enrichedCart.push({
+        product: {
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          price: unitPrice,
+          mrp: product.mrp,
+          unit: product.unit,
+          image: product.image
+        },
+        qty: item.qty,
+        itemSubtotal
+      });
+    }
+  }
+
+  const deliveryCharge = subtotal > 5000 || subtotal === 0 ? 0 : 250;
+  res.json({
+    success: true,
+    items: enrichedCart,
+    itemCount: enrichedCart.reduce((acc, i) => acc + i.qty, 0),
+    subtotal,
+    deliveryCharge,
+    totalAmount: subtotal + deliveryCharge
+  });
+});
+
+// Remove single product from cart
+app.delete('/api/cart/:productId', (req, res) => {
+  const { productId } = req.params;
+  const customerId = req.query.customerId || 'CUST-01';
+  const store = getStore();
+
+  if (store.customerCarts && store.customerCarts[customerId]) {
+    store.customerCarts[customerId] = store.customerCarts[customerId].filter(
+      (i) => i.productId !== productId
+    );
+    saveStore(store);
+  }
+
+  res.json({ success: true, message: 'Item removed from cart' });
+});
+
+// Clear cart
+app.delete('/api/cart', (req, res) => {
+  const customerId = req.query.customerId || 'CUST-01';
+  const store = getStore();
+
+  if (store.customerCarts) {
+    store.customerCarts[customerId] = [];
+    saveStore(store);
+  }
+
+  res.json({ success: true, message: 'Cart cleared' });
+});
+
+// =========================================================================
+// 9 & 10. ORDER FLOW & DIRECT PAYMENTS
 // =========================================================================
 app.post('/api/orders', (req, res) => {
   const { userId, role, items, paymentMethod, paymentSubType, shippingAddress } = req.body;
@@ -263,7 +620,7 @@ app.post('/api/orders', (req, res) => {
     return res.status(400).json({ error: stockCheck.error });
   }
 
-  // 2. Calculate totals
+  // 2. Calculate totals dynamically
   let totalAmount = 0;
   const enrichedItems = [];
 
@@ -296,7 +653,6 @@ app.post('/api/orders', (req, res) => {
       creditDays = eligibility.creditDays;
       dueDate = eligibility.dueDate;
       paymentStatus = 'Credit / Outstanding';
-      // Deduct available credit in Zoho Books ledger
       zohoDealerService.utilizeCredit(user.id, totalAmount);
     } else {
       paymentStatus = 'Successful';
@@ -330,7 +686,7 @@ app.post('/api/orders', (req, res) => {
     assignedPlumberName: orderRole === 'customer' ? 'Ramesh Babu (Master Plumber)' : null,
     plumberTaskStatus: orderRole === 'customer' ? 'ASSIGNED' : null,
     plumberNotes: orderRole === 'customer' ? 'Auto-assigned verified plumber for installation inspection.' : null,
-    shippingAddress: shippingAddress || user.address || `${user.city || 'Hyderabad'} Warehouse`,
+    shippingAddress: shippingAddress || user.address || `${user.city || 'Hyderabad'} Site`,
     orderDate: now.toISOString(),
     createdAt: now.toISOString(),
     trackingTimeline: [
@@ -358,6 +714,11 @@ app.post('/api/orders', (req, res) => {
   };
 
   store.orders.unshift(newOrder);
+
+  // Clear customer backend cart on successful order
+  if (orderRole === 'customer' && store.customerCarts && store.customerCarts[user.id]) {
+    store.customerCarts[user.id] = [];
+  }
 
   // Record payment entry
   store.payments.unshift({
@@ -399,6 +760,16 @@ app.post('/api/orders', (req, res) => {
   });
 });
 
+// Customer-specific My Orders
+app.get('/api/orders/my', (req, res) => {
+  const customerId = req.query.customerId;
+  const store = getStore();
+  let myOrders = store.orders.filter(
+    (o) => o.orderRole === 'customer' && (!customerId || o.userId === customerId)
+  );
+  res.json({ orders: myOrders });
+});
+
 app.get('/api/orders', (req, res) => {
   const { userId, role } = req.query;
   const store = getStore();
@@ -425,7 +796,7 @@ app.get('/api/orders/:orderId', (req, res) => {
 });
 
 // =========================================================================
-// 12. NOTIFICATIONS (ROLE-BASED)
+// 12. NOTIFICATIONS (ROLE-BASED & MARK AS READ)
 // =========================================================================
 app.get('/api/notifications', (req, res) => {
   const { role, userId } = req.query;
@@ -446,7 +817,23 @@ app.get('/api/notifications', (req, res) => {
     notifications = store.users.admins[0]?.notifications || [];
   }
 
-  res.json({ role: r, notifications });
+  const unreadCount = notifications.filter((n) => !n.read).length;
+  res.json({ role: r, notifications, unreadCount });
+});
+
+app.patch('/api/notifications/:id/read', (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.query;
+  const store = getStore();
+
+  const customer = store.users.customers.find((u) => u.id === userId);
+  if (customer && customer.notifications) {
+    const notif = customer.notifications.find((n) => n.id === id);
+    if (notif) notif.read = true;
+    saveStore(store);
+  }
+
+  res.json({ success: true });
 });
 
 // =========================================================================
@@ -564,10 +951,9 @@ app.patch('/api/admin/orders/:orderId', (req, res) => {
 
   if (req.body.orderStatus) {
     order.orderStatus = req.body.orderStatus;
-    // Update tracking timeline step
-    const stepOrder = ['Placed', 'Confirmed', 'Processing', 'Shipped', 'Delivered'];
+    const stepOrder = ['Placed', 'Confirmed', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
     const currentIdx = stepOrder.indexOf(order.orderStatus);
-    if (currentIdx !== -1) {
+    if (currentIdx !== -1 && order.orderStatus !== 'Cancelled') {
       order.trackingTimeline.forEach((st) => {
         const stepIdx = stepOrder.indexOf(st.step);
         if (stepIdx <= currentIdx) st.done = true;

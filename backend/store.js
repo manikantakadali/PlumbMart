@@ -13,12 +13,38 @@ const initialData = {
     webhookActive: true,
     totalSyncedRows: 8
   },
+  banners: [
+    {
+      id: 'BAN-101',
+      title: 'Free Master Plumber Site Visit',
+      subtitle: 'Complimentary professional installation on orders above ₹5,000',
+      badge: 'Certified Support',
+      tag: 'Installation Free',
+      gradient: 'from-blue-600 via-indigo-600 to-cyan-500'
+    },
+    {
+      id: 'BAN-102',
+      title: 'Astral ProFlow CPVC SDR 11',
+      subtitle: 'Engineered for high-pressure hot & cold water distribution up to 93°C',
+      badge: 'IS 15778 Certified',
+      tag: 'Best Seller',
+      gradient: 'from-indigo-600 via-purple-600 to-pink-500'
+    },
+    {
+      id: 'BAN-103',
+      title: 'Direct Online Payment Gateways',
+      subtitle: 'Instant checkout via UPI (PhonePe, GPay), Cards & NetBanking',
+      badge: '100% Secure',
+      tag: 'Instant Confirm',
+      gradient: 'from-emerald-600 via-teal-600 to-cyan-600'
+    }
+  ],
   categories: [
-    { id: 'cat-pipes', name: 'CPVC & UPVC Pipes', icon: 'Cylinder', count: 2, description: 'High-pressure hot & cold water distribution pipes' },
-    { id: 'cat-faucets', name: 'Luxury Faucets & Mixers', icon: 'Droplets', count: 2, description: 'Chrome-plated brass basin & wall mixers' },
-    { id: 'cat-valves', name: 'Industrial Valves & Fittings', icon: 'Wrench', count: 2, description: 'Heavy-duty brass ball valves, elbows & tees' },
-    { id: 'cat-pumps', name: 'Pressure Booster Pumps', icon: 'Gauge', count: 1, description: 'Automatic domestic & commercial hydro-pneumatic pumps' },
-    { id: 'cat-sanitary', name: 'Sanitaryware & Cisterns', icon: 'Bath', count: 1, description: 'Concealed flushing cisterns & wall-hung systems' }
+    { id: 'cat-pipes', name: 'CPVC & UPVC Pipes', icon: 'Pipette', description: 'High-pressure hot & cold water distribution pipes' },
+    { id: 'cat-faucets', name: 'Luxury Faucets & Mixers', icon: 'Droplets', description: 'Chrome-plated brass basin & wall mixers' },
+    { id: 'cat-valves', name: 'Industrial Valves & Fittings', icon: 'Wrench', description: 'Heavy-duty brass ball valves, elbows & tees' },
+    { id: 'cat-pumps', name: 'Pressure Booster Pumps', icon: 'Gauge', description: 'Automatic domestic & commercial hydro-pneumatic pumps' },
+    { id: 'cat-sanitary', name: 'Sanitaryware & Cisterns', icon: 'Bath', description: 'Concealed flushing cisterns & wall-hung systems' }
   ],
   zohoWorkbookProducts: [
     {
@@ -35,6 +61,9 @@ const initialData = {
       mrp: 3200,
       stockQuantity: 420,
       minDealerOrderQty: 5,
+      isFeatured: true,
+      isPopular: true,
+      orderCount: 184,
       specifications: '25mm (1 inch) | SDR 11 | Temp Rating: up to 93°C | IS 15778 Certified',
       image: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
       plumberPoints: 45,
@@ -54,6 +83,9 @@ const initialData = {
       mrp: 3900,
       stockQuantity: 185,
       minDealerOrderQty: 3,
+      isFeatured: false,
+      isPopular: true,
+      orderCount: 96,
       specifications: '50mm (2 inch) | Schedule 80 | UV Stabilized Lead-Free Compound',
       image: 'https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&w=600&q=80',
       plumberPoints: 60,
@@ -73,6 +105,9 @@ const initialData = {
       mrp: 7999,
       stockQuantity: 64,
       minDealerOrderQty: 4,
+      isFeatured: true,
+      isPopular: true,
+      orderCount: 142,
       specifications: 'Solid DZR Brass | 40mm Ceramic Cartridge | 3-Way Outlet Diverter',
       image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80',
       plumberPoints: 120,
@@ -92,6 +127,9 @@ const initialData = {
       mrp: 4990,
       stockQuantity: 92,
       minDealerOrderQty: 4,
+      isFeatured: true,
+      isPopular: false,
+      orderCount: 54,
       specifications: 'Dual Power (6V DC / 230V AC) | 1.5 LPM Aerator | IP67 Sensor',
       image: 'https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=600&q=80',
       plumberPoints: 85,
@@ -111,6 +149,9 @@ const initialData = {
       mrp: 5200,
       stockQuantity: 310,
       minDealerOrderQty: 2,
+      isFeatured: false,
+      isPopular: true,
+      orderCount: 110,
       specifications: 'PN25 Pressure Rated | PTFE Seats | SS304 Lever Handle | BSP Threaded',
       image: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80',
       plumberPoints: 70,
@@ -130,6 +171,9 @@ const initialData = {
       mrp: 2600,
       stockQuantity: 140,
       minDealerOrderQty: 5,
+      isFeatured: false,
+      isPopular: false,
+      orderCount: 38,
       specifications: 'Adjustable 1.5 to 6 Bar | Stainless Steel Mesh Filter | Dial Gauge Included',
       image: 'https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?auto=format&fit=crop&w=600&q=80',
       plumberPoints: 50,
@@ -149,6 +193,9 @@ const initialData = {
       mrp: 21500,
       stockQuantity: 28,
       minDealerOrderQty: 1,
+      isFeatured: true,
+      isPopular: true,
+      orderCount: 72,
       specifications: '0.75 kW (1 HP) | 24L Diaphragm Tank | Dry-Run Protection | Up to 4 Bathrooms',
       image: 'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&w=600&q=80',
       plumberPoints: 250,
@@ -168,12 +215,22 @@ const initialData = {
       mrp: 9200,
       stockQuantity: 75,
       minDealerOrderQty: 2,
+      isFeatured: true,
+      isPopular: false,
+      orderCount: 46,
       specifications: '80mm Slim HDPE Tank | 3L/6L Dual Flush | Matte Chrome Actuation Plate | 400kg Frame',
       image: 'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=600&q=80',
       plumberPoints: 140,
       installationNote: 'Anchor frame bolts into solid masonry/slab; verify 180mm WC bolt pitch.'
     }
   ],
+  customerCarts: {
+    'CUST-01': [
+      { productId: 'PRD-1001', qty: 2, addedAt: '2026-10-12T10:00:00Z' },
+      { productId: 'PRD-1003', qty: 1, addedAt: '2026-10-12T10:05:00Z' }
+    ],
+    'CUST-02': []
+  },
   users: {
     customers: [
       {
@@ -182,21 +239,42 @@ const initialData = {
         name: 'Rahul Sharma',
         mobile: '9876543210',
         email: 'rahul.sharma@example.com',
+        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
         address: 'Flat 402, Green Valley Residency, Madhapur, Hyderabad - 500081',
+        addresses: [
+          {
+            id: 'ADDR-101',
+            label: 'Home Residency',
+            addressLine: 'Flat 402, Green Valley Residency, Madhapur',
+            city: 'Hyderabad',
+            state: 'Telangana',
+            pincode: '500081',
+            isDefault: true
+          },
+          {
+            id: 'ADDR-102',
+            label: 'Construction Site / Villa',
+            addressLine: 'Plot 88, Financial District Extension, Nanakramguda',
+            city: 'Hyderabad',
+            state: 'Telangana',
+            pincode: '500032',
+            isDefault: false
+          }
+        ],
         createdAt: '2026-09-15T10:00:00Z',
         notifications: [
           {
             id: 'NOTIF-CUST-1',
             type: 'ORDER_UPDATE',
-            title: 'Order Dispatched (ORD-2026-101)',
-            message: 'Your plumbing items are out for delivery with Plumber Ramesh Babu assigned for installation.',
+            title: 'Order Shipped (ORD-2026-101)',
+            message: 'Your plumbing items are on the way. Assigned Master Plumber: Ramesh Babu.',
             time: '2 hours ago',
             read: false
           },
           {
             id: 'NOTIF-CUST-2',
             type: 'PAYMENT_UPDATE',
-            title: 'Payment Confirmed: ₹12,199',
+            title: 'Payment Successful: ₹12,199',
             message: 'Direct payment via UPI (PhonePe) was settled successfully.',
             time: '1 day ago',
             read: true
@@ -204,8 +282,8 @@ const initialData = {
           {
             id: 'NOTIF-CUST-3',
             type: 'GENERAL',
-            title: 'Zoho Inventory Sync Complete',
-            message: 'New CPVC and Sanitary products added to PlumbMart catalog.',
+            title: 'Free Installation Support Active',
+            message: 'Your order qualifies for complimentary on-site plumber inspection.',
             time: '3 days ago',
             read: true
           }
@@ -217,14 +295,26 @@ const initialData = {
         name: 'Priya Nair',
         mobile: '9848011223',
         email: 'priya.nair@example.com',
+        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80',
         address: 'Villa 18, Palm Meadows, Whitefield, Bengaluru - 560066',
+        addresses: [
+          {
+            id: 'ADDR-201',
+            label: 'Primary Villa',
+            addressLine: 'Villa 18, Palm Meadows, Whitefield',
+            city: 'Bengaluru',
+            state: 'Karnataka',
+            pincode: '560066',
+            isDefault: true
+          }
+        ],
         createdAt: '2026-09-22T14:30:00Z',
         notifications: [
           {
             id: 'NOTIF-CUST-4',
             type: 'GENERAL',
-            title: 'Welcome to PlumbMart',
-            message: 'Browse premium CPVC pipes & bathroom fittings with free installation support.',
+            title: 'Welcome to PlumbMart!',
+            message: 'Order certified CPVC pipes and plumbing fittings with verified installer support.',
             time: '5 days ago',
             read: true
           }
@@ -243,7 +333,7 @@ const initialData = {
         zohoVerified: true,
         creditEligible: true,
         credit30DaysAllowed: true,
-        credit90DaysAllowed: true, // Selected & approved for 90-day credit!
+        credit90DaysAllowed: true,
         creditLimit: 500000,
         creditUsed: 112400,
         city: 'Hyderabad',
@@ -256,14 +346,6 @@ const initialData = {
             message: 'Your dealership has been granted 90-Day Credit Line up to ₹5,00,000 via Zoho Books.',
             time: '1 day ago',
             read: false
-          },
-          {
-            id: 'NOTIF-DLR-2',
-            type: 'ORDER_UPDATE',
-            title: 'Bulk Order Placed (ORD-2026-102)',
-            message: 'Order of ₹78,000 confirmed under 90-Day Credit terms. Due on 2027-01-10.',
-            time: '2 days ago',
-            read: true
           }
         ]
       },
@@ -278,7 +360,7 @@ const initialData = {
         zohoVerified: true,
         creditEligible: true,
         credit30DaysAllowed: true,
-        credit90DaysAllowed: false, // Standard dealer: 90 Days is locked!
+        credit90DaysAllowed: false,
         creditLimit: 200000,
         creditUsed: 45000,
         city: 'Vijayawada',
@@ -302,7 +384,7 @@ const initialData = {
         mobile: '9000033333',
         gstin: '37AADCC9920D1Z8',
         zohoContactId: 'ZCRM-DLR-PENDING',
-        zohoVerified: false, // Blocked at login until Admin approves in Zoho!
+        zohoVerified: false,
         creditEligible: false,
         credit30DaysAllowed: false,
         credit90DaysAllowed: false,
@@ -315,7 +397,7 @@ const initialData = {
             id: 'NOTIF-DLR-4',
             type: 'VERIFICATION_UPDATE',
             title: 'Zoho CRM Verification Required',
-            message: 'Your dealer registration is submitted. Please wait for PlumbMart Admin to verify your GST & Zoho Contact.',
+            message: 'Please ask PlumbMart Admin to verify your GST & Zoho Contact.',
             time: '1 hour ago',
             read: false
           }
@@ -342,17 +424,9 @@ const initialData = {
             id: 'NOTIF-PLB-1',
             type: 'ASSIGNED_ACTIVITY',
             title: 'New Installation Assigned: ORD-2026-101',
-            message: 'Assigned to customer Rahul Sharma (Madhapur) for Kohler Diverter & Astral CPVC installation.',
+            message: 'Assigned to customer Rahul Sharma (Madhapur) for diverter & pipe installation.',
             time: '2 hours ago',
             read: false
-          },
-          {
-            id: 'NOTIF-PLB-2',
-            type: 'REWARD_UPDATE',
-            title: '+120 Zoho Reward Points Credited',
-            message: 'Points added for verified product installation scan SKU: ZW-FAUCET-THERM.',
-            time: '1 day ago',
-            read: true
           }
         ]
       },
@@ -370,16 +444,7 @@ const initialData = {
         rewardPoints: 420,
         walletBalance: 1100,
         city: 'Bengaluru',
-        notifications: [
-          {
-            id: 'NOTIF-PLB-3',
-            type: 'VERIFICATION_UPDATE',
-            title: 'Trade Certificate Under Review',
-            message: 'Admin is reviewing your Plumbing Trade Certificate.',
-            time: '2 days ago',
-            read: false
-          }
-        ]
+        notifications: []
       }
     ],
     admins: [
@@ -397,28 +462,11 @@ const initialData = {
             message: 'Master inventory and pricing refreshed from Zoho Workbook.',
             time: 'Just now',
             read: false
-          },
-          {
-            id: 'NOTIF-ADM-2',
-            type: 'DEALER_ALERT',
-            title: 'New Dealer Verification Request',
-            message: 'Coastal Builders Mart (9000033333) requested Zoho CRM verification.',
-            time: '1 hour ago',
-            read: false
-          },
-          {
-            id: 'NOTIF-ADM-3',
-            type: 'PAYMENT_ALERT',
-            title: 'Dealer Credit Payment Logged',
-            message: 'ORD-2026-102 booked under 90-Day Credit (₹78,000).',
-            time: '1 day ago',
-            read: true
           }
         ]
       }
     ]
   },
-  // Orders with standard statuses: Placed -> Confirmed -> Processing -> Shipped -> Delivered
   orders: [
     {
       id: 'ORD-2026-101',
@@ -433,8 +481,8 @@ const initialData = {
       totalAmount: 12199,
       paymentMethod: 'DIRECT_PAYMENT',
       paymentSubType: 'UPI (PhonePe)',
-      paymentStatus: 'Successful', // Status: Pending | Successful | Failed | Credit / Outstanding
-      orderStatus: 'Shipped', // Status: Placed -> Confirmed -> Processing -> Shipped -> Delivered
+      paymentStatus: 'Successful',
+      orderStatus: 'Shipped',
       assignedPlumberId: 'PLB-01',
       assignedPlumberName: 'Ramesh Babu (Master Plumber)',
       plumberTaskStatus: 'IN_PROGRESS',
@@ -518,7 +566,7 @@ const initialData = {
       role: 'customer',
       amount: 12199,
       mode: 'Direct Payment (UPI)',
-      status: 'Successful', // Pending | Successful | Failed | Credit / Outstanding
+      status: 'Successful',
       dueDate: 'Immediate',
       date: '2026-10-11'
     },

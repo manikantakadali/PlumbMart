@@ -9,10 +9,7 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   X,
-  ChevronDown,
-  User,
-  Building2,
-  Wrench
+  ChevronDown
 } from 'lucide-react';
 
 // Services
@@ -21,6 +18,7 @@ import {
   zohoProductService,
   zohoDealerService
 } from './services/zoho';
+import { customerService } from './services/customerService';
 import { apiRequest } from './services/api';
 
 // Navigation Components
@@ -33,7 +31,7 @@ import LoginScreen from './components/auth/LoginScreen';
 import OtpVerificationScreen from './components/auth/OtpVerificationScreen';
 import ZohoVerificationScreen from './components/auth/ZohoVerificationScreen';
 
-// Customer Screens
+// Customer Screens (100% Dynamic)
 import CustomerDashboard from './components/customer/CustomerDashboard';
 import CustomerProductDetails from './components/customer/CustomerProductDetails';
 import CustomerCart from './components/customer/CustomerCart';
@@ -70,7 +68,7 @@ export default function App() {
 
   // Auth State
   const [authStep, setAuthStep] = useState('LOGIN'); // 'SPLASH' | 'LOGIN' | 'OTP' | 'ZOHO_VERIFY' | 'AUTHENTICATED'
-  const [selectedRole, setSelectedRole] = useState('customer'); // 'customer' | 'dealer' | 'plumber' | 'admin'
+  const [selectedRole, setSelectedRole] = useState('customer');
   const [mobileInput, setMobileInput] = useState('9876543210');
   const [nameInput, setNameInput] = useState('Rahul Sharma');
   const [otpInput, setOtpInput] = useState('123456');
@@ -82,17 +80,42 @@ export default function App() {
   const [mobileScreen, setMobileScreen] = useState('DASHBOARD');
   const [screenHistory, setScreenHistory] = useState(['DASHBOARD']);
 
-  // Data Store State
-  const [zohoMeta, setZohoMeta] = useState(null);
+  // Dynamic Customer Data
+  const [customerBanners, setCustomerBanners] = useState([]);
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
+  const [isProductsLoading, setIsProductsLoading] = useState(false);
+  const [productsError, setProductsError] = useState(null);
+
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortOption, setSortOption] = useState('');
+  const [activeFilter, setActiveFilter] = useState(''); // 'featured' | 'popular'
+
   const [activeProduct, setActiveProduct] = useState(null);
-  const [cart, setCart] = useState([]);
+
+  // Dynamic Cart (Backend-persisted per customer)
+  const [cartItems, setCartItems] = useState([]);
+  const [cartSubtotal, setCartSubtotal] = useState(0);
+  const [cartDeliveryCharge, setCartDeliveryCharge] = useState(0);
+  const [cartTotalAmount, setCartTotalAmount] = useState(0);
+  const [cartCount, setCartCount] = useState(0);
+  const [isCartLoading, setIsCartLoading] = useState(false);
+  const [cartError, setCartError] = useState(null);
+
+  // Dynamic Addresses
+  const [addresses, setAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState(null);
+
+  // Dynamic Orders & Tracking
   const [orders, setOrders] = useState([]);
   const [activeOrder, setActiveOrder] = useState(null);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState(null);
+
+  // Dynamic Notifications
   const [notifications, setNotifications] = useState([]);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
   // Checkout State
   const [customerPaymentMode, setCustomerPaymentMode] = useState('UPI (PhonePe / GPay)');
@@ -101,13 +124,12 @@ export default function App() {
   const [checkoutError, setCheckoutError] = useState('');
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
-  // Plumber Data
+  // Plumber Data & Admin Data
   const [plumberData, setPlumberData] = useState(null);
-
-  // Admin Data
   const [adminData, setAdminData] = useState(null);
+  const [zohoMeta, setZohoMeta] = useState(null);
 
-  // 1. Fetch System & Admin Overview
+  // 1. Fetch Admin Overview
   const fetchOverview = useCallback(async () => {
     try {
       const data = await apiRequest('/api/admin/overview');
@@ -118,41 +140,119 @@ export default function App() {
     }
   }, []);
 
-  // 2. Fetch Role-Filtered Products from Zoho Service
-  const fetchProducts = useCallback(async (role, catId = 'all', search = '') => {
+  // 2. Fetch Customer Banners
+  const fetchBanners = useCallback(async () => {
     try {
-      const data = await zohoProductService.getProductsByRole(role, catId, search);
-      setCategories(data.categories || []);
-      setProducts(data.products || []);
-      setZohoMeta(data.zohoMeta || null);
+      const res = await customerService.getBanners();
+      setCustomerBanners(res.banners || []);
     } catch (err) {
-      console.error('Error fetching products:', err);
+      console.error('Error fetching banners:', err);
     }
   }, []);
 
-  // 3. Fetch Orders
-  const fetchUserOrders = useCallback(async (user) => {
-    if (!user) return;
+  // 3. Fetch Categories
+  const fetchCategories = useCallback(async () => {
     try {
-      const data = await apiRequest(`/api/orders?role=${user.role}&userId=${user.id}`);
-      setOrders(data.orders || []);
+      const res = await customerService.getCategories();
+      setCategories(res.categories || []);
     } catch (err) {
-      console.error('Error fetching orders:', err);
+      console.error('Error fetching categories:', err);
     }
   }, []);
 
-  // 4. Fetch Notifications
-  const fetchNotifications = useCallback(async (user) => {
-    if (!user) return;
+  // 4. Fetch Products dynamically with role filtering
+  const fetchDynamicProducts = useCallback(
+    async (role = 'customer', catId = 'all', search = '', sort = '', filter = '') => {
+      setIsProductsLoading(true);
+      setProductsError(null);
+      try {
+        if (role === 'customer') {
+          const res = await customerService.getProducts({
+            categoryId: catId,
+            search,
+            sort,
+            filter
+          });
+          setProducts(res.products || []);
+          if (res.categories) setCategories(res.categories);
+        } else {
+          const res = await zohoProductService.getProductsByRole(role, catId, search);
+          setProducts(res.products || []);
+          if (res.categories) setCategories(res.categories);
+        }
+      } catch (err) {
+        setProductsError('Failed to load products. Please check server.');
+      } finally {
+        setIsProductsLoading(false);
+      }
+    },
+    []
+  );
+
+  // 5. Fetch Customer Cart from Backend
+  const fetchCustomerCart = useCallback(async (customerId) => {
+    if (!customerId) return;
+    setIsCartLoading(true);
+    setCartError(null);
     try {
-      const data = await apiRequest(`/api/notifications?role=${user.role}&userId=${user.id}`);
-      setNotifications(data.notifications || []);
+      const res = await customerService.getCart(customerId);
+      setCartItems(res.items || []);
+      setCartSubtotal(res.subtotal || 0);
+      setCartDeliveryCharge(res.deliveryCharge || 0);
+      setCartTotalAmount(res.totalAmount || 0);
+      setCartCount(res.itemCount || 0);
+    } catch (err) {
+      setCartError('Failed to sync shopping cart.');
+    } finally {
+      setIsCartLoading(false);
+    }
+  }, []);
+
+  // 6. Fetch Customer Addresses
+  const fetchCustomerAddresses = useCallback(async (customerId) => {
+    if (!customerId) return;
+    try {
+      const res = await customerService.getAddresses(customerId);
+      const addrList = res.addresses || [];
+      setAddresses(addrList);
+      const defaultAddr = addrList.find((a) => a.isDefault) || addrList[0];
+      if (defaultAddr) {
+        setSelectedAddressId(defaultAddr.id);
+        setShippingAddress(`${defaultAddr.addressLine}, ${defaultAddr.city} - ${defaultAddr.pincode}`);
+      }
+    } catch (err) {
+      console.error('Error fetching addresses:', err);
+    }
+  }, []);
+
+  // 7. Fetch Customer Orders
+  const fetchCustomerOrders = useCallback(async (customerId) => {
+    if (!customerId) return;
+    setIsOrdersLoading(true);
+    setOrdersError(null);
+    try {
+      const res = await customerService.getMyOrders(customerId);
+      setOrders(res.orders || []);
+    } catch (err) {
+      setOrdersError('Failed to load order history.');
+    } finally {
+      setIsOrdersLoading(false);
+    }
+  }, []);
+
+  // 8. Fetch Notifications
+  const fetchCustomerNotifications = useCallback(async (customerId) => {
+    if (!customerId) return;
+    try {
+      const res = await customerService.getNotifications(customerId);
+      setNotifications(res.notifications || []);
+      setUnreadNotificationsCount(res.unreadCount || 0);
     } catch (err) {
       console.error('Error fetching notifications:', err);
     }
   }, []);
 
-  // 5. Fetch Plumber Dashboard
+  // 9. Fetch Plumber Info
   const fetchPlumberInfo = useCallback(async (plumberId) => {
     try {
       const data = await apiRequest(`/api/plumber/${plumberId || 'PLB-01'}`);
@@ -162,12 +262,15 @@ export default function App() {
     }
   }, []);
 
+  // Initial Load
   useEffect(() => {
     fetchOverview();
-    fetchProducts('customer');
-  }, [fetchOverview, fetchProducts]);
+    fetchBanners();
+    fetchCategories();
+    fetchDynamicProducts('customer');
+  }, [fetchOverview, fetchBanners, fetchCategories, fetchDynamicProducts]);
 
-  // Navigate Mobile Screens with History
+  // Navigate Screen
   const navigateTo = (screen) => {
     setMobileScreen(screen);
     setScreenHistory((prev) => [...prev, screen]);
@@ -175,10 +278,10 @@ export default function App() {
 
   const handleBack = () => {
     if (screenHistory.length > 1) {
-      const nextHistory = [...screenHistory];
-      nextHistory.pop();
-      const prevScreen = nextHistory[nextHistory.length - 1];
-      setScreenHistory(nextHistory);
+      const next = [...screenHistory];
+      next.pop();
+      const prevScreen = next[next.length - 1];
+      setScreenHistory(next);
       setMobileScreen(prevScreen);
     } else {
       setMobileScreen('DASHBOARD');
@@ -241,23 +344,35 @@ export default function App() {
     }
   };
 
-  // Complete Login
+  // Successful Login handler
   const loginSuccess = async (user) => {
     setCurrentUser(user);
     setAuthStep('AUTHENTICATED');
     setMobileScreen('DASHBOARD');
     setScreenHistory(['DASHBOARD']);
-    setCart([]);
     setCheckoutError('');
     setShowPersonaDrawer(false);
-    setShippingAddress(user.address || `${user.city || 'Hyderabad'} Warehouse`);
 
-    await fetchProducts(user.role, 'all', '');
-    await fetchUserOrders(user);
-    await fetchNotifications(user);
-    if (user.role === 'plumber') {
+    if (user.role === 'customer') {
+      await fetchCustomerCart(user.id);
+      await fetchCustomerAddresses(user.id);
+      await fetchCustomerOrders(user.id);
+      await fetchCustomerNotifications(user.id);
+      await fetchDynamicProducts('customer', 'all', '', '', '');
+    } else if (user.role === 'dealer') {
+      await fetchDynamicProducts('dealer', 'all', '');
+      const dealerOrders = await apiRequest(`/api/orders?role=dealer&userId=${user.id}`);
+      setOrders(dealerOrders.orders || []);
+      const dNotifs = await apiRequest(`/api/notifications?role=dealer&userId=${user.id}`);
+      setNotifications(dNotifs.notifications || []);
+      setCartItems([]);
+      setCartCount(0);
+    } else if (user.role === 'plumber') {
       await fetchPlumberInfo(user.id);
+      const pNotifs = await apiRequest(`/api/notifications?role=plumber&userId=${user.id}`);
+      setNotifications(pNotifs.notifications || []);
     }
+
     await fetchOverview();
   };
 
@@ -288,7 +403,7 @@ export default function App() {
       }
     } catch (err) {
       if (role === 'dealer') {
-        const unverified = adminData?.users?.dealers.find((d) => d.mobile === mobile);
+        const unverified = adminData?.users?.dealers?.find((d) => d.mobile === mobile);
         if (unverified) {
           setPendingDealerVerification(unverified);
           setAuthStep('ZOHO_VERIFY');
@@ -305,37 +420,120 @@ export default function App() {
     setAuthStep('LOGIN');
     setAuthError(null);
     setMobileScreen('DASHBOARD');
+    setCartItems([]);
+    setCartCount(0);
   };
 
-  // Cart Operations
-  const handleAddToCart = (product, customQty) => {
-    const minQty = currentUser?.role === 'dealer' ? product.minDealerOrderQty || 1 : 1;
-    const addCount = customQty || minQty;
-
-    setCart((prev) => {
-      const exists = prev.find((item) => item.product.id === product.id);
-      if (exists) {
-        return prev.map((item) =>
-          item.product.id === product.id ? { ...item, qty: item.qty + addCount } : item
-        );
+  // Customer Dynamic Cart Actions
+  const handleAddToCart = async (product, qty = 1) => {
+    if (currentUser?.role === 'customer') {
+      try {
+        const res = await customerService.addToCart(currentUser.id, product.id, qty);
+        setCartItems(res.items || []);
+        setCartSubtotal(res.subtotal || 0);
+        setCartDeliveryCharge(res.deliveryCharge || 0);
+        setCartTotalAmount(res.totalAmount || 0);
+        setCartCount(res.itemCount || 0);
+      } catch (err) {
+        console.error('Error adding to backend cart:', err);
       }
-      return [...prev, { product, qty: addCount }];
-    });
+    } else {
+      // Dealer local cart for bulk quotes
+      const minQty = product.minDealerOrderQty || 1;
+      const addQty = qty || minQty;
+      setCartItems((prev) => {
+        const exists = prev.find((i) => i.product.id === product.id);
+        if (exists) {
+          return prev.map((i) =>
+            i.product.id === product.id ? { ...i, qty: i.qty + addQty } : i
+          );
+        }
+        return [...prev, { product, qty: addQty }];
+      });
+      setCartCount((c) => c + addQty);
+    }
   };
 
-  const handleUpdateCartQty = (productId, delta) => {
-    setCart((prev) =>
-      prev
-        .map((item) => {
-          if (item.product.id !== productId) return item;
-          const next = item.qty + delta;
-          return next > 0 ? { ...item, qty: next } : null;
-        })
-        .filter(Boolean)
-    );
+  const handleUpdateCartQty = async (productId, delta) => {
+    if (currentUser?.role === 'customer') {
+      try {
+        const res = await customerService.updateCartQty(currentUser.id, productId, delta);
+        setCartItems(res.items || []);
+        setCartSubtotal(res.subtotal || 0);
+        setCartDeliveryCharge(res.deliveryCharge || 0);
+        setCartTotalAmount(res.totalAmount || 0);
+        setCartCount(res.itemCount || 0);
+      } catch (err) {
+        console.error('Error updating cart qty:', err);
+      }
+    } else {
+      setCartItems((prev) =>
+        prev
+          .map((item) => {
+            if (item.product.id !== productId) return item;
+            const next = item.qty + delta;
+            return next > 0 ? { ...item, qty: next } : null;
+          })
+          .filter(Boolean)
+      );
+    }
   };
 
-  // Place Order
+  const handleRemoveCartItem = async (productId) => {
+    if (currentUser?.role === 'customer') {
+      try {
+        await customerService.removeFromCart(currentUser.id, productId);
+        await fetchCustomerCart(currentUser.id);
+      } catch (err) {
+        console.error('Error removing cart item:', err);
+      }
+    } else {
+      setCartItems((prev) => prev.filter((i) => i.product.id !== productId));
+    }
+  };
+
+  const handleClearCart = async () => {
+    if (currentUser?.role === 'customer') {
+      try {
+        await customerService.clearCart(currentUser.id);
+        setCartItems([]);
+        setCartSubtotal(0);
+        setCartDeliveryCharge(0);
+        setCartTotalAmount(0);
+        setCartCount(0);
+      } catch (err) {
+        console.error('Error clearing cart:', err);
+      }
+    } else {
+      setCartItems([]);
+      setCartCount(0);
+    }
+  };
+
+  // Customer Dynamic Address Actions
+  const handleSelectAddress = (addressId) => {
+    setSelectedAddressId(addressId);
+    const addr = addresses.find((a) => a.id === addressId);
+    if (addr) {
+      setShippingAddress(`${addr.addressLine}, ${addr.city} - ${addr.pincode}`);
+    }
+  };
+
+  const handleAddNewAddress = async (addrData) => {
+    if (!currentUser) return;
+    try {
+      const res = await customerService.addAddress(currentUser.id, addrData);
+      setAddresses(res.addresses || []);
+      if (res.newAddress) {
+        setSelectedAddressId(res.newAddress.id);
+        setShippingAddress(`${res.newAddress.addressLine}, ${res.newAddress.city} - ${res.newAddress.pincode}`);
+      }
+    } catch (err) {
+      console.error('Error adding address:', err);
+    }
+  };
+
+  // Place Order (Customer Direct Payment or Dealer Credit)
   const handlePlaceOrder = async () => {
     setCheckoutError('');
     setIsSubmittingOrder(true);
@@ -343,7 +541,7 @@ export default function App() {
       const payload = {
         userId: currentUser.id,
         role: currentUser.role,
-        items: cart.map((i) => ({ productId: i.product.id, qty: i.qty })),
+        items: cartItems.map((i) => ({ productId: i.product.id, qty: i.qty })),
         paymentMethod: currentUser.role === 'customer' ? 'DIRECT_PAYMENT' : dealerPaymentMethod,
         paymentSubType:
           currentUser.role === 'customer'
@@ -356,19 +554,21 @@ export default function App() {
         shippingAddress
       };
 
-      const res = await apiRequest('/api/orders', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+      const res = await customerService.createOrder(payload);
 
-      setCart([]);
-      setActiveOrder(res.order);
-      if (res.updatedUser) {
-        setCurrentUser(res.updatedUser);
+      // Refresh cart, orders, and products
+      if (currentUser.role === 'customer') {
+        await fetchCustomerCart(currentUser.id);
+        await fetchCustomerOrders(currentUser.id);
+        await fetchCustomerNotifications(currentUser.id);
+      } else {
+        setCartItems([]);
+        const dealerOrders = await apiRequest(`/api/orders?role=dealer&userId=${currentUser.id}`);
+        setOrders(dealerOrders.orders || []);
       }
-      await fetchProducts(currentUser.role, selectedCategory, searchQuery);
-      await fetchUserOrders(currentUser);
-      await fetchNotifications(currentUser);
+
+      setActiveOrder(res.order);
+      await fetchDynamicProducts(currentUser.role, selectedCategory, searchQuery);
       await fetchOverview();
       navigateTo('ORDER_CONFIRMATION');
     } catch (err) {
@@ -378,14 +578,32 @@ export default function App() {
     }
   };
 
-  // Plumber Status Update
+  // Customer Profile Update
+  const handleUpdateCustomerProfile = async (profileData) => {
+    if (!currentUser) return;
+    const res = await customerService.updateProfile(currentUser.id, profileData);
+    if (res.customer) {
+      setCurrentUser(res.customer);
+      if (profileData.address) setShippingAddress(profileData.address);
+      await fetchCustomerAddresses(currentUser.id);
+    }
+  };
+
+  // Notification Mark as Read
+  const handleMarkNotificationRead = async (notifId) => {
+    if (!currentUser) return;
+    await customerService.markNotificationRead(currentUser.id, notifId);
+    await fetchCustomerNotifications(currentUser.id);
+  };
+
+  // Plumber Actions
   const handlePlumberStatusUpdate = async (orderId, status) => {
     await apiRequest(`/api/plumber/orders/${orderId}`, {
       method: 'PATCH',
       body: JSON.stringify({ plumberTaskStatus: status })
     });
     await fetchPlumberInfo(currentUser?.id);
-    await fetchNotifications(currentUser);
+    await fetchCustomerNotifications(currentUser?.id);
     await fetchOverview();
   };
 
@@ -416,7 +634,7 @@ export default function App() {
     await zohoProductService.updateProductInWorkbook(productId, updates);
     await fetchOverview();
     if (currentUser) {
-      await fetchProducts(currentUser.role, selectedCategory, searchQuery);
+      await fetchDynamicProducts(currentUser.role, selectedCategory, searchQuery);
     }
   };
 
@@ -427,7 +645,12 @@ export default function App() {
     });
     await fetchOverview();
     if (currentUser) {
-      await fetchUserOrders(currentUser);
+      if (currentUser.role === 'customer') {
+        await fetchCustomerOrders(currentUser.id);
+      } else {
+        const dealerOrders = await apiRequest(`/api/orders?role=dealer&userId=${currentUser.id}`);
+        setOrders(dealerOrders.orders || []);
+      }
     }
   };
 
@@ -435,7 +658,7 @@ export default function App() {
     await zohoProductService.syncZohoWorkbook();
     await fetchOverview();
     if (currentUser) {
-      await fetchProducts(currentUser.role, selectedCategory, searchQuery);
+      await fetchDynamicProducts(currentUser.role, selectedCategory, searchQuery);
     }
   };
 
@@ -443,20 +666,26 @@ export default function App() {
     await apiRequest('/api/admin/reset-demo', { method: 'POST' });
     await fetchOverview();
     if (currentUser) {
-      await fetchProducts(currentUser.role, 'all', '');
-      await fetchUserOrders(currentUser);
+      await loginSuccess(currentUser);
     }
   };
 
-  // Persona Switcher UI List
   const personasList = [
     {
       role: 'customer',
       mobile: '9876543210',
       name: 'Rahul Sharma',
-      tag: '1. CUSTOMER',
+      tag: '1. CUSTOMER A (Rahul)',
       color: 'blue',
-      desc: 'Retail Price Only • Stock Hidden • Direct Payment (UPI/Card) • Order Tracking'
+      desc: 'Dynamic Profile • Own Cart & Addresses • Retail Price Only • Stock Hidden'
+    },
+    {
+      role: 'customer',
+      mobile: '9848011223',
+      name: 'Priya Nair',
+      tag: '1B. CUSTOMER B (Priya)',
+      color: 'blue',
+      desc: 'Separate Customer Account • Own Cart, Orders & Notifications'
     },
     {
       role: 'dealer',
@@ -510,21 +739,21 @@ export default function App() {
             </div>
           </div>
 
-          {/* Quick Persona Trigger Button (Instant Role Switcher) */}
+          {/* Persona Switcher Trigger */}
           <button
             onClick={() => setShowPersonaDrawer(true)}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-900/60 to-purple-900/60 hover:from-blue-800/80 hover:to-purple-800/80 border border-blue-500/40 text-white text-[11px] font-bold shadow transition"
             title="Switch Demo Role"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-spin" />
-            <span className="hidden sm:inline">Role:</span>
-            <span className="uppercase text-blue-300">
-              {currentUser?.role || selectedRole}
+            <span className="hidden sm:inline">User:</span>
+            <span className="text-blue-300 truncate max-w-[120px]">
+              {currentUser ? currentUser.name : selectedRole}
             </span>
             <ChevronDown className="w-3 h-3 text-slate-400" />
           </button>
 
-          {/* Main View Switcher Pills */}
+          {/* Navigation Mode Switcher */}
           <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
             <button
               onClick={() => setMainView('mobile')}
@@ -565,7 +794,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-7xl mx-auto flex flex-col justify-start">
-        {/* VIEW 1: ARCHITECTURE BLUEPRINT & WIREFRAME */}
+        {/* VIEW 1: BLUEPRINT */}
         {mainView === 'blueprint' && (
           <div className="p-4 sm:p-6 w-full">
             <BlueprintAndComparison
@@ -577,7 +806,7 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 2: ADMIN MANAGEMENT PORTAL (11 SECTIONS) */}
+        {/* VIEW 2: ADMIN MANAGEMENT PORTAL */}
         {mainView === 'admin' && (
           <div className="p-4 sm:p-6 w-full">
             <AdminPortal
@@ -592,12 +821,11 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 3: MOBILE APP SIMULATOR (100% RESPONSIVE ON MOBILE & DESKTOP) */}
+        {/* VIEW 3: MOBILE APP SIMULATOR */}
         {mainView === 'mobile' && (
           <div className="w-full flex-1 flex flex-col lg:py-6 lg:items-center justify-center">
-            {/* On Desktop: Sleek Phone Frame with subtle border; On Mobile: Full viewport native app */}
             <div className="w-full lg:max-w-[440px] bg-slate-900 lg:border-[6px] lg:border-slate-800 lg:rounded-[44px] lg:shadow-2xl overflow-hidden flex flex-col flex-1 min-h-[calc(100vh-56px)] lg:min-h-[760px] lg:max-h-[840px]">
-              {/* Phone Top Status Bar (Desktop Mockup Mode) */}
+              {/* Phone Top Status Bar */}
               <div className="hidden lg:flex bg-slate-950 px-6 py-2.5 items-center justify-between border-b border-slate-800/80 text-[11px] text-slate-400">
                 <span className="font-semibold text-slate-200">PlumbMart Mobile</span>
                 <div className="flex items-center gap-2">
@@ -614,8 +842,8 @@ export default function App() {
                 <MobileHeader
                   currentUser={currentUser}
                   currentScreen={mobileScreen}
-                  cartCount={cart.length}
-                  unreadNotificationsCount={notifications.filter((n) => !n.read).length}
+                  cartCount={cartCount}
+                  unreadNotificationsCount={unreadNotificationsCount}
                   onBack={handleBack}
                   onOpenCart={() => navigateTo('CART')}
                   onOpenNotifications={() => navigateTo('NOTIFICATIONS')}
@@ -623,14 +851,14 @@ export default function App() {
                 />
               )}
 
-              {/* Scrollable Mobile App Body */}
+              {/* Scrollable Screen Body */}
               <div className="flex-1 overflow-y-auto p-4 flex flex-col">
-                {/* 1. SPLASH SCREEN */}
+                {/* 1. Splash */}
                 {authStep === 'SPLASH' && (
                   <SplashScreen onStart={() => setAuthStep('LOGIN')} />
                 )}
 
-                {/* 2. LOGIN SCREEN (OTP Only) */}
+                {/* 2. Login Screen */}
                 {authStep === 'LOGIN' && (
                   <LoginScreen
                     selectedRole={selectedRole}
@@ -652,7 +880,7 @@ export default function App() {
                   />
                 )}
 
-                {/* 3. OTP VERIFICATION SCREEN */}
+                {/* 3. OTP Screen */}
                 {authStep === 'OTP' && (
                   <OtpVerificationScreen
                     mobile={mobileInput}
@@ -666,7 +894,7 @@ export default function App() {
                   />
                 )}
 
-                {/* 4. ZOHO DEALER VERIFICATION GATE SCREEN */}
+                {/* 4. Zoho Dealer Verification Gate Screen */}
                 {authStep === 'ZOHO_VERIFY' && (
                   <ZohoVerificationScreen
                     dealer={pendingDealerVerification}
@@ -676,26 +904,39 @@ export default function App() {
                   />
                 )}
 
-                {/* 5. AUTHENTICATED USER DASHBOARDS */}
+                {/* 5. Authenticated Dashboards */}
                 {authStep === 'AUTHENTICATED' && currentUser && (
                   <>
-                    {/* CUSTOMER SCREENS */}
+                    {/* CUSTOMER SIDE (FULLY DYNAMIC) */}
                     {currentUser.role === 'customer' && (
                       <>
                         {mobileScreen === 'DASHBOARD' && (
                           <CustomerDashboard
                             customer={currentUser}
+                            banners={customerBanners}
                             categories={categories}
                             products={products}
+                            isLoading={isProductsLoading}
+                            error={productsError}
                             searchQuery={searchQuery}
                             onSearchChange={(q) => {
                               setSearchQuery(q);
-                              fetchProducts('customer', selectedCategory, q);
+                              fetchDynamicProducts('customer', selectedCategory, q, sortOption, activeFilter);
                             }}
                             selectedCategory={selectedCategory}
                             onSelectCategory={(catId) => {
                               setSelectedCategory(catId);
-                              fetchProducts('customer', catId, searchQuery);
+                              fetchDynamicProducts('customer', catId, searchQuery, sortOption, activeFilter);
+                            }}
+                            sortOption={sortOption}
+                            onSortChange={(s) => {
+                              setSortOption(s);
+                              fetchDynamicProducts('customer', selectedCategory, searchQuery, s, activeFilter);
+                            }}
+                            activeFilter={activeFilter}
+                            onFilterChange={(f) => {
+                              setActiveFilter(f);
+                              fetchDynamicProducts('customer', selectedCategory, searchQuery, sortOption, f);
                             }}
                             onOpenProductDetails={(prod) => {
                               setActiveProduct(prod);
@@ -705,22 +946,23 @@ export default function App() {
                             onOpenCart={() => navigateTo('CART')}
                             onOpenCategories={() => navigateTo('CATEGORIES')}
                             onOpenOrders={() => navigateTo('ORDERS')}
+                            onRetry={() => fetchDynamicProducts('customer', selectedCategory, searchQuery)}
                           />
                         )}
 
                         {mobileScreen === 'CATEGORIES' && (
                           <div className="space-y-3 py-2">
-                            <h2 className="text-base font-extrabold text-white">Select Product Category</h2>
+                            <h2 className="text-base font-extrabold text-white">Dynamic Categories</h2>
                             <div className="space-y-2.5">
                               <button
                                 onClick={() => {
                                   setSelectedCategory('all');
-                                  fetchProducts('customer', 'all', '');
+                                  fetchDynamicProducts('customer', 'all', searchQuery, sortOption, activeFilter);
                                   navigateTo('PRODUCTS');
                                 }}
                                 className="w-full p-3.5 rounded-xl bg-blue-600/20 border border-blue-500/40 text-left flex items-center justify-between"
                               >
-                                <span className="font-bold text-sm text-white">All Zoho Products</span>
+                                <span className="font-bold text-sm text-white">All Products ({products.length})</span>
                                 <ArrowRight className="w-4 h-4 text-blue-400" />
                               </button>
                               {categories.map((cat) => (
@@ -728,13 +970,20 @@ export default function App() {
                                   key={cat.id}
                                   onClick={() => {
                                     setSelectedCategory(cat.id);
-                                    fetchProducts('customer', cat.id, '');
+                                    fetchDynamicProducts('customer', cat.id, searchQuery, sortOption, activeFilter);
                                     navigateTo('PRODUCTS');
                                   }}
                                   className="w-full p-3.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-blue-500/50 text-left flex items-center justify-between transition"
                                 >
                                   <div>
-                                    <div className="font-bold text-sm text-white">{cat.name}</div>
+                                    <div className="font-bold text-sm text-white flex items-center gap-1.5">
+                                      <span>{cat.name}</span>
+                                      {cat.productCount !== undefined && (
+                                        <span className="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] text-blue-300 font-mono">
+                                          {cat.productCount} items
+                                        </span>
+                                      )}
+                                    </div>
                                     <div className="text-xs text-slate-400 mt-0.5">{cat.description}</div>
                                   </div>
                                   <ArrowRight className="w-4 h-4 text-slate-400" />
@@ -747,17 +996,30 @@ export default function App() {
                         {mobileScreen === 'PRODUCTS' && (
                           <CustomerDashboard
                             customer={currentUser}
+                            banners={[]}
                             categories={categories}
                             products={products}
+                            isLoading={isProductsLoading}
+                            error={productsError}
                             searchQuery={searchQuery}
                             onSearchChange={(q) => {
                               setSearchQuery(q);
-                              fetchProducts('customer', selectedCategory, q);
+                              fetchDynamicProducts('customer', selectedCategory, q, sortOption, activeFilter);
                             }}
                             selectedCategory={selectedCategory}
                             onSelectCategory={(catId) => {
                               setSelectedCategory(catId);
-                              fetchProducts('customer', catId, searchQuery);
+                              fetchDynamicProducts('customer', catId, searchQuery, sortOption, activeFilter);
+                            }}
+                            sortOption={sortOption}
+                            onSortChange={(s) => {
+                              setSortOption(s);
+                              fetchDynamicProducts('customer', selectedCategory, searchQuery, s, activeFilter);
+                            }}
+                            activeFilter={activeFilter}
+                            onFilterChange={(f) => {
+                              setActiveFilter(f);
+                              fetchDynamicProducts('customer', selectedCategory, searchQuery, sortOption, f);
                             }}
                             onOpenProductDetails={(prod) => {
                               setActiveProduct(prod);
@@ -767,12 +1029,14 @@ export default function App() {
                             onOpenCart={() => navigateTo('CART')}
                             onOpenCategories={() => navigateTo('CATEGORIES')}
                             onOpenOrders={() => navigateTo('ORDERS')}
+                            onRetry={() => fetchDynamicProducts('customer', selectedCategory, searchQuery)}
                           />
                         )}
 
                         {mobileScreen === 'PRODUCT_DETAIL' && (
                           <CustomerProductDetails
                             product={activeProduct}
+                            customerId={currentUser.id}
                             onBack={handleBack}
                             onAddToCart={(prod, qty) => handleAddToCart(prod, qty)}
                             onGoToCart={() => navigateTo('CART')}
@@ -781,22 +1045,34 @@ export default function App() {
 
                         {mobileScreen === 'CART' && (
                           <CustomerCart
-                            cart={cart}
+                            cart={cartItems}
+                            subtotal={cartSubtotal}
+                            deliveryCharge={cartDeliveryCharge}
+                            totalAmount={cartTotalAmount}
+                            isLoading={isCartLoading}
+                            error={cartError}
                             onUpdateQty={handleUpdateCartQty}
-                            onClearCart={() => setCart([])}
+                            onRemoveItem={handleRemoveCartItem}
+                            onClearCart={handleClearCart}
                             onProceedToCheckout={() => navigateTo('CHECKOUT')}
                             onContinueShopping={() => navigateTo('DASHBOARD')}
+                            onRetry={() => fetchCustomerCart(currentUser.id)}
                           />
                         )}
 
                         {mobileScreen === 'CHECKOUT' && (
                           <CustomerCheckout
-                            cart={cart}
+                            cart={cartItems}
                             customer={currentUser}
+                            addresses={addresses}
+                            selectedAddressId={selectedAddressId}
+                            onSelectAddress={handleSelectAddress}
+                            onAddNewAddress={handleAddNewAddress}
                             paymentMode={customerPaymentMode}
                             onChangePaymentMode={setCustomerPaymentMode}
-                            shippingAddress={shippingAddress}
-                            onChangeShippingAddress={setShippingAddress}
+                            subtotal={cartSubtotal}
+                            deliveryCharge={cartDeliveryCharge}
+                            totalAmount={cartTotalAmount}
                             error={checkoutError}
                             isSubmitting={isSubmittingOrder}
                             onPlaceOrder={handlePlaceOrder}
@@ -817,23 +1093,31 @@ export default function App() {
                             orders={orders}
                             activeOrder={activeOrder}
                             onSelectOrder={(ord) => setActiveOrder(ord)}
+                            isLoading={isOrdersLoading}
+                            error={ordersError}
+                            onRetry={() => fetchCustomerOrders(currentUser.id)}
+                            onBrowseProducts={() => navigateTo('DASHBOARD')}
                           />
                         )}
 
                         {mobileScreen === 'PROFILE' && (
                           <CustomerProfile
                             customer={currentUser}
+                            onUpdateProfile={handleUpdateCustomerProfile}
                             onLogout={handleLogout}
                           />
                         )}
 
                         {mobileScreen === 'NOTIFICATIONS' && (
-                          <CustomerNotifications notifications={notifications} />
+                          <CustomerNotifications
+                            notifications={notifications}
+                            onMarkAsRead={handleMarkNotificationRead}
+                          />
                         )}
                       </>
                     )}
 
-                    {/* DEALER SCREENS */}
+                    {/* DEALER SIDE */}
                     {currentUser.role === 'dealer' && (
                       <>
                         {mobileScreen === 'DASHBOARD' && (
@@ -851,7 +1135,7 @@ export default function App() {
                             searchQuery={searchQuery}
                             onSearchChange={(q) => {
                               setSearchQuery(q);
-                              fetchProducts('dealer', selectedCategory, q);
+                              fetchDynamicProducts('dealer', selectedCategory, q);
                             }}
                             onAddToCart={(prod, qty) => {
                               handleAddToCart(prod, qty);
@@ -863,9 +1147,9 @@ export default function App() {
 
                         {mobileScreen === 'CART' && (
                           <DealerCart
-                            cart={cart}
+                            cart={cartItems}
                             onUpdateQty={handleUpdateCartQty}
-                            onClearCart={() => setCart([])}
+                            onClearCart={handleClearCart}
                             onProceedToCheckout={() => navigateTo('CHECKOUT')}
                             onContinueShopping={() => navigateTo('PRODUCTS')}
                           />
@@ -873,7 +1157,7 @@ export default function App() {
 
                         {mobileScreen === 'CHECKOUT' && (
                           <DealerCheckout
-                            cart={cart}
+                            cart={cartItems}
                             dealer={currentUser}
                             paymentMethod={dealerPaymentMethod}
                             onChangePaymentMethod={setDealerPaymentMethod}
@@ -911,7 +1195,7 @@ export default function App() {
                       </>
                     )}
 
-                    {/* PLUMBER SCREENS */}
+                    {/* PLUMBER SIDE */}
                     {currentUser.role === 'plumber' && plumberData && (
                       <>
                         {mobileScreen === 'DASHBOARD' && (
@@ -951,7 +1235,7 @@ export default function App() {
                 )}
               </div>
 
-              {/* Role-Specific Mobile Bottom Navigation */}
+              {/* Dynamic Bottom Navigation */}
               {authStep === 'AUTHENTICATED' && currentUser && (
                 <MobileBottomNav
                   role={currentUser.role}
@@ -964,9 +1248,7 @@ export default function App() {
         )}
       </main>
 
-      {/* ========================================================= */}
-      {/* SLIDE-UP BOTTOM SHEET: 1-CLICK INTERVIEW PERSONA SWITCHER */}
-      {/* ========================================================= */}
+      {/* Slide-Up Persona Drawer */}
       {showPersonaDrawer && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-center items-end sm:items-center p-0 sm:p-4">
           <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto animate-slide-up">

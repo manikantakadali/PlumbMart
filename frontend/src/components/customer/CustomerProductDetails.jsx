@@ -3,13 +3,22 @@ import { ArrowLeft, ShoppingCart, EyeOff, CheckCircle2, ShieldCheck } from 'luci
 
 export default function CustomerProductDetails({
   product,
+  customerId,
   onBack,
   onAddToCart,
   onGoToCart
 }) {
   const [qty, setQty] = useState(1);
+  const [isAdding, setIsAdding] = useState(false);
 
   if (!product) return null;
+
+  const handleAdd = async () => {
+    setIsAdding(true);
+    await onAddToCart(product, qty);
+    setIsAdding(false);
+    onGoToCart();
+  };
 
   return (
     <div className="space-y-4 py-2">
@@ -33,23 +42,25 @@ export default function CustomerProductDetails({
         {/* Product Title & Brand */}
         <div>
           <h2 className="text-base font-extrabold text-white leading-snug">{product.name}</h2>
-          <div className="text-xs text-slate-400 mt-0.5">Brand: <strong className="text-slate-200">{product.brand}</strong></div>
+          <div className="text-xs text-slate-400 mt-0.5">
+            Brand: <strong className="text-slate-200">{product.brand}</strong>
+          </div>
         </div>
 
         {/* Price Box */}
         <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
           <div>
             <div className="text-[10px] text-slate-400">Customer Retail Price</div>
-            <div className="text-2xl font-black text-emerald-400">
+            <div className="text-2xl font-black text-emerald-400 font-mono">
               ₹{product.price.toLocaleString('en-IN')}
               <span className="text-xs text-slate-400 font-normal"> / {product.unit}</span>
             </div>
-            <div className="text-[10px] text-slate-500 line-through">
-              MRP ₹{product.mrp.toLocaleString('en-IN')}
+            <div className="text-[10px] text-slate-500 line-through font-mono">
+              MRP ₹{product.mrp?.toLocaleString('en-IN')}
             </div>
           </div>
 
-          {/* Business rule highlight */}
+          {/* Business rule: Customer cannot see stock quantity */}
           <div className="text-right">
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-300 border border-rose-500/20">
               <EyeOff className="w-3 h-3" /> Stock Qty Hidden
@@ -68,7 +79,7 @@ export default function CustomerProductDetails({
           </p>
         </div>
 
-        {/* Quantity Selector & Add Button */}
+        {/* Quantity Selector (min = 1) & Add to Cart Button */}
         <div className="flex items-center gap-3 pt-2">
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl px-2 py-1">
             <button
@@ -87,14 +98,12 @@ export default function CustomerProductDetails({
           </div>
 
           <button
-            onClick={() => {
-              onAddToCart(product, qty);
-              onGoToCart();
-            }}
-            className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition"
+            onClick={handleAdd}
+            disabled={isAdding}
+            className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition disabled:opacity-60"
           >
             <ShoppingCart className="w-4 h-4" />
-            <span>Add to Cart &amp; Checkout</span>
+            <span>{isAdding ? 'Adding...' : 'Add to Cart & Checkout'}</span>
           </button>
         </div>
       </div>

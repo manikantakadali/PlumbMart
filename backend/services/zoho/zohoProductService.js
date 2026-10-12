@@ -16,9 +16,11 @@ const zohoProductService = {
    * @param {string} role 'customer' | 'dealer' | 'plumber' | 'admin'
    * @param {string} categoryId optional category filter
    * @param {string} search optional search term
+   * @param {string} sort optional sort ('price-asc', 'price-desc', 'popular')
+   * @param {string} filter optional filter ('featured', 'popular')
    * @returns {Array} filtered product objects
    */
-  getProductsByRole: (role = 'customer', categoryId = 'all', search = '') => {
+  getProductsByRole: (role = 'customer', categoryId = 'all', search = '', sort = '', filter = '') => {
     const store = getStore();
     let list = [...store.zohoWorkbookProducts];
 
@@ -27,7 +29,7 @@ const zohoProductService = {
       list = list.filter((p) => p.categoryId === categoryId);
     }
 
-    // Filter by Search Query
+    // Filter by Search Query (name, SKU, brand, category, specifications)
     if (search) {
       const q = search.toLowerCase().trim();
       list = list.filter(
@@ -38,6 +40,22 @@ const zohoProductService = {
           p.categoryName.toLowerCase().includes(q) ||
           (p.specifications && p.specifications.toLowerCase().includes(q))
       );
+    }
+
+    // Filter by featured / popular if specified
+    if (filter === 'featured') {
+      list = list.filter((p) => p.isFeatured);
+    } else if (filter === 'popular') {
+      list = list.filter((p) => p.isPopular);
+    }
+
+    // Sorting
+    if (sort === 'price-asc') {
+      list.sort((a, b) => (role === 'dealer' ? a.dealerPrice - b.dealerPrice : a.customerPrice - b.customerPrice));
+    } else if (sort === 'price-desc') {
+      list.sort((a, b) => (role === 'dealer' ? b.dealerPrice - a.dealerPrice : b.customerPrice - a.customerPrice));
+    } else if (sort === 'popular') {
+      list.sort((a, b) => (b.orderCount || 0) - (a.orderCount || 0));
     }
 
     const normalizedRole = role.toLowerCase();
@@ -57,6 +75,10 @@ const zohoProductService = {
           price: p.customerPrice,
           mrp: p.mrp,
           image: p.image,
+          specifications: p.specifications,
+          isFeatured: Boolean(p.isFeatured),
+          isPopular: Boolean(p.isPopular),
+          orderCount: p.orderCount || 0,
           availability: p.stockQuantity > 0 ? 'In Stock' : 'Out of Stock',
           inStock: p.stockQuantity > 0,
           // CRITICAL SECURITY & BUSINESS REQUIREMENT: Stock quantity completely omitted for Customer
@@ -86,7 +108,10 @@ const zohoProductService = {
           availability: p.stockQuantity > 0 ? `${p.stockQuantity} ${p.unit} Available` : 'Out of Stock',
           inStock: p.stockQuantity > 0,
           minDealerOrderQty: p.minDealerOrderQty || 1,
-          stockVisibility: 'VISIBLE'
+          stockVisibility: 'VISIBLE',
+          specifications: p.specifications,
+          isFeatured: Boolean(p.isFeatured),
+          isPopular: Boolean(p.isPopular)
         };
       }
 
@@ -122,6 +147,66 @@ const zohoProductService = {
   },
 
   /**
+   * Get single product by ID with role visibility filter
+   */
+  getProductById: (productId, role = 'customer') => {
+    const store = getStore();
+    const p = store.zohoWorkbookProducts.find((prod) => prod.id === productId);
+    if (!p) return null;
+
+    const normalizedRole = role.toLowerCase();
+    if (normalizedRole === 'customer') {
+      return {
+        id: p.id,
+        sku: p.sku,
+        name: p.name,
+        categoryId: p.categoryId,
+        categoryName: p.categoryName,
+        brand: p.brand,
+        unit: p.unit,
+        description: p.specifications,
+        specifications: p.specifications,
+        price: p.customerPrice,
+        mrp: p.mrp,
+        image: p.image,
+        isFeatured: Boolean(p.isFeatured),
+        isPopular: Boolean(p.isPopular),
+        availability: p.stockQuantity > 0 ? 'In Stock' : 'Out of Stock',
+        inStock: p.stockQuantity > 0,
+        stockQuantity: undefined,
+        stockVisibility: 'HIDDEN'
+      };
+    }
+
+    if (normalizedRole === 'dealer') {
+      return {
+        id: p.id,
+        sku: p.sku,
+        zohoRowId: p.zohoRowId,
+        name: p.name,
+        categoryId: p.categoryId,
+        categoryName: p.categoryName,
+        brand: p.brand,
+        unit: p.unit,
+        description: p.specifications,
+        specifications: p.specifications,
+        price: p.dealerPrice,
+        dealerPrice: p.dealerPrice,
+        customerPrice: p.customerPrice,
+        mrp: p.mrp,
+        image: p.image,
+        stockQuantity: p.stockQuantity,
+        availability: p.stockQuantity > 0 ? `${p.stockQuantity} ${p.unit} Available` : 'Out of Stock',
+        inStock: p.stockQuantity > 0,
+        minDealerOrderQty: p.minDealerOrderQty || 1,
+        stockVisibility: 'VISIBLE'
+      };
+    }
+
+    return p;
+  },
+
+  /**
    * Synchronise latest products, pricing, and stock from Zoho Workbook
    */
   synchroniseWorkbook: () => {
@@ -150,6 +235,8 @@ const zohoProductService = {
     if (updates.stockQuantity !== undefined) product.stockQuantity = Number(updates.stockQuantity);
     if (updates.minDealerOrderQty !== undefined) product.minDealerOrderQty = Number(updates.minDealerOrderQty);
     if (updates.specifications !== undefined) product.specifications = updates.specifications;
+    if (updates.isFeatured !== undefined) product.isFeatured = Boolean(updates.isFeatured);
+    if (updates.isPopular !== undefined) product.isPopular = Boolean(updates.isPopular);
 
     store.zohoMeta.lastSyncedAt = new Date().toISOString();
     saveStore(store);
