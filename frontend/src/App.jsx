@@ -7,7 +7,12 @@ import {
   ArrowRight,
   Lock,
   CheckCircle2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  X,
+  ChevronDown,
+  User,
+  Building2,
+  Wrench
 } from 'lucide-react';
 
 // Services
@@ -61,10 +66,10 @@ import BlueprintAndComparison from './components/BlueprintAndComparison';
 
 export default function App() {
   const [mainView, setMainView] = useState('mobile'); // 'mobile' | 'admin' | 'blueprint'
+  const [showPersonaDrawer, setShowPersonaDrawer] = useState(false);
 
   // Auth State
-  // authStep: 'SPLASH' | 'LOGIN' | 'OTP' | 'ZOHO_VERIFY' | 'AUTHENTICATED'
-  const [authStep, setAuthStep] = useState('LOGIN');
+  const [authStep, setAuthStep] = useState('LOGIN'); // 'SPLASH' | 'LOGIN' | 'OTP' | 'ZOHO_VERIFY' | 'AUTHENTICATED'
   const [selectedRole, setSelectedRole] = useState('customer'); // 'customer' | 'dealer' | 'plumber' | 'admin'
   const [mobileInput, setMobileInput] = useState('9876543210');
   const [nameInput, setNameInput] = useState('Rahul Sharma');
@@ -74,8 +79,6 @@ export default function App() {
   const [pendingDealerVerification, setPendingDealerVerification] = useState(null);
 
   // Mobile Screen State
-  // Customer & Dealer screens: 'DASHBOARD' | 'CATEGORIES' | 'PRODUCTS' | 'PRODUCT_DETAIL' | 'CART' | 'CHECKOUT' | 'ORDER_CONFIRMATION' | 'ORDERS' | 'PROFILE' | 'NOTIFICATIONS'
-  // Plumber tabs: 'DASHBOARD' | 'ASSIGNED_JOBS' | 'PRODUCT_GUIDE' | 'PROFILE' | 'NOTIFICATIONS'
   const [mobileScreen, setMobileScreen] = useState('DASHBOARD');
   const [screenHistory, setScreenHistory] = useState(['DASHBOARD']);
 
@@ -187,7 +190,6 @@ export default function App() {
     if (e) e.preventDefault();
     setAuthError(null);
 
-    // If Admin role is selected, directly open Admin panel or OTP
     if (selectedRole === 'admin') {
       try {
         const res = await zohoAuthService.requestOtp(mobileInput, 'admin');
@@ -220,14 +222,12 @@ export default function App() {
         nameInput
       );
 
-      // Section 4: If role is Dealer, perform Zoho Verification Screen transition!
       if (res.user.role === 'dealer') {
         setPendingDealerVerification(res.user);
         setAuthStep('ZOHO_VERIFY');
         return;
       }
 
-      // If Admin
       if (res.user.role === 'admin') {
         setCurrentUser(res.user);
         setMainView('admin');
@@ -235,7 +235,6 @@ export default function App() {
         return;
       }
 
-      // Customer or Plumber
       await loginSuccess(res.user);
     } catch (err) {
       setAuthError(err.data ? err.data.error : err.message);
@@ -250,6 +249,7 @@ export default function App() {
     setScreenHistory(['DASHBOARD']);
     setCart([]);
     setCheckoutError('');
+    setShowPersonaDrawer(false);
     setShippingAddress(user.address || `${user.city || 'Hyderabad'} Warehouse`);
 
     await fetchProducts(user.role, 'all', '');
@@ -267,8 +267,8 @@ export default function App() {
     setMobileInput(mobile);
     setNameInput(name);
     setAuthError(null);
+    setShowPersonaDrawer(false);
 
-    // If Admin
     if (role === 'admin') {
       const adminUser = adminData?.users?.admins[0] || { id: 'ADM-01', role: 'admin', name: 'Manikanta (Super Admin)' };
       setCurrentUser(adminUser);
@@ -277,9 +277,7 @@ export default function App() {
     }
 
     try {
-      // Step 1: Send OTP
       await zohoAuthService.requestOtp(mobile, role, name);
-      // Step 2: Verify OTP
       const res = await zohoAuthService.verifyOtp(mobile, '123456', role, name);
 
       if (res.user.role === 'dealer') {
@@ -289,7 +287,6 @@ export default function App() {
         await loginSuccess(res.user);
       }
     } catch (err) {
-      // e.g. Unverified dealer 9000033333
       if (role === 'dealer') {
         const unverified = adminData?.users?.dealers.find((d) => d.mobile === mobile);
         if (unverified) {
@@ -338,7 +335,7 @@ export default function App() {
     );
   };
 
-  // Place Order (Customer Direct Payment OR Dealer Upfront / 30D / 90D Credit)
+  // Place Order
   const handlePlaceOrder = async () => {
     setCheckoutError('');
     setIsSubmittingOrder(true);
@@ -451,714 +448,606 @@ export default function App() {
     }
   };
 
+  // Persona Switcher UI List
+  const personasList = [
+    {
+      role: 'customer',
+      mobile: '9876543210',
+      name: 'Rahul Sharma',
+      tag: '1. CUSTOMER',
+      color: 'blue',
+      desc: 'Retail Price Only • Stock Hidden • Direct Payment (UPI/Card) • Order Tracking'
+    },
+    {
+      role: 'dealer',
+      mobile: '9000011111',
+      name: 'Sri Venkateswara Distributors',
+      tag: '2A. DEALER (90D APPROVED)',
+      color: 'amber',
+      desc: 'Zoho Verified • Sees Exact Stock • Upfront, 30-Day & 90-Day Credit Approved'
+    },
+    {
+      role: 'dealer',
+      mobile: '9000022222',
+      name: 'Metro Pipe Syndicate',
+      tag: '2B. DEALER (30D ONLY)',
+      color: 'amber',
+      desc: 'Zoho Verified • Sees Stock • Upfront & 30-Day Credit (90-Day Credit Locked)'
+    },
+    {
+      role: 'dealer',
+      mobile: '9000033333',
+      name: 'Coastal Builders Mart',
+      tag: '2C. UNVERIFIED DEALER',
+      color: 'rose',
+      desc: 'Demonstrates Zoho CRM Gate: Login Blocked until Admin approves in Zoho'
+    },
+    {
+      role: 'plumber',
+      mobile: '9111122222',
+      name: 'Ramesh Babu (Master Plumber)',
+      tag: '3. MASTER PLUMBER',
+      color: 'purple',
+      desc: 'Trade Verified • Assigned jobs • Product technical specs & reward wallet'
+    }
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased">
-      {/* Top Global Navigation Bar */}
-      <header className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur-md border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-600/30 font-black text-white text-lg">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-blue-600 selection:text-white">
+      {/* Sleek Top Navigation Bar */}
+      <header className="sticky top-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
+          {/* Logo & Brand */}
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-400 flex items-center justify-center font-black text-white text-sm shadow-md shadow-blue-500/30">
               PM
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-white text-base tracking-tight">PlumbMart</span>
-                <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                  <FileSpreadsheet className="w-3 h-3" /> Zoho Workbook Connected
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 hidden sm:block">
-                Waytowebs Interview Task • 4 Roles (Customer, Dealer, Plumber, Admin)
-              </p>
+            <div className="flex items-baseline gap-1.5">
+              <span className="font-extrabold text-white text-sm sm:text-base tracking-tight">PlumbMart</span>
+              <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                <FileSpreadsheet className="w-2.5 h-2.5" /> Zoho Live
+              </span>
             </div>
           </div>
 
-          {/* Primary View Switcher */}
-          <div className="flex items-center gap-1.5 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
+          {/* Quick Persona Trigger Button (Instant Role Switcher) */}
+          <button
+            onClick={() => setShowPersonaDrawer(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-900/60 to-purple-900/60 hover:from-blue-800/80 hover:to-purple-800/80 border border-blue-500/40 text-white text-[11px] font-bold shadow transition"
+            title="Switch Demo Role"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-spin" />
+            <span className="hidden sm:inline">Role:</span>
+            <span className="uppercase text-blue-300">
+              {currentUser?.role || selectedRole}
+            </span>
+            <ChevronDown className="w-3 h-3 text-slate-400" />
+          </button>
+
+          {/* Main View Switcher Pills */}
+          <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
             <button
               onClick={() => setMainView('mobile')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition ${
                 mainView === 'mobile'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  ? 'bg-blue-600 text-white shadow'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>Mobile Simulator</span>
+              <Smartphone className="w-3 h-3" />
+              <span className="hidden xs:inline">App</span>
             </button>
             <button
               onClick={() => setMainView('admin')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition ${
                 mainView === 'admin'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  ? 'bg-blue-600 text-white shadow'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Admin Panel (11)</span>
+              <ShieldCheck className="w-3 h-3" />
+              <span className="hidden xs:inline">Admin</span>
             </button>
             <button
               onClick={() => setMainView('blueprint')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition ${
                 mainView === 'blueprint'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  ? 'bg-blue-600 text-white shadow'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Zoho Blueprint</span>
+              <Layers className="w-3 h-3" />
+              <span className="hidden sm:inline">Blueprint</span>
             </button>
           </div>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 pt-6">
-        {/* VIEW 1: ARCHITECTURE & BLUEPRINT */}
+      <main className="flex-1 w-full max-w-7xl mx-auto flex flex-col justify-start">
+        {/* VIEW 1: ARCHITECTURE BLUEPRINT & WIREFRAME */}
         {mainView === 'blueprint' && (
-          <BlueprintAndComparison
-            zohoMeta={zohoMeta}
-            products={adminData?.products || products}
-            onTriggerZohoSync={handleTriggerZohoSync}
-            onSwitchView={setMainView}
-          />
+          <div className="p-4 sm:p-6 w-full">
+            <BlueprintAndComparison
+              zohoMeta={zohoMeta}
+              products={adminData?.products || products}
+              onTriggerZohoSync={handleTriggerZohoSync}
+              onSwitchView={setMainView}
+            />
+          </div>
         )}
 
-        {/* VIEW 2: ADMIN MANAGEMENT PORTAL (11 Sections) */}
+        {/* VIEW 2: ADMIN MANAGEMENT PORTAL (11 SECTIONS) */}
         {mainView === 'admin' && (
-          <AdminPortal
-            adminData={adminData}
-            onUpdateDealer={handleAdminUpdateDealer}
-            onUpdatePlumber={handleAdminUpdatePlumber}
-            onUpdateProductRow={handleAdminUpdateProductRow}
-            onUpdateOrder={handleAdminUpdateOrder}
-            onTriggerZohoSync={handleTriggerZohoSync}
-            onResetDemo={handleResetDemo}
-          />
+          <div className="p-4 sm:p-6 w-full">
+            <AdminPortal
+              adminData={adminData}
+              onUpdateDealer={handleAdminUpdateDealer}
+              onUpdatePlumber={handleAdminUpdatePlumber}
+              onUpdateProductRow={handleAdminUpdateProductRow}
+              onUpdateOrder={handleAdminUpdateOrder}
+              onTriggerZohoSync={handleTriggerZohoSync}
+              onResetDemo={handleResetDemo}
+            />
+          </div>
         )}
 
-        {/* VIEW 3: MOBILE APP SIMULATOR (Customer, Dealer, Plumber Flows) */}
+        {/* VIEW 3: MOBILE APP SIMULATOR (100% RESPONSIVE ON MOBILE & DESKTOP) */}
         {mainView === 'mobile' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-12 items-start">
-            {/* LEFT COLUMN: Interview Persona Switcher + Live Flow Tracker */}
-            <div className="lg:col-span-5 space-y-4">
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-blue-400" />
-                    1-Click Interview Role Switcher
-                  </h2>
-                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-500/30">
-                    OTP: 123456
+          <div className="w-full flex-1 flex flex-col lg:py-6 lg:items-center justify-center">
+            {/* On Desktop: Sleek Phone Frame with subtle border; On Mobile: Full viewport native app */}
+            <div className="w-full lg:max-w-[440px] bg-slate-900 lg:border-[6px] lg:border-slate-800 lg:rounded-[44px] lg:shadow-2xl overflow-hidden flex flex-col flex-1 min-h-[calc(100vh-56px)] lg:min-h-[760px] lg:max-h-[840px]">
+              {/* Phone Top Status Bar (Desktop Mockup Mode) */}
+              <div className="hidden lg:flex bg-slate-950 px-6 py-2.5 items-center justify-between border-b border-slate-800/80 text-[11px] text-slate-400">
+                <span className="font-semibold text-slate-200">PlumbMart Mobile</span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 text-emerald-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Zoho Live
                   </span>
-                </div>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Switch instantly between personas to demonstrate each required flow to the interviewer:
-                </p>
-
-                <div className="space-y-2">
-                  {/* Persona 1: Customer */}
-                  <button
-                    onClick={() => quickSelectPersona('customer', '9876543210', 'Rahul Sharma')}
-                    className={`w-full p-3 rounded-xl border text-left transition flex items-start justify-between gap-2 ${
-                      currentUser?.mobile === '9876543210' && authStep === 'AUTHENTICATED'
-                        ? 'bg-blue-950/60 border-blue-500 text-white shadow'
-                        : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300">
-                          1. CUSTOMER
-                        </span>
-                        <span className="text-xs font-bold text-white">Rahul Sharma (+91 9876543210)</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-1">
-                        • Retail Price Only • <strong className="text-rose-300">Stock Qty Hidden</strong> • Direct Payment (UPI/Card) • Order Tracking
-                      </p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-blue-400 shrink-0 mt-1" />
-                  </button>
-
-                  {/* Persona 2: Dealer (90D Credit Approved) */}
-                  <button
-                    onClick={() => quickSelectPersona('dealer', '9000011111')}
-                    className={`w-full p-3 rounded-xl border text-left transition flex items-start justify-between gap-2 ${
-                      currentUser?.mobile === '9000011111' && authStep === 'AUTHENTICATED'
-                        ? 'bg-amber-950/60 border-amber-500 text-white shadow'
-                        : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300">
-                          2A. DEALER (90D APPROVED)
-                        </span>
-                        <span className="text-xs font-bold text-white">Sri Venkateswara (+91 9000011111)</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-1">
-                        • Zoho Verified • <strong className="text-emerald-300">Sees Stock Qty</strong> • Upfront, 30-Day &amp; <strong className="text-purple-300">90-Day Credit Approved</strong>
-                      </p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-amber-400 shrink-0 mt-1" />
-                  </button>
-
-                  {/* Persona 3: Dealer (30D Credit Only, 90D Locked) */}
-                  <button
-                    onClick={() => quickSelectPersona('dealer', '9000022222')}
-                    className={`w-full p-3 rounded-xl border text-left transition flex items-start justify-between gap-2 ${
-                      currentUser?.mobile === '9000022222' && authStep === 'AUTHENTICATED'
-                        ? 'bg-amber-950/60 border-amber-500 text-white shadow'
-                        : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300">
-                          2B. DEALER (30D ONLY)
-                        </span>
-                        <span className="text-xs font-bold text-white">Metro Pipe Syndicate (+91 9000022222)</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-1">
-                        • Zoho Verified • Sees Stock Qty • Upfront &amp; 30-Day Credit (<strong className="text-rose-300">90-Day Credit Locked</strong>)
-                      </p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-amber-400 shrink-0 mt-1" />
-                  </button>
-
-                  {/* Persona 4: Unverified Dealer (Access Blocked) */}
-                  <button
-                    onClick={() => quickSelectPersona('dealer', '9000033333')}
-                    className={`w-full p-3 rounded-xl border text-left transition flex items-start justify-between gap-2 ${
-                      authStep === 'ZOHO_VERIFY' && pendingDealerVerification?.mobile === '9000033333'
-                        ? 'bg-rose-950/60 border-rose-500 text-white shadow'
-                        : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300">
-                          2C. UNVERIFIED DEALER
-                        </span>
-                        <span className="text-xs font-bold text-white">Coastal Builders (+91 9000033333)</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-1">
-                        • Demonstrates Zoho CRM Gate: <strong className="text-rose-300">Login Blocked until Admin approves</strong>
-                      </p>
-                    </div>
-                    <Lock className="w-4 h-4 text-rose-400 shrink-0 mt-1" />
-                  </button>
-
-                  {/* Persona 5: Plumber */}
-                  <button
-                    onClick={() => quickSelectPersona('plumber', '9111122222')}
-                    className={`w-full p-3 rounded-xl border text-left transition flex items-start justify-between gap-2 ${
-                      currentUser?.mobile === '9111122222' && authStep === 'AUTHENTICATED'
-                        ? 'bg-purple-950/60 border-purple-500 text-white shadow'
-                        : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300">
-                          3. MASTER PLUMBER
-                        </span>
-                        <span className="text-xs font-bold text-white">Ramesh Babu (+91 9111122222)</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-1">
-                        • Verified Trade License • Assigned customer activities • Product technical guide &amp; reward wallet
-                      </p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-purple-400 shrink-0 mt-1" />
-                  </button>
+                  <span>5G • 100%</span>
                 </div>
               </div>
 
-              {/* End-to-End Application Flow Tracker */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                    Application Flow Stepper
-                  </span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-blue-300 uppercase">
-                    Role: {currentUser?.role || selectedRole}
-                  </span>
-                </div>
+              {/* Mobile Header (When Logged In) */}
+              {authStep === 'AUTHENTICATED' && currentUser && (
+                <MobileHeader
+                  currentUser={currentUser}
+                  currentScreen={mobileScreen}
+                  cartCount={cart.length}
+                  unreadNotificationsCount={notifications.filter((n) => !n.read).length}
+                  onBack={handleBack}
+                  onOpenCart={() => navigateTo('CART')}
+                  onOpenNotifications={() => navigateTo('NOTIFICATIONS')}
+                  onLogout={handleLogout}
+                />
+              )}
 
-                {(!currentUser || currentUser.role === 'customer') && (
-                  <div className="flex flex-wrap gap-1.5 text-[11px]">
-                    {[
-                      { id: 'LOGIN', label: '1. OTP Login' },
-                      { id: 'DASHBOARD', label: '2. Dashboard' },
-                      { id: 'CATEGORIES', label: '3. Categories' },
-                      { id: 'PRODUCTS', label: '4. Products (No Stock)' },
-                      { id: 'PRODUCT_DETAIL', label: '5. Product Details' },
-                      { id: 'CART', label: '6. Cart' },
-                      { id: 'CHECKOUT', label: '7. Direct Payment' },
-                      { id: 'ORDER_CONFIRMATION', label: '8. Confirmation' },
-                      { id: 'ORDERS', label: '9. Order Tracking' }
-                    ].map((st) => (
-                      <button
-                        key={st.id}
-                        onClick={() => {
-                          if (st.id === 'LOGIN') {
-                            setAuthStep('LOGIN');
-                            setCurrentUser(null);
-                          } else if (authStep === 'AUTHENTICATED') {
-                            navigateTo(st.id);
-                          }
-                        }}
-                        className={`px-2 py-1 rounded-lg font-medium transition ${
-                          mobileScreen === st.id && authStep === 'AUTHENTICATED'
-                            ? 'bg-blue-600 text-white shadow'
-                            : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
-                        }`}
-                      >
-                        {st.label}
-                      </button>
-                    ))}
-                  </div>
+              {/* Scrollable Mobile App Body */}
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col">
+                {/* 1. SPLASH SCREEN */}
+                {authStep === 'SPLASH' && (
+                  <SplashScreen onStart={() => setAuthStep('LOGIN')} />
                 )}
 
-                {currentUser?.role === 'dealer' && (
-                  <div className="flex flex-wrap gap-1.5 text-[11px]">
-                    {[
-                      { id: 'LOGIN', label: '1. OTP Login' },
-                      { id: 'ZOHO_VERIFY', label: '2. Zoho Verification' },
-                      { id: 'DASHBOARD', label: '3. Dealer Dashboard' },
-                      { id: 'PRODUCTS', label: '4. Products (Stock Visible)' },
-                      { id: 'CART', label: '5. Bulk Cart' },
-                      { id: 'CHECKOUT', label: '6. Payment (30/90D Credit)' },
-                      { id: 'ORDERS', label: '7. Invoices & Orders' }
-                    ].map((st) => (
-                      <button
-                        key={st.id}
-                        onClick={() => {
-                          if (st.id === 'LOGIN') {
-                            setAuthStep('LOGIN');
-                            setCurrentUser(null);
-                          } else if (st.id === 'ZOHO_VERIFY') {
-                            setPendingDealerVerification(currentUser);
-                            setAuthStep('ZOHO_VERIFY');
-                          } else {
-                            navigateTo(st.id);
-                          }
-                        }}
-                        className={`px-2 py-1 rounded-lg font-medium transition ${
-                          mobileScreen === st.id && authStep === 'AUTHENTICATED'
-                            ? 'bg-amber-500 text-slate-950 font-bold shadow'
-                            : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
-                        }`}
-                      >
-                        {st.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {currentUser?.role === 'plumber' && (
-                  <div className="flex flex-wrap gap-1.5 text-[11px]">
-                    {[
-                      { id: 'DASHBOARD', label: '1. Plumber Overview' },
-                      { id: 'ASSIGNED_JOBS', label: '2. Assigned Activities' },
-                      { id: 'PRODUCT_GUIDE', label: '3. Product Specs' },
-                      { id: 'PROFILE', label: '4. Wallet & KYC' }
-                    ].map((st) => (
-                      <button
-                        key={st.id}
-                        onClick={() => navigateTo(st.id)}
-                        className={`px-2 py-1 rounded-lg font-medium transition ${
-                          mobileScreen === st.id
-                            ? 'bg-purple-600 text-white shadow'
-                            : 'bg-slate-950 text-slate-400 border border-slate-800'
-                        }`}
-                      >
-                        {st.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* RIGHT COLUMN: Mobile Device Simulator Frame */}
-            <div className="lg:col-span-7 flex justify-center">
-              <div className="w-full max-w-[440px] bg-slate-900 border-[6px] border-slate-800 rounded-[44px] shadow-2xl overflow-hidden flex flex-col min-h-[740px] max-h-[820px]">
-                {/* Phone Status Bar */}
-                <div className="bg-slate-950 px-6 py-2.5 flex items-center justify-between border-b border-slate-800/80 text-[11px] text-slate-400">
-                  <span className="font-semibold text-slate-200">PlumbMart Mobile</span>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1 text-emerald-400">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Zoho Live
-                    </span>
-                    <span>5G • 100%</span>
-                  </div>
-                </div>
-
-                {/* Mobile Header (When Authenticated) */}
-                {authStep === 'AUTHENTICATED' && currentUser && (
-                  <MobileHeader
-                    currentUser={currentUser}
-                    currentScreen={mobileScreen}
-                    cartCount={cart.length}
-                    unreadNotificationsCount={notifications.filter((n) => !n.read).length}
-                    onBack={handleBack}
-                    onOpenCart={() => navigateTo('CART')}
-                    onOpenNotifications={() => navigateTo('NOTIFICATIONS')}
-                    onLogout={handleLogout}
+                {/* 2. LOGIN SCREEN (OTP Only) */}
+                {authStep === 'LOGIN' && (
+                  <LoginScreen
+                    selectedRole={selectedRole}
+                    onSelectRole={(r) => {
+                      setSelectedRole(r);
+                      setAuthError(null);
+                      if (r === 'customer') setMobileInput('9876543210');
+                      if (r === 'dealer') setMobileInput('9000011111');
+                      if (r === 'plumber') setMobileInput('9111122222');
+                      if (r === 'admin') setMobileInput('9999999999');
+                    }}
+                    mobileInput={mobileInput}
+                    onChangeMobile={setMobileInput}
+                    nameInput={nameInput}
+                    onChangeName={setNameInput}
+                    authError={authError}
+                    onSubmit={handleSendOtp}
+                    onQuickSelectPersona={quickSelectPersona}
                   />
                 )}
 
-                {/* SCROLLABLE PHONE SCREEN BODY */}
-                <div className="flex-1 overflow-y-auto p-4">
-                  {/* AUTH STATE 1: SPLASH */}
-                  {authStep === 'SPLASH' && (
-                    <SplashScreen onStart={() => setAuthStep('LOGIN')} />
-                  )}
+                {/* 3. OTP VERIFICATION SCREEN */}
+                {authStep === 'OTP' && (
+                  <OtpVerificationScreen
+                    mobile={mobileInput}
+                    role={selectedRole}
+                    otpInput={otpInput}
+                    onChangeOtp={setOtpInput}
+                    demoOtp="123456"
+                    error={authError}
+                    onBack={() => setAuthStep('LOGIN')}
+                    onVerify={handleVerifyOtp}
+                  />
+                )}
 
-                  {/* AUTH STATE 2: LOGIN */}
-                  {authStep === 'LOGIN' && (
-                    <LoginScreen
-                      selectedRole={selectedRole}
-                      onSelectRole={(r) => {
-                        setSelectedRole(r);
-                        setAuthError(null);
-                        if (r === 'customer') setMobileInput('9876543210');
-                        if (r === 'dealer') setMobileInput('9000011111');
-                        if (r === 'plumber') setMobileInput('9111122222');
-                        if (r === 'admin') setMobileInput('9999999999');
-                      }}
-                      mobileInput={mobileInput}
-                      onChangeMobile={setMobileInput}
-                      nameInput={nameInput}
-                      onChangeName={setNameInput}
-                      authError={authError}
-                      onSubmit={handleSendOtp}
-                      onQuickSelectPersona={quickSelectPersona}
-                    />
-                  )}
+                {/* 4. ZOHO DEALER VERIFICATION GATE SCREEN */}
+                {authStep === 'ZOHO_VERIFY' && (
+                  <ZohoVerificationScreen
+                    dealer={pendingDealerVerification}
+                    onProceed={() => loginSuccess(pendingDealerVerification)}
+                    onBackToLogin={() => setAuthStep('LOGIN')}
+                    onOpenAdminToVerify={() => setMainView('admin')}
+                  />
+                )}
 
-                  {/* AUTH STATE 3: OTP VERIFICATION */}
-                  {authStep === 'OTP' && (
-                    <OtpVerificationScreen
-                      mobile={mobileInput}
-                      role={selectedRole}
-                      otpInput={otpInput}
-                      onChangeOtp={setOtpInput}
-                      demoOtp="123456"
-                      error={authError}
-                      onBack={() => setAuthStep('LOGIN')}
-                      onVerify={handleVerifyOtp}
-                    />
-                  )}
+                {/* 5. AUTHENTICATED USER DASHBOARDS */}
+                {authStep === 'AUTHENTICATED' && currentUser && (
+                  <>
+                    {/* CUSTOMER SCREENS */}
+                    {currentUser.role === 'customer' && (
+                      <>
+                        {mobileScreen === 'DASHBOARD' && (
+                          <CustomerDashboard
+                            customer={currentUser}
+                            categories={categories}
+                            products={products}
+                            searchQuery={searchQuery}
+                            onSearchChange={(q) => {
+                              setSearchQuery(q);
+                              fetchProducts('customer', selectedCategory, q);
+                            }}
+                            selectedCategory={selectedCategory}
+                            onSelectCategory={(catId) => {
+                              setSelectedCategory(catId);
+                              fetchProducts('customer', catId, searchQuery);
+                            }}
+                            onOpenProductDetails={(prod) => {
+                              setActiveProduct(prod);
+                              navigateTo('PRODUCT_DETAIL');
+                            }}
+                            onAddToCart={(prod, qty) => handleAddToCart(prod, qty)}
+                            onOpenCart={() => navigateTo('CART')}
+                            onOpenCategories={() => navigateTo('CATEGORIES')}
+                            onOpenOrders={() => navigateTo('ORDERS')}
+                          />
+                        )}
 
-                  {/* AUTH STATE 4: ZOHO DEALER VERIFICATION GATE */}
-                  {authStep === 'ZOHO_VERIFY' && (
-                    <ZohoVerificationScreen
-                      dealer={pendingDealerVerification}
-                      onProceed={() => loginSuccess(pendingDealerVerification)}
-                      onBackToLogin={() => setAuthStep('LOGIN')}
-                      onOpenAdminToVerify={() => setMainView('admin')}
-                    />
-                  )}
-
-                  {/* ========================================================= */}
-                  {/* AUTH STATE 5: AUTHENTICATED ROLE SCREENS                  */}
-                  {/* ========================================================= */}
-                  {authStep === 'AUTHENTICATED' && currentUser && (
-                    <>
-                      {/* ----------------------------------------------------- */}
-                      {/* A. CUSTOMER SCREENS                                  */}
-                      {/* ----------------------------------------------------- */}
-                      {currentUser.role === 'customer' && (
-                        <>
-                          {mobileScreen === 'DASHBOARD' && (
-                            <CustomerDashboard
-                              customer={currentUser}
-                              categories={categories}
-                              products={products}
-                              searchQuery={searchQuery}
-                              onSearchChange={(q) => {
-                                setSearchQuery(q);
-                                fetchProducts('customer', selectedCategory, q);
-                              }}
-                              selectedCategory={selectedCategory}
-                              onSelectCategory={(catId) => {
-                                setSelectedCategory(catId);
-                                fetchProducts('customer', catId, searchQuery);
-                              }}
-                              onOpenProductDetails={(prod) => {
-                                setActiveProduct(prod);
-                                navigateTo('PRODUCT_DETAIL');
-                              }}
-                              onAddToCart={(prod, qty) => handleAddToCart(prod, qty)}
-                              onOpenCart={() => navigateTo('CART')}
-                              onOpenCategories={() => navigateTo('CATEGORIES')}
-                              onOpenOrders={() => navigateTo('ORDERS')}
-                            />
-                          )}
-
-                          {mobileScreen === 'CATEGORIES' && (
-                            <div className="space-y-3 py-2">
-                              <h2 className="text-base font-extrabold text-white">Select Product Category</h2>
-                              <div className="space-y-2.5">
+                        {mobileScreen === 'CATEGORIES' && (
+                          <div className="space-y-3 py-2">
+                            <h2 className="text-base font-extrabold text-white">Select Product Category</h2>
+                            <div className="space-y-2.5">
+                              <button
+                                onClick={() => {
+                                  setSelectedCategory('all');
+                                  fetchProducts('customer', 'all', '');
+                                  navigateTo('PRODUCTS');
+                                }}
+                                className="w-full p-3.5 rounded-xl bg-blue-600/20 border border-blue-500/40 text-left flex items-center justify-between"
+                              >
+                                <span className="font-bold text-sm text-white">All Zoho Products</span>
+                                <ArrowRight className="w-4 h-4 text-blue-400" />
+                              </button>
+                              {categories.map((cat) => (
                                 <button
+                                  key={cat.id}
                                   onClick={() => {
-                                    setSelectedCategory('all');
-                                    fetchProducts('customer', 'all', '');
+                                    setSelectedCategory(cat.id);
+                                    fetchProducts('customer', cat.id, '');
                                     navigateTo('PRODUCTS');
                                   }}
-                                  className="w-full p-3.5 rounded-xl bg-blue-600/20 border border-blue-500/40 text-left flex items-center justify-between"
+                                  className="w-full p-3.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-blue-500/50 text-left flex items-center justify-between transition"
                                 >
-                                  <span className="font-bold text-sm text-white">All Zoho Products</span>
-                                  <ArrowRight className="w-4 h-4 text-blue-400" />
+                                  <div>
+                                    <div className="font-bold text-sm text-white">{cat.name}</div>
+                                    <div className="text-xs text-slate-400 mt-0.5">{cat.description}</div>
+                                  </div>
+                                  <ArrowRight className="w-4 h-4 text-slate-400" />
                                 </button>
-                                {categories.map((cat) => (
-                                  <button
-                                    key={cat.id}
-                                    onClick={() => {
-                                      setSelectedCategory(cat.id);
-                                      fetchProducts('customer', cat.id, '');
-                                      navigateTo('PRODUCTS');
-                                    }}
-                                    className="w-full p-3.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-blue-500/50 text-left flex items-center justify-between transition"
-                                  >
-                                    <div>
-                                      <div className="font-bold text-sm text-white">{cat.name}</div>
-                                      <div className="text-xs text-slate-400 mt-0.5">{cat.description}</div>
-                                    </div>
-                                    <ArrowRight className="w-4 h-4 text-slate-400" />
-                                  </button>
-                                ))}
-                              </div>
+                              ))}
                             </div>
-                          )}
+                          </div>
+                        )}
 
-                          {mobileScreen === 'PRODUCTS' && (
-                            <CustomerDashboard
-                              customer={currentUser}
-                              categories={categories}
-                              products={products}
-                              searchQuery={searchQuery}
-                              onSearchChange={(q) => {
-                                setSearchQuery(q);
-                                fetchProducts('customer', selectedCategory, q);
-                              }}
-                              selectedCategory={selectedCategory}
-                              onSelectCategory={(catId) => {
-                                setSelectedCategory(catId);
-                                fetchProducts('customer', catId, searchQuery);
-                              }}
-                              onOpenProductDetails={(prod) => {
-                                setActiveProduct(prod);
-                                navigateTo('PRODUCT_DETAIL');
-                              }}
-                              onAddToCart={(prod, qty) => handleAddToCart(prod, qty)}
-                              onOpenCart={() => navigateTo('CART')}
-                              onOpenCategories={() => navigateTo('CATEGORIES')}
-                              onOpenOrders={() => navigateTo('ORDERS')}
-                            />
-                          )}
+                        {mobileScreen === 'PRODUCTS' && (
+                          <CustomerDashboard
+                            customer={currentUser}
+                            categories={categories}
+                            products={products}
+                            searchQuery={searchQuery}
+                            onSearchChange={(q) => {
+                              setSearchQuery(q);
+                              fetchProducts('customer', selectedCategory, q);
+                            }}
+                            selectedCategory={selectedCategory}
+                            onSelectCategory={(catId) => {
+                              setSelectedCategory(catId);
+                              fetchProducts('customer', catId, searchQuery);
+                            }}
+                            onOpenProductDetails={(prod) => {
+                              setActiveProduct(prod);
+                              navigateTo('PRODUCT_DETAIL');
+                            }}
+                            onAddToCart={(prod, qty) => handleAddToCart(prod, qty)}
+                            onOpenCart={() => navigateTo('CART')}
+                            onOpenCategories={() => navigateTo('CATEGORIES')}
+                            onOpenOrders={() => navigateTo('ORDERS')}
+                          />
+                        )}
 
-                          {mobileScreen === 'PRODUCT_DETAIL' && (
-                            <CustomerProductDetails
-                              product={activeProduct}
-                              onBack={handleBack}
-                              onAddToCart={(prod, qty) => handleAddToCart(prod, qty)}
-                              onGoToCart={() => navigateTo('CART')}
-                            />
-                          )}
+                        {mobileScreen === 'PRODUCT_DETAIL' && (
+                          <CustomerProductDetails
+                            product={activeProduct}
+                            onBack={handleBack}
+                            onAddToCart={(prod, qty) => handleAddToCart(prod, qty)}
+                            onGoToCart={() => navigateTo('CART')}
+                          />
+                        )}
 
-                          {mobileScreen === 'CART' && (
-                            <CustomerCart
-                              cart={cart}
-                              onUpdateQty={handleUpdateCartQty}
-                              onClearCart={() => setCart([])}
-                              onProceedToCheckout={() => navigateTo('CHECKOUT')}
-                              onContinueShopping={() => navigateTo('DASHBOARD')}
-                            />
-                          )}
+                        {mobileScreen === 'CART' && (
+                          <CustomerCart
+                            cart={cart}
+                            onUpdateQty={handleUpdateCartQty}
+                            onClearCart={() => setCart([])}
+                            onProceedToCheckout={() => navigateTo('CHECKOUT')}
+                            onContinueShopping={() => navigateTo('DASHBOARD')}
+                          />
+                        )}
 
-                          {mobileScreen === 'CHECKOUT' && (
-                            <CustomerCheckout
-                              cart={cart}
-                              customer={currentUser}
-                              paymentMode={customerPaymentMode}
-                              onChangePaymentMode={setCustomerPaymentMode}
-                              shippingAddress={shippingAddress}
-                              onChangeShippingAddress={setShippingAddress}
-                              error={checkoutError}
-                              isSubmitting={isSubmittingOrder}
-                              onPlaceOrder={handlePlaceOrder}
-                              onBackToCart={() => navigateTo('CART')}
-                            />
-                          )}
+                        {mobileScreen === 'CHECKOUT' && (
+                          <CustomerCheckout
+                            cart={cart}
+                            customer={currentUser}
+                            paymentMode={customerPaymentMode}
+                            onChangePaymentMode={setCustomerPaymentMode}
+                            shippingAddress={shippingAddress}
+                            onChangeShippingAddress={setShippingAddress}
+                            error={checkoutError}
+                            isSubmitting={isSubmittingOrder}
+                            onPlaceOrder={handlePlaceOrder}
+                            onBackToCart={() => navigateTo('CART')}
+                          />
+                        )}
 
-                          {mobileScreen === 'ORDER_CONFIRMATION' && (
-                            <CustomerOrderConfirmation
-                              order={activeOrder}
-                              onTrackOrder={() => navigateTo('ORDERS')}
-                              onContinueShopping={() => navigateTo('DASHBOARD')}
-                            />
-                          )}
+                        {mobileScreen === 'ORDER_CONFIRMATION' && (
+                          <CustomerOrderConfirmation
+                            order={activeOrder}
+                            onTrackOrder={() => navigateTo('ORDERS')}
+                            onContinueShopping={() => navigateTo('DASHBOARD')}
+                          />
+                        )}
 
-                          {mobileScreen === 'ORDERS' && (
-                            <CustomerOrderTracking
-                              orders={orders}
-                              activeOrder={activeOrder}
-                              onSelectOrder={(ord) => setActiveOrder(ord)}
-                            />
-                          )}
+                        {mobileScreen === 'ORDERS' && (
+                          <CustomerOrderTracking
+                            orders={orders}
+                            activeOrder={activeOrder}
+                            onSelectOrder={(ord) => setActiveOrder(ord)}
+                          />
+                        )}
 
-                          {mobileScreen === 'PROFILE' && (
-                            <CustomerProfile
-                              customer={currentUser}
-                              onLogout={handleLogout}
-                            />
-                          )}
+                        {mobileScreen === 'PROFILE' && (
+                          <CustomerProfile
+                            customer={currentUser}
+                            onLogout={handleLogout}
+                          />
+                        )}
 
-                          {mobileScreen === 'NOTIFICATIONS' && (
-                            <CustomerNotifications notifications={notifications} />
-                          )}
-                        </>
-                      )}
+                        {mobileScreen === 'NOTIFICATIONS' && (
+                          <CustomerNotifications notifications={notifications} />
+                        )}
+                      </>
+                    )}
 
-                      {/* ----------------------------------------------------- */}
-                      {/* B. DEALER SCREENS                                    */}
-                      {/* ----------------------------------------------------- */}
-                      {currentUser.role === 'dealer' && (
-                        <>
-                          {mobileScreen === 'DASHBOARD' && (
-                            <DealerDashboard
-                              dealer={currentUser}
-                              products={products}
-                              orders={orders}
-                              onNavigate={navigateTo}
-                            />
-                          )}
+                    {/* DEALER SCREENS */}
+                    {currentUser.role === 'dealer' && (
+                      <>
+                        {mobileScreen === 'DASHBOARD' && (
+                          <DealerDashboard
+                            dealer={currentUser}
+                            products={products}
+                            orders={orders}
+                            onNavigate={navigateTo}
+                          />
+                        )}
 
-                          {mobileScreen === 'PRODUCTS' && (
-                            <DealerProductList
-                              products={products}
-                              searchQuery={searchQuery}
-                              onSearchChange={(q) => {
-                                setSearchQuery(q);
-                                fetchProducts('dealer', selectedCategory, q);
-                              }}
-                              onAddToCart={(prod, qty) => {
-                                handleAddToCart(prod, qty);
-                                navigateTo('CART');
-                              }}
-                              onOpenCart={() => navigateTo('CART')}
-                            />
-                          )}
+                        {mobileScreen === 'PRODUCTS' && (
+                          <DealerProductList
+                            products={products}
+                            searchQuery={searchQuery}
+                            onSearchChange={(q) => {
+                              setSearchQuery(q);
+                              fetchProducts('dealer', selectedCategory, q);
+                            }}
+                            onAddToCart={(prod, qty) => {
+                              handleAddToCart(prod, qty);
+                              navigateTo('CART');
+                            }}
+                            onOpenCart={() => navigateTo('CART')}
+                          />
+                        )}
 
-                          {mobileScreen === 'CART' && (
-                            <DealerCart
-                              cart={cart}
-                              onUpdateQty={handleUpdateCartQty}
-                              onClearCart={() => setCart([])}
-                              onProceedToCheckout={() => navigateTo('CHECKOUT')}
-                              onContinueShopping={() => navigateTo('PRODUCTS')}
-                            />
-                          )}
+                        {mobileScreen === 'CART' && (
+                          <DealerCart
+                            cart={cart}
+                            onUpdateQty={handleUpdateCartQty}
+                            onClearCart={() => setCart([])}
+                            onProceedToCheckout={() => navigateTo('CHECKOUT')}
+                            onContinueShopping={() => navigateTo('PRODUCTS')}
+                          />
+                        )}
 
-                          {mobileScreen === 'CHECKOUT' && (
-                            <DealerCheckout
-                              cart={cart}
-                              dealer={currentUser}
-                              paymentMethod={dealerPaymentMethod}
-                              onChangePaymentMethod={setDealerPaymentMethod}
-                              shippingAddress={shippingAddress}
-                              onChangeShippingAddress={setShippingAddress}
-                              error={checkoutError}
-                              isSubmitting={isSubmittingOrder}
-                              onPlaceOrder={handlePlaceOrder}
-                              onBackToCart={() => navigateTo('CART')}
-                            />
-                          )}
+                        {mobileScreen === 'CHECKOUT' && (
+                          <DealerCheckout
+                            cart={cart}
+                            dealer={currentUser}
+                            paymentMethod={dealerPaymentMethod}
+                            onChangePaymentMethod={setDealerPaymentMethod}
+                            shippingAddress={shippingAddress}
+                            onChangeShippingAddress={setShippingAddress}
+                            error={checkoutError}
+                            isSubmitting={isSubmittingOrder}
+                            onPlaceOrder={handlePlaceOrder}
+                            onBackToCart={() => navigateTo('CART')}
+                          />
+                        )}
 
-                          {mobileScreen === 'ORDER_CONFIRMATION' && (
-                            <DealerOrderConfirmation
-                              order={activeOrder}
-                              onViewOrders={() => navigateTo('ORDERS')}
-                              onContinueWholesale={() => navigateTo('PRODUCTS')}
-                            />
-                          )}
+                        {mobileScreen === 'ORDER_CONFIRMATION' && (
+                          <DealerOrderConfirmation
+                            order={activeOrder}
+                            onViewOrders={() => navigateTo('ORDERS')}
+                            onContinueWholesale={() => navigateTo('PRODUCTS')}
+                          />
+                        )}
 
-                          {mobileScreen === 'ORDERS' && (
-                            <DealerOrders orders={orders} />
-                          )}
+                        {mobileScreen === 'ORDERS' && (
+                          <DealerOrders orders={orders} />
+                        )}
 
-                          {mobileScreen === 'PROFILE' && (
-                            <DealerProfile
-                              dealer={currentUser}
-                              onLogout={handleLogout}
-                            />
-                          )}
+                        {mobileScreen === 'PROFILE' && (
+                          <DealerProfile
+                            dealer={currentUser}
+                            onLogout={handleLogout}
+                          />
+                        )}
 
-                          {mobileScreen === 'NOTIFICATIONS' && (
-                            <DealerNotifications notifications={notifications} />
-                          )}
-                        </>
-                      )}
+                        {mobileScreen === 'NOTIFICATIONS' && (
+                          <DealerNotifications notifications={notifications} />
+                        )}
+                      </>
+                    )}
 
-                      {/* ----------------------------------------------------- */}
-                      {/* C. PLUMBER SCREENS                                   */}
-                      {/* ----------------------------------------------------- */}
-                      {currentUser.role === 'plumber' && plumberData && (
-                        <>
-                          {mobileScreen === 'DASHBOARD' && (
-                            <PlumberDashboard
-                              plumber={plumberData.plumber}
-                              assignedOrders={plumberData.assignedOrders}
-                              onNavigateTab={navigateTo}
-                            />
-                          )}
+                    {/* PLUMBER SCREENS */}
+                    {currentUser.role === 'plumber' && plumberData && (
+                      <>
+                        {mobileScreen === 'DASHBOARD' && (
+                          <PlumberDashboard
+                            plumber={plumberData.plumber}
+                            assignedOrders={plumberData.assignedOrders}
+                            onNavigateTab={navigateTo}
+                          />
+                        )}
 
-                          {mobileScreen === 'ASSIGNED_JOBS' && (
-                            <PlumberAssignedActivities
-                              assignedOrders={plumberData.assignedOrders}
-                              onUpdateStatus={handlePlumberStatusUpdate}
-                            />
-                          )}
+                        {mobileScreen === 'ASSIGNED_JOBS' && (
+                          <PlumberAssignedActivities
+                            assignedOrders={plumberData.assignedOrders}
+                            onUpdateStatus={handlePlumberStatusUpdate}
+                          />
+                        )}
 
-                          {mobileScreen === 'PRODUCT_GUIDE' && (
-                            <PlumberProductRequirements
-                              technicalCatalog={plumberData.technicalCatalog}
-                            />
-                          )}
+                        {mobileScreen === 'PRODUCT_GUIDE' && (
+                          <PlumberProductRequirements
+                            technicalCatalog={plumberData.technicalCatalog}
+                          />
+                        )}
 
-                          {mobileScreen === 'PROFILE' && (
-                            <PlumberProfile
-                              plumber={plumberData.plumber}
-                              onLogout={handleLogout}
-                            />
-                          )}
+                        {mobileScreen === 'PROFILE' && (
+                          <PlumberProfile
+                            plumber={plumberData.plumber}
+                            onLogout={handleLogout}
+                          />
+                        )}
 
-                          {mobileScreen === 'NOTIFICATIONS' && (
-                            <PlumberNotifications notifications={notifications} />
-                          )}
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* Role-Specific Mobile Bottom Navigation */}
-                {authStep === 'AUTHENTICATED' && currentUser && (
-                  <MobileBottomNav
-                    role={currentUser.role}
-                    activeTab={mobileScreen}
-                    onSelectTab={(tabId) => navigateTo(tabId)}
-                  />
+                        {mobileScreen === 'NOTIFICATIONS' && (
+                          <PlumberNotifications notifications={notifications} />
+                        )}
+                      </>
+                    )}
+                  </>
                 )}
               </div>
+
+              {/* Role-Specific Mobile Bottom Navigation */}
+              {authStep === 'AUTHENTICATED' && currentUser && (
+                <MobileBottomNav
+                  role={currentUser.role}
+                  activeTab={mobileScreen}
+                  onSelectTab={(tabId) => navigateTo(tabId)}
+                />
+              )}
             </div>
           </div>
         )}
       </main>
+
+      {/* ========================================================= */}
+      {/* SLIDE-UP BOTTOM SHEET: 1-CLICK INTERVIEW PERSONA SWITCHER */}
+      {/* ========================================================= */}
+      {showPersonaDrawer && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-center items-end sm:items-center p-0 sm:p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto animate-slide-up">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-400" />
+                <h3 className="font-extrabold text-sm sm:text-base text-white">
+                  1-Click Interview Role Switcher
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowPersonaDrawer(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Select any persona to immediately log in and demonstrate their exact flow, pricing tier, and permission rules (Demo OTP: <strong className="text-emerald-400 font-mono">123456</strong>):
+            </p>
+
+            <div className="space-y-2.5">
+              {personasList.map((p) => (
+                <button
+                  key={p.tag}
+                  onClick={() => quickSelectPersona(p.role, p.mobile, p.name)}
+                  className={`w-full p-3.5 rounded-2xl border text-left transition flex items-start justify-between gap-3 ${
+                    currentUser?.mobile === p.mobile
+                      ? 'bg-blue-950/80 border-blue-500 text-white shadow'
+                      : 'bg-slate-950/80 border-slate-800 hover:border-slate-700 text-slate-300'
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          p.color === 'amber'
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : p.color === 'purple'
+                            ? 'bg-purple-500/20 text-purple-300'
+                            : p.color === 'rose'
+                            ? 'bg-rose-500/20 text-rose-300'
+                            : 'bg-blue-500/20 text-blue-300'
+                        }`}
+                      >
+                        {p.tag}
+                      </span>
+                      <span className="font-bold text-xs text-white truncate max-w-[200px]">
+                        {p.name}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono">+91 {p.mobile}</div>
+                    <p className="text-[11px] text-slate-400 pt-0.5 leading-snug">{p.desc}</p>
+                  </div>
+
+                  <ArrowRight className="w-4 h-4 text-blue-400 shrink-0 mt-1" />
+                </button>
+              ))}
+
+              {/* Admin Portal Shortcut */}
+              <button
+                onClick={() => {
+                  quickSelectPersona('admin', '9999999999');
+                  setShowPersonaDrawer(false);
+                }}
+                className="w-full p-3.5 rounded-2xl border border-rose-500/40 bg-rose-950/40 text-left transition flex items-center justify-between"
+              >
+                <div>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300">
+                    4. SUPER ADMIN
+                  </span>
+                  <div className="text-xs font-bold text-white mt-1">Open 11-Module Admin Panel</div>
+                  <div className="text-[10px] text-slate-400">Manage Dealers, 30/90D Credit, Zoho Workbook Rows</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-rose-400 shrink-0" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

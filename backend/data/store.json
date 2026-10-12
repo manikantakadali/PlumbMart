@@ -341,6 +341,68 @@
   },
   "orders": [
     {
+      "id": "ORD-2026-105",
+      "orderRole": "customer",
+      "userId": "CUST-01",
+      "userName": "Rahul Sharma",
+      "userMobile": "9876543210",
+      "items": [
+        {
+          "productId": "PRD-1001",
+          "name": "Astral ProFlow CPVC Pipe 25mm (SDR 11 - 3m)",
+          "qty": 1,
+          "unitPrice": 2850,
+          "total": 2850
+        }
+      ],
+      "totalAmount": 2850,
+      "paymentMethod": "DIRECT_PAYMENT",
+      "paymentSubType": "Credit / Debit Card",
+      "paymentStatus": "Successful",
+      "orderStatus": "Confirmed",
+      "creditDays": 0,
+      "dueDate": "Immediate",
+      "assignedPlumberId": "PLB-01",
+      "assignedPlumberName": "Ramesh Babu (Master Plumber)",
+      "plumberTaskStatus": "ASSIGNED",
+      "plumberNotes": "Auto-assigned verified plumber for installation inspection.",
+      "shippingAddress": "Flat 402, Green Valley Residency, Madhapur, Hyderabad - 500081",
+      "orderDate": "2026-10-12T09:43:29.981Z",
+      "createdAt": "2026-10-12T09:43:29.981Z",
+      "trackingTimeline": [
+        {
+          "step": "Placed",
+          "detail": "Order placed by user via mobile app",
+          "time": "12 Oct, 03:13 pm",
+          "done": true
+        },
+        {
+          "step": "Confirmed",
+          "detail": "Direct Payment of ₹2,850 verified (Credit / Debit Card)",
+          "time": "12 Oct, 03:13 pm",
+          "done": true
+        },
+        {
+          "step": "Processing",
+          "detail": "Stock reserved in Zoho Workbook & packed for dispatch",
+          "time": "In Queue",
+          "done": false
+        },
+        {
+          "step": "Shipped",
+          "detail": "Out for delivery • Assigned Plumber: Ramesh Babu",
+          "time": "Pending",
+          "done": false
+        },
+        {
+          "step": "Delivered",
+          "detail": "Delivered to designated premise",
+          "time": "Pending",
+          "done": false
+        }
+      ]
+    },
+    {
       "id": "ORD-2026-104",
       "orderRole": "customer",
       "userId": "CUST-01",
@@ -559,6 +621,17 @@
     }
   ],
   "payments": [
+    {
+      "id": "PAY-9005",
+      "orderId": "ORD-2026-105",
+      "partyName": "Rahul Sharma",
+      "role": "customer",
+      "amount": 2850,
+      "mode": "Direct Payment (Credit / Debit Card)",
+      "status": "Successful",
+      "dueDate": "Immediate",
+      "date": "2026-10-12"
+    },
     {
       "id": "PAY-9004",
       "orderId": "ORD-2026-104",
