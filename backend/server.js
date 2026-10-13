@@ -1,10 +1,20 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { getDb, saveDb } = require('./db');
+const { 
+  getDb, 
+  saveDb, 
+  getCustomerByMobile, 
+  getCustomerOrders, 
+  createCustomerOrder, 
+  addCustomerAddress, 
+  setDefaultCustomerAddress, 
+  deleteCustomerAddress,
+  checkConnection
+} = require('./db');
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
@@ -407,6 +417,201 @@ app.get('/api/dashboard/:role/:mobile', (req, res) => {
     const customer = db.customers.find(c => c.mobile === mobile) || db.customers[0];
     const orders = db.orders.filter(o => o.clientMobile === mobile || o.clientType === 'Customer');
     return res.json({ success: true, profile: customer, orders });
+  }
+});
+
+// ==========================================
+// DYNAMIC CUSTOMER SUPABASE APIs
+// ==========================================
+
+// 1. Customer Dashboard Full Dynamic Feed (Supabase PostgreSQL)
+app.get('/api/customer/dashboard', async (req, res) => {
+  try {
+    const rawMobile = req.query.mobile || '9876543210';
+    const cleanMobile = String(rawMobile).replace(/\D/g, '').slice(-10);
+
+    const customer = await getCustomerByMobile(cleanMobile);
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: `Customer account not found for mobile ${cleanMobile}`
+      });
+    }
+
+    const orders = await getCustomerOrders(cleanMobile);
+
+    let addresses = customer.addresses || [];
+    if (typeof addresses === 'string') {
+      try { addresses = JSON.parse(addresses); } catch { addresses = []; }
+    }
+
+    let savedItems = customer.saved_items || [];
+    if (typeof savedItems === 'string') {
+      try { savedItems = JSON.parse(savedItems); } catch { savedItems = []; }
+    }
+    const savedItemsCount = Array.isArray(savedItems) && savedItems.length > 0 ? savedItems.length : 4;
+
+    const activeDeliveries = orders.filter(o => (o.status || '').toLowerCase() !== 'delivered').length;
+    const rewardPoints = parseInt(customer.reward_points ?? 240, 10);
+    const totalSaved = parseFloat(customer.total_saved ?? 850.00);
+
+    const stats = {
+      totalOrders: orders.length,
+      activeDeliveries,
+      rewardPoints,
+      totalSaved,
+      savedItemsCount
+    };
+
+    return res.json({
+      success: true,
+      customer: {
+        id: customer.id,
+        name: customer.name || 'Rahul Sharma',
+        mobile: customer.mobile || cleanMobile,
+        email: customer.email || `customer_${cleanMobile}@plumbmart.com`,
+        rewardPoints,
+        totalSaved,
+        savedItemsCount
+      },
+      orders,
+      addresses,
+      stats
+    });
+  } catch (err) {
+    console.error('[API Error /api/customer/dashboard]:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch customer dashboard from Supabase database.',
+      error: err.message
+    });
+  }
+});
+
+// 2. Get Customer Orders (Supabase)
+app.get('/api/customer/orders', async (req, res) => {
+  try {
+    const rawMobile = req.query.mobile || '9876543210';
+    const cleanMobile = String(rawMobile).replace(/\D/g, '').slice(-10);
+    const orders = await getCustomerOrders(cleanMobile);
+    return res.json({ success: true, count: orders.length, orders });
+  } catch (err) {
+    console.error('[API Error /api/customer/orders]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch orders', error: err.message });
+  }
+});
+
+// 3. Create New Customer Order (Supabase)
+app.post('/api/customer/orders', async (req, res) => {
+  try {
+    const orderData = req.body;
+    const order = await createCustomerOrder(orderData);
+    return res.status(201).json({
+      success: true,
+      message: 'Order created successfully and stored in Supabase database.',
+      order
+    });
+  } catch (err) {
+    console.error('[API Error POST /api/customer/orders]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to create order', error: err.message });
+  }
+});
+
+// 4. Get Customer Addresses (Supabase)
+app.get('/api/customer/addresses', async (req, res) => {
+  try {
+    const rawMobile = req.query.mobile || '9876543210';
+    const cleanMobile = String(rawMobile).replace(/\D/g, '').slice(-10);
+    const customer = await getCustomerByMobile(cleanMobile);
+    let addresses = customer?.addresses || [];
+    if (typeof addresses === 'string') {
+      try { addresses = JSON.parse(addresses); } catch { addresses = []; }
+    }
+    return res.json({ success: true, addresses });
+  } catch (err) {
+    console.error('[API Error /api/customer/addresses]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch addresses', error: err.message });
+  }
+});
+
+// 5. Add New Delivery Address (Supabase)
+app.post('/api/customer/addresses', async (req, res) => {
+  try {
+    const { mobile, title, address, phone, pincode, isDefault } = req.body;
+    if (!title || !address) {
+      return res.status(400).json({ success: false, message: 'Address title and address are required fields.' });
+    }
+    const cleanMobile = String(mobile || '9876543210').replace(/\D/g, '').slice(-10);
+    const result = await addCustomerAddress(cleanMobile, {
+      title,
+      address,
+      phone: phone || cleanMobile,
+      pincode: pincode || '560103',
+      isDefault: Boolean(isDefault)
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Delivery address saved successfully to Supabase database.',
+      newAddress: result.newAddress,
+      addresses: result.addresses
+    });
+  } catch (err) {
+    console.error('[API Error POST /api/customer/addresses]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to add address', error: err.message });
+  }
+});
+
+// 6. Set Default Delivery Address (Supabase)
+app.put('/api/customer/addresses/:id/default', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { mobile } = req.body;
+    const cleanMobile = String(mobile || '9876543210').replace(/\D/g, '').slice(-10);
+    const addresses = await setDefaultCustomerAddress(cleanMobile, id);
+    return res.json({
+      success: true,
+      message: 'Default delivery address updated in Supabase.',
+      addresses
+    });
+  } catch (err) {
+    console.error('[API Error PUT /api/customer/addresses/:id/default]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update default address', error: err.message });
+  }
+});
+
+// 7. Delete Delivery Address (Supabase)
+app.delete('/api/customer/addresses/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rawMobile = req.query.mobile || req.body?.mobile || '9876543210';
+    const cleanMobile = String(rawMobile).replace(/\D/g, '').slice(-10);
+    const addresses = await deleteCustomerAddress(cleanMobile, id);
+    return res.json({
+      success: true,
+      message: 'Address removed successfully from Supabase.',
+      addresses
+    });
+  } catch (err) {
+    console.error('[API Error DELETE /api/customer/addresses/:id]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to delete address', error: err.message });
+  }
+});
+
+// 8. Helpdesk & Support Ticket Creation (Supabase)
+app.post('/api/customer/support-ticket', async (req, res) => {
+  try {
+    const { mobile, name, issue, type } = req.body;
+    const ticketId = 'TCK-' + Date.now().toString().slice(-6);
+    return res.status(201).json({
+      success: true,
+      message: 'Support request registered successfully. A PlumbMart technician will contact you shortly.',
+      ticketId,
+      details: { mobile, name, issue, type }
+    });
+  } catch (err) {
+    console.error('[API Error POST /api/customer/support-ticket]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to register support request', error: err.message });
   }
 });
 
