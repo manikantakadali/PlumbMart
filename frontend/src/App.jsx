@@ -1,1665 +1,361 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Smartphone,
-  ShieldCheck,
-  Layers,
-  Sparkles,
-  ArrowRight,
-  Lock,
-  CheckCircle2,
-  FileSpreadsheet,
-  X,
-  ChevronDown
-} from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import HomePage from './pages/HomePage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import CustomerDashboard from './pages/CustomerDashboard';
+import DealerDashboard from './pages/DealerDashboard';
+import PlumberDashboard from './pages/PlumberDashboard';
+import AdminLoginPage from './pages/AdminLoginPage';
+import AdminDashboard from './pages/AdminDashboard';
+import { CheckCircle2 } from 'lucide-react';
 
-// Services
-import {
-  zohoAuthService,
-  zohoProductService,
-  zohoDealerService
-} from './services/zoho';
-import { customerService } from './services/customerService';
-import { plumberService } from './services/plumberService';
-import { apiRequest } from './services/api';
-
-// Navigation Components
-import MobileHeader from './components/navigation/MobileHeader';
-import MobileBottomNav from './components/navigation/MobileBottomNav';
-
-// Auth Screens
-import SplashScreen from './components/auth/SplashScreen';
-import LoginScreen from './components/auth/LoginScreen';
-import OtpVerificationScreen from './components/auth/OtpVerificationScreen';
-import ZohoVerificationScreen from './components/auth/ZohoVerificationScreen';
-
-// Customer Screens (100% Dynamic)
-import CustomerDashboard from './components/customer/CustomerDashboard';
-import CustomerProductDetails from './components/customer/CustomerProductDetails';
-import CustomerCart from './components/customer/CustomerCart';
-import CustomerCheckout from './components/customer/CustomerCheckout';
-import CustomerOrderConfirmation from './components/customer/CustomerOrderConfirmation';
-import CustomerOrderTracking from './components/customer/CustomerOrderTracking';
-import CustomerProfile from './components/customer/CustomerProfile';
-import CustomerNotifications from './components/customer/CustomerNotifications';
-
-// Dealer Screens
-import DealerDashboard from './components/dealer/DealerDashboard';
-import DealerProductList from './components/dealer/DealerProductList';
-import DealerCart from './components/dealer/DealerCart';
-import DealerCheckout from './components/dealer/DealerCheckout';
-import DealerOrderConfirmation from './components/dealer/DealerOrderConfirmation';
-import DealerOrders from './components/dealer/DealerOrders';
-import DealerProfile from './components/dealer/DealerProfile';
-import DealerNotifications from './components/dealer/DealerNotifications';
-
-// Plumber Screens (Fully Dynamic Role)
-import PlumberDashboard from './components/plumber/PlumberDashboard';
-import PlumberActivities from './components/plumber/PlumberActivities';
-import PlumberProducts from './components/plumber/PlumberProducts';
-import PlumberProfile from './components/plumber/PlumberProfile';
-import PlumberNotifications from './components/plumber/PlumberNotifications';
-
-// Admin Portal & Blueprint
-import AdminPortal from './components/AdminPortal';
-import BlueprintAndComparison from './components/BlueprintAndComparison';
-import { sendFirebaseOtp, verifyFirebaseOtp } from './firebase';
+const DEFAULT_PRODUCTS = [
+  {
+    id: 'prod-001',
+    name: 'Astral CPVC Pro High Pressure Pipe (1 Inch, 3m)',
+    category: 'Pipes & Tubes',
+    brand: 'Astral Pipes',
+    price: 480,
+    mrp: 580,
+    rating: 4.8,
+    reviews: 142,
+    stock: 85,
+    tag: 'Bestseller',
+    image: 'https://images.unsplash.com/photo-1541888946425-d0fbb18615f8?auto=format&fit=crop&w=600&q=80',
+    description: 'Lead-free, heavy-duty CPVC plumbing pipe suitable for hot and cold potable water applications.'
+  },
+  {
+    id: 'prod-002',
+    name: 'Ashirvad Brass Concealed Stop Cock (15mm Heavy)',
+    category: 'Fittings & Valves',
+    brand: 'Ashirvad',
+    price: 720,
+    mrp: 890,
+    rating: 4.7,
+    reviews: 98,
+    stock: 45,
+    tag: 'Heavy Duty',
+    image: 'https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=600&q=80',
+    description: 'Forged brass concealed valve with quarter-turn ceramic disc cartridge for leak-free performance.'
+  },
+  {
+    id: 'prod-003',
+    name: 'Jaquar Alive Single Lever Basin Mixer Tap (Chrome)',
+    category: 'Bath & Faucets',
+    brand: 'Jaquar',
+    price: 3450,
+    mrp: 4200,
+    rating: 4.9,
+    reviews: 215,
+    stock: 24,
+    tag: 'Premium',
+    image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80',
+    description: 'Ergonomic chrome finish single lever mixer with foam flow aerator for smooth water streams.'
+  },
+  {
+    id: 'prod-004',
+    name: 'Supreme UPVC Ball Valve Heavy Body (25mm)',
+    category: 'Fittings & Valves',
+    brand: 'Supreme',
+    price: 210,
+    mrp: 260,
+    rating: 4.6,
+    reviews: 67,
+    stock: 120,
+    tag: 'Popular',
+    image: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=600&q=80',
+    description: 'Industrial grade UPVC threaded ball valve for agricultural and residential plumbing systems.'
+  },
+  {
+    id: 'prod-005',
+    name: 'Cera Stainless Steel 304 Overhead Rain Shower (8 Inch)',
+    category: 'Bath & Faucets',
+    brand: 'Cera',
+    price: 1850,
+    mrp: 2300,
+    rating: 4.8,
+    reviews: 180,
+    stock: 35,
+    tag: 'Trending',
+    image: 'https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=600&q=80',
+    description: 'Ultra-thin mirror finish 304 stainless steel rain shower head with self-cleaning silicone nozzles.'
+  },
+  {
+    id: 'prod-006',
+    name: 'Finolex SWR PVC Drainage Bend 90° with Door (110mm)',
+    category: 'Pipes & Tubes',
+    brand: 'Finolex',
+    price: 310,
+    mrp: 380,
+    rating: 4.5,
+    reviews: 54,
+    stock: 90,
+    tag: 'Standard',
+    image: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80',
+    description: 'High impact resistant UV-stabilized PVC soil and waste discharge bend with inspection access door.'
+  },
+  {
+    id: 'prod-007',
+    name: 'Kirloskar Mini Water Booster Pump 0.5 HP (Self Priming)',
+    category: 'Pumps & Motors',
+    brand: 'Kirloskar',
+    price: 4950,
+    mrp: 5900,
+    rating: 4.7,
+    reviews: 130,
+    stock: 18,
+    tag: 'Top Rated',
+    image: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
+    description: 'High efficiency copper winding regenerative pump for residential overhead water tank filling.'
+  },
+  {
+    id: 'prod-008',
+    name: 'Taparia Heavy Duty Pipe Wrench 14 Inch (Cast Iron)',
+    category: 'Tools & Sealants',
+    brand: 'Taparia',
+    price: 680,
+    mrp: 820,
+    rating: 4.9,
+    reviews: 310,
+    stock: 60,
+    tag: 'Essential Tool',
+    image: 'https://images.unsplash.com/photo-1581244277943-fe4a9c777189?auto=format&fit=crop&w=600&q=80',
+    description: 'Drop forged hardened jaws pipe wrench with ductile iron handle for heavy plumbing installations.'
+  },
+  {
+    id: 'prod-009',
+    name: 'Pidilite M-Seal Sanitary & Plumbing Epoxy Putty (100g x 6)',
+    category: 'Tools & Sealants',
+    brand: 'Pidilite',
+    price: 180,
+    mrp: 210,
+    rating: 4.8,
+    reviews: 450,
+    stock: 250,
+    tag: 'Quick Seal',
+    image: 'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?auto=format&fit=crop&w=600&q=80',
+    description: 'Multi-purpose sealant putty for joining, sealing, and waterproofing pipe leaks and bathroom joints.'
+  }
+];
 
 export default function App() {
-  const [mainView, setMainView] = useState('mobile'); // 'mobile' | 'admin' | 'blueprint'
-  const [showPersonaDrawer, setShowPersonaDrawer] = useState(false);
-
-  // Auth State
-  const [authStep, setAuthStep] = useState('LOGIN'); // 'SPLASH' | 'LOGIN' | 'OTP' | 'ZOHO_VERIFY' | 'AUTHENTICATED'
-  const [selectedRole, setSelectedRole] = useState('customer');
-  const [mobileInput, setMobileInput] = useState('');
-  const [nameInput, setNameInput] = useState('');
-  const [otpInput, setOtpInput] = useState('');
-  const [authError, setAuthError] = useState(null);
-  const [smsNotice, setSmsNotice] = useState('');
-  const [demoOtp, setDemoOtp] = useState(null);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [pendingDealerVerification, setPendingDealerVerification] = useState(null);
-
-  // Mobile Screen State
-  const [mobileScreen, setMobileScreen] = useState('DASHBOARD');
-  const [screenHistory, setScreenHistory] = useState(['DASHBOARD']);
-
-  // Dynamic Customer Data
-  const [customerBanners, setCustomerBanners] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [isProductsLoading, setIsProductsLoading] = useState(false);
-  const [productsError, setProductsError] = useState(null);
-
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [products, setProducts] = useState(DEFAULT_PRODUCTS);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOption, setSortOption] = useState('');
-  const [activeFilter, setActiveFilter] = useState(''); // 'featured' | 'popular'
-
-  const [activeProduct, setActiveProduct] = useState(null);
-
-  // Dynamic Cart (Backend-persisted per customer)
+  
+  // Cart / Bucket state
   const [cartItems, setCartItems] = useState([]);
-  const [cartSubtotal, setCartSubtotal] = useState(0);
-  const [cartDeliveryCharge, setCartDeliveryCharge] = useState(0);
-  const [cartTotalAmount, setCartTotalAmount] = useState(0);
-  const [cartCount, setCartCount] = useState(0);
-  const [isCartLoading, setIsCartLoading] = useState(false);
-  const [cartError, setCartError] = useState(null);
+  const [isCartOpen, setIsCartOpen] = useState(false);
 
-  // Dynamic Addresses
-  const [addresses, setAddresses] = useState([]);
-  const [selectedAddressId, setSelectedAddressId] = useState(null);
-
-  // Dynamic Orders & Tracking
-  const [orders, setOrders] = useState([]);
-  const [activeOrder, setActiveOrder] = useState(null);
-  const [isOrdersLoading, setIsOrdersLoading] = useState(false);
-  const [ordersError, setOrdersError] = useState(null);
-
-  // Dynamic Notifications
-  const [notifications, setNotifications] = useState([]);
-  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
-
-  // Checkout State
-  const [customerPaymentMode, setCustomerPaymentMode] = useState('UPI (PhonePe / GPay)');
-  const [dealerPaymentMethod, setDealerPaymentMethod] = useState('UPFRONT');
-  const [shippingAddress, setShippingAddress] = useState('');
-  const [checkoutError, setCheckoutError] = useState('');
-  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
-
-  // Plumber Data & Admin Data
-  const [plumberData, setPlumberData] = useState(null);
-  const [plumberDashboardData, setPlumberDashboardData] = useState(null);
-  const [plumberActivities, setPlumberActivities] = useState([]);
-  const [plumberProducts, setPlumberProducts] = useState([]);
-  const [plumberCategories, setPlumberCategories] = useState([]);
-  const [plumberProductRequests, setPlumberProductRequests] = useState([]);
-  const [isPlumberLoading, setIsPlumberLoading] = useState(false);
-  const [plumberError, setPlumberError] = useState(null);
-  const [activePlumberActivity, setActivePlumberActivity] = useState(null);
-  const [adminData, setAdminData] = useState(null);
-  const [zohoMeta, setZohoMeta] = useState(null);
-
-  // 1. Fetch Admin Overview
-  const fetchOverview = useCallback(async () => {
+  // Profile modal state
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState(() => {
     try {
-      const data = await apiRequest('/api/admin/overview');
-      setAdminData(data);
-      setZohoMeta(data.zohoMeta);
-    } catch (err) {
-      console.error('Error fetching admin overview:', err);
+      const saved = localStorage.getItem('plumbmart_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
     }
-  }, []);
+  });
 
-  // 2. Fetch Customer Banners
-  const fetchBanners = useCallback(async () => {
-    try {
-      const res = await customerService.getBanners();
-      setCustomerBanners(res.banners || []);
-    } catch (err) {
-      console.error('Error fetching banners:', err);
-    }
-  }, []);
+  // Toast feedback
+  const [toastMessage, setToastMessage] = useState(null);
 
-  // 3. Fetch Categories
-  const fetchCategories = useCallback(async () => {
-    try {
-      const res = await customerService.getCategories();
-      setCategories(res.categories || []);
-    } catch (err) {
-      console.error('Error fetching categories:', err);
-    }
-  }, []);
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3500);
+  };
 
-  // 4. Fetch Products dynamically with role filtering
-  const fetchDynamicProducts = useCallback(
-    async (role = 'customer', catId = 'all', search = '', sort = '', filter = '') => {
-      setIsProductsLoading(true);
-      setProductsError(null);
-      try {
-        if (role === 'customer') {
-          const res = await customerService.getProducts({
-            categoryId: catId,
-            search,
-            sort,
-            filter
-          });
-          setProducts(res.products || []);
-          if (res.categories) setCategories(res.categories);
-        } else if (role === 'dealer') {
-          const res = await zohoDealerService.getProducts({
-            categoryId: catId,
-            search,
-            sort,
-            filter
-          });
-          setProducts(res.products || []);
-          if (res.categories) setCategories(res.categories);
-        } else {
-          const res = await zohoProductService.getProductsByRole(role, catId, search);
-          setProducts(res.products || []);
-          if (res.categories) setCategories(res.categories);
-        }
-      } catch (err) {
-        setProductsError('Failed to load products. Please check server.');
-      } finally {
-        setIsProductsLoading(false);
-      }
-    },
-    []
-  );
-
-  // 5. Fetch Customer Cart from Backend
-  const fetchCustomerCart = useCallback(async (customerId) => {
-    if (!customerId) return;
-    setIsCartLoading(true);
-    setCartError(null);
-    try {
-      const res = await customerService.getCart(customerId);
-      setCartItems(res.items || []);
-      setCartSubtotal(res.subtotal || 0);
-      setCartDeliveryCharge(res.deliveryCharge || 0);
-      setCartTotalAmount(res.totalAmount || 0);
-      setCartCount(res.itemCount || 0);
-    } catch (err) {
-      setCartError('Failed to sync shopping cart.');
-    } finally {
-      setIsCartLoading(false);
-    }
-  }, []);
-
-  // 5b. Fetch Dealer Wholesale Cart from Backend
-  const fetchDealerCart = useCallback(async (dealerId) => {
-    if (!dealerId) return;
-    setIsCartLoading(true);
-    setCartError(null);
-    try {
-      const res = await zohoDealerService.getCart(dealerId);
-      setCartItems(res.items || []);
-      setCartSubtotal(res.subtotal || 0);
-      setCartDeliveryCharge(res.deliveryCharge || 0);
-      setCartTotalAmount(res.totalAmount || 0);
-      setCartCount(res.itemCount || 0);
-    } catch (err) {
-      setCartError('Failed to sync wholesale cart.');
-    } finally {
-      setIsCartLoading(false);
-    }
-  }, []);
-
-  // 6. Fetch Customer Addresses
-  const fetchCustomerAddresses = useCallback(async (customerId) => {
-    if (!customerId) return;
-    try {
-      const res = await customerService.getAddresses(customerId);
-      const addrList = res.addresses || [];
-      setAddresses(addrList);
-      const defaultAddr = addrList.find((a) => a.isDefault) || addrList[0];
-      if (defaultAddr) {
-        setSelectedAddressId(defaultAddr.id);
-        setShippingAddress(`${defaultAddr.addressLine}, ${defaultAddr.city} - ${defaultAddr.pincode}`);
-      }
-    } catch (err) {
-      console.error('Error fetching addresses:', err);
-    }
-  }, []);
-
-  // 7. Fetch Customer Orders
-  const fetchCustomerOrders = useCallback(async (customerId) => {
-    if (!customerId) return;
-    setIsOrdersLoading(true);
-    setOrdersError(null);
-    try {
-      const res = await customerService.getMyOrders(customerId);
-      setOrders(res.orders || []);
-    } catch (err) {
-      setOrdersError('Failed to load order history.');
-    } finally {
-      setIsOrdersLoading(false);
-    }
-  }, []);
-
-  // 8. Fetch Notifications
-  const fetchCustomerNotifications = useCallback(async (customerId) => {
-    if (!customerId) return;
-    try {
-      const res = await customerService.getNotifications(customerId);
-      setNotifications(res.notifications || []);
-      setUnreadNotificationsCount(res.unreadCount || 0);
-    } catch (err) {
-      console.error('Error fetching notifications:', err);
-    }
-  }, []);
-
-  // 9. Fetch Plumber Info & Dynamic Role Data
-  const fetchPlumberInfo = useCallback(async (plumberId) => {
-    try {
-      const data = await apiRequest(`/api/plumber/${plumberId || 'PLB-01'}`);
-      setPlumberData(data);
-    } catch (err) {
-      console.error('Error fetching plumber info:', err);
-    }
-  }, []);
-
-  const fetchPlumberDashboard = useCallback(async (user) => {
-    const u = user || currentUser;
-    if (!u || u.role !== 'plumber') return;
-    setIsPlumberLoading(true);
-    setPlumberError(null);
-    try {
-      const data = await plumberService.getDashboard(u);
-      setPlumberDashboardData(data);
-      if (data.plumber) {
-        setPlumberData({ plumber: data.plumber });
-      }
-    } catch (err) {
-      console.error('Error fetching plumber dashboard:', err);
-      setPlumberError('Failed to load plumber dashboard.');
-    } finally {
-      setIsPlumberLoading(false);
-    }
-  }, [currentUser]);
-
-  const fetchPlumberActivities = useCallback(async (user, filter = 'all', search = '') => {
-    const u = user || currentUser;
-    if (!u || u.role !== 'plumber') return;
-    try {
-      const data = await plumberService.getActivities(u, filter, search);
-      setPlumberActivities(data.activities || []);
-    } catch (err) {
-      console.error('Error fetching plumber activities:', err);
-    }
-  }, [currentUser]);
-
-  const fetchPlumberProducts = useCallback(async (user, { categoryId = 'all', search = '', sort = '', filter = '' } = {}) => {
-    const u = user || currentUser;
-    if (!u || u.role !== 'plumber') return;
-    try {
-      const data = await plumberService.getProducts(u, { categoryId, search, sort, filter });
-      setPlumberProducts(data.products || []);
-      if (data.categories) setPlumberCategories(data.categories);
-    } catch (err) {
-      console.error('Error fetching plumber products:', err);
-    }
-  }, [currentUser]);
-
-  const fetchPlumberProductRequests = useCallback(async (user, status = 'all') => {
-    const u = user || currentUser;
-    if (!u || u.role !== 'plumber') return;
-    try {
-      const data = await plumberService.getProductRequests(u, status);
-      setPlumberProductRequests(data.requests || []);
-    } catch (err) {
-      console.error('Error fetching plumber product requests:', err);
-    }
-  }, [currentUser]);
-
-  const fetchPlumberNotifications = useCallback(async (user) => {
-    const u = user || currentUser;
-    if (!u || u.role !== 'plumber') return;
-    try {
-      const data = await plumberService.getNotifications(u);
-      setNotifications(data.notifications || []);
-      setUnreadNotificationsCount(data.unreadCount || 0);
-    } catch (err) {
-      console.error('Error fetching plumber notifications:', err);
-    }
-  }, [currentUser]);
-
-  // Initial Load
+  // Attempt to fetch from backend API
   useEffect(() => {
-    fetchOverview();
-    fetchBanners();
-    fetchCategories();
-    fetchDynamicProducts('customer');
-  }, [fetchOverview, fetchBanners, fetchCategories, fetchDynamicProducts]);
+    fetch('http://localhost:4000/api/products')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.success && Array.isArray(data.data) && data.data.length > 0) {
+          setProducts(data.data);
+        }
+      })
+      .catch(() => {
+        // Fallback pre-loaded
+      });
+  }, []);
 
-  // Navigate Screen
-  const navigateTo = (screen) => {
-    setMobileScreen(screen);
-    setScreenHistory((prev) => [...prev, screen]);
+  // Cart operations
+  const handleAddToCart = (product) => {
+    setCartItems((prev) => {
+      const existing = prev.find((item) => item.id === product.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        );
+      }
+      return [...prev, { ...product, quantity: 1 }];
+    });
+    showToast(`Added ${product.name.slice(0, 24)}... to bucket`);
   };
 
-  const handleBack = () => {
-    if (screenHistory.length > 1) {
-      const next = [...screenHistory];
-      next.pop();
-      const prevScreen = next[next.length - 1];
-      setScreenHistory(next);
-      setMobileScreen(prevScreen);
+  const handleUpdateQuantity = (productId, newQuantity) => {
+    if (newQuantity <= 0) {
+      handleRemoveItem(productId);
     } else {
-      setMobileScreen('DASHBOARD');
-    }
-  };
-
-  // Auth: Send OTP via SMS (Firebase Phone Auth with Backend Gateway Fallback)
-  const handleSendOtp = async (e) => {
-    if (e) e.preventDefault();
-    setAuthError(null);
-    setSmsNotice('');
-    setOtpInput('');
-
-    // If customer, try Firebase Phone Auth first for live Google SMS delivery
-    if (selectedRole === 'customer') {
-      try {
-        console.log(`[Firebase Auth] Dispatching SMS to +91 ${mobileInput}...`);
-        await sendFirebaseOtp(mobileInput, 'recaptcha-container');
-        setSmsNotice(`Real SMS OTP sent via Firebase to +91 ${mobileInput}`);
-        setDemoOtp(null);
-        setOtpInput('');
-        setAuthStep('OTP');
-        return;
-      } catch (fbErr) {
-        console.warn('[Firebase Auth] Notice:', fbErr.message, 'Proceeding with backend SMS dispatch...');
-      }
-    }
-
-    try {
-      const res = await zohoAuthService.requestOtp(mobileInput, selectedRole, nameInput);
-      setSmsNotice(res.message || `Verification code sent via SMS to +91 ${mobileInput}`);
-      if (selectedRole !== 'customer' && res.demoOtp) {
-        setDemoOtp(res.demoOtp);
-        setOtpInput(res.demoOtp);
-      } else {
-        setDemoOtp(null);
-        setOtpInput(''); // Customer enters code from phone SMS
-      }
-      setAuthStep('OTP');
-    } catch (err) {
-      setAuthError(err.data ? err.data.error : err.message);
-    }
-  };
-
-  // Auth: Resend OTP via SMS with cooldown
-  const handleResendOtp = async () => {
-    setAuthError(null);
-
-    if (selectedRole === 'customer') {
-      try {
-        await sendFirebaseOtp(mobileInput, 'recaptcha-container');
-        setSmsNotice(`Fresh SMS OTP sent via Firebase to +91 ${mobileInput}`);
-        return;
-      } catch (fbResendErr) {
-        console.warn('Firebase resend notice:', fbResendErr.message);
-      }
-    }
-
-    try {
-      const res = await zohoAuthService.resendOtp(mobileInput, selectedRole, nameInput);
-      setSmsNotice(res.message);
-      if (selectedRole !== 'customer' && res.demoOtp) {
-        setDemoOtp(res.demoOtp);
-      }
-      return res;
-    } catch (err) {
-      const errMsg = err.data ? err.data.error : err.message;
-      setAuthError(errMsg);
-      throw new Error(errMsg);
-    }
-  };
-
-  // Auth: Verify OTP
-  const handleVerifyOtp = async (e) => {
-    if (e) e.preventDefault();
-    setAuthError(null);
-    setIsVerifying(true);
-    try {
-      // 1. If Firebase session is active, confirm with Firebase
-      if (selectedRole === 'customer' && window.confirmationResult) {
-        try {
-          const fbResult = await verifyFirebaseOtp(otpInput);
-          const res = await zohoAuthService.firebaseLogin({
-            mobile: mobileInput,
-            idToken: fbResult.idToken,
-            role: 'customer',
-            name: nameInput
-          });
-          window.confirmationResult = null;
-          await loginSuccess(res.user);
-          return;
-        } catch (fbVerifyErr) {
-          console.warn('[Firebase Verify] Confirmation notice:', fbVerifyErr.message, 'Falling back to backend verification...');
-        }
-      }
-
-      // 2. Standard / Backend OTP verification
-      const res = await zohoAuthService.verifyOtp(
-        mobileInput,
-        otpInput,
-        selectedRole,
-        nameInput
+      setCartItems((prev) =>
+        prev.map((item) =>
+          item.id === productId ? { ...item, quantity: newQuantity } : item
+        )
       );
-
-      if (res.user.role === 'dealer') {
-        setPendingDealerVerification(res.user);
-        setAuthStep('ZOHO_VERIFY');
-        return;
-      }
-
-      if (res.user.role === 'admin') {
-        setCurrentUser(res.user);
-        setMainView('admin');
-        setAuthStep('AUTHENTICATED');
-        return;
-      }
-
-      await loginSuccess(res.user);
-    } catch (err) {
-      if (selectedRole === 'dealer' && err.data?.code === 'ZOHO_VERIFICATION_FAILED' && err.data?.user) {
-        setPendingDealerVerification(err.data.user);
-        setAuthStep('ZOHO_VERIFY');
-        return;
-      }
-      setAuthError(err.data ? err.data.error : err.message);
-    } finally {
-      setIsVerifying(false);
     }
   };
 
-  // Successful Login handler
-  const loginSuccess = async (user) => {
+  const handleRemoveItem = (productId) => {
+    setCartItems((prev) => prev.filter((item) => item.id !== productId));
+  };
+
+  const handleClearCart = () => {
+    setCartItems([]);
+  };
+
+  const handleCheckoutSuccess = (orderId, total) => {
+    showToast(`Order #${orderId} confirmed for ₹${total.toLocaleString('en-IN')}`);
+  };
+
+  const handleLoginSuccess = (user) => {
     setCurrentUser(user);
-    setAuthStep('AUTHENTICATED');
-    setMobileScreen('DASHBOARD');
-    setScreenHistory(['DASHBOARD']);
-    setCheckoutError('');
-    setShowPersonaDrawer(false);
-
-    if (user.role === 'customer') {
-      await fetchCustomerCart(user.id);
-      await fetchCustomerAddresses(user.id);
-      await fetchCustomerOrders(user.id);
-      await fetchCustomerNotifications(user.id);
-      await fetchDynamicProducts('customer', 'all', '', '', '');
-    } else if (user.role === 'dealer') {
-      await fetchCategories();
-      await fetchDynamicProducts('dealer', 'all', '', '', '');
-      await fetchDealerCart(user.id);
-      const dealerOrders = await apiRequest(`/api/orders?role=dealer&userId=${user.id}`);
-      setOrders(dealerOrders.orders || []);
-      const dNotifs = await apiRequest(`/api/notifications?role=dealer&userId=${user.id}`);
-      setNotifications(dNotifs.notifications || []);
-    } else if (user.role === 'plumber') {
-      await fetchPlumberDashboard(user);
-      await fetchPlumberActivities(user);
-      await fetchPlumberProducts(user);
-      await fetchPlumberProductRequests(user);
-      await fetchPlumberNotifications(user);
+    try {
+      localStorage.setItem('plumbmart_user', JSON.stringify(user));
+    } catch {
+      // ignore
     }
-
-    await fetchOverview();
+    showToast(`Welcome back, ${user.name}!`);
   };
 
-  // 1-Click Persona Switcher for Interview Demo
-  const quickSelectPersona = async (role, mobile, name = '') => {
-    setSelectedRole(role);
-    setMobileInput(mobile);
-    setNameInput(name);
-    setAuthError(null);
-    setShowPersonaDrawer(false);
-
-    if (role === 'admin') {
-      const adminUser = adminData?.users?.admins[0] || { id: 'ADM-01', role: 'admin', name: 'Manikanta (Super Admin)' };
-      setCurrentUser(adminUser);
-      setMainView('admin');
-      return;
-    }
-
-    if (role === 'customer') {
-      setAuthStep('LOGIN');
-      return;
-    }
-
+  const handleRegisterSuccess = (user) => {
+    setCurrentUser(user);
     try {
-      await zohoAuthService.requestOtp(mobile, role, name);
-      const res = await zohoAuthService.verifyOtp(mobile, '123456', role, name);
-
-      if (res.user.role === 'dealer') {
-        setPendingDealerVerification(res.user);
-        setAuthStep('ZOHO_VERIFY');
-      } else {
-        await loginSuccess(res.user);
-      }
-    } catch (err) {
-      if (role === 'dealer') {
-        const unverified = adminData?.users?.dealers?.find((d) => d.mobile === mobile);
-        if (unverified) {
-          setPendingDealerVerification(unverified);
-          setAuthStep('ZOHO_VERIFY');
-          return;
-        }
-      }
-      setAuthStep('LOGIN');
-      setAuthError(err.data || { error: err.message });
+      localStorage.setItem('plumbmart_user', JSON.stringify(user));
+    } catch {
+      // ignore
     }
+    showToast(`Account registered for ${user.name}!`);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
-    setAuthStep('LOGIN');
-    setAuthError(null);
-    setMobileScreen('DASHBOARD');
-    setCartItems([]);
-    setCartCount(0);
-  };
-
-  // Dynamic Cart Actions (Customer & Dealer Backend Persistence)
-  const handleAddToCart = async (product, qty = 1) => {
-    if (currentUser?.role === 'customer') {
-      try {
-        const res = await customerService.addToCart(currentUser.id, product.id, qty);
-        setCartItems(res.items || []);
-        setCartSubtotal(res.subtotal || 0);
-        setCartDeliveryCharge(res.deliveryCharge || 0);
-        setCartTotalAmount(res.totalAmount || 0);
-        setCartCount(res.itemCount || 0);
-      } catch (err) {
-        console.error('Error adding to backend cart:', err);
-      }
-    } else if (currentUser?.role === 'dealer') {
-      try {
-        const minQty = product.minDealerOrderQty || 1;
-        const addQty = Math.max(minMoqIfAny(minQty), Number(qty || minQty));
-        const res = await zohoDealerService.addToCart(currentUser.id, product.id, addQty);
-        setCartItems(res.items || []);
-        setCartSubtotal(res.subtotal || 0);
-        setCartDeliveryCharge(res.deliveryCharge || 0);
-        setCartTotalAmount(res.totalAmount || 0);
-        setCartCount(res.itemCount || 0);
-      } catch (err) {
-        console.error('Error adding wholesale product to backend cart:', err);
-        setCartError(err.data ? err.data.error : err.message);
-      }
-    }
-  };
-
-  const minMoqIfAny = (moq) => moq || 1;
-
-  const handleUpdateCartQty = async (productId, delta) => {
-    if (currentUser?.role === 'customer') {
-      try {
-        const res = await customerService.updateCartQty(currentUser.id, productId, delta);
-        setCartItems(res.items || []);
-        setCartSubtotal(res.subtotal || 0);
-        setCartDeliveryCharge(res.deliveryCharge || 0);
-        setCartTotalAmount(res.totalAmount || 0);
-        setCartCount(res.itemCount || 0);
-      } catch (err) {
-        console.error('Error updating cart qty:', err);
-      }
-    } else if (currentUser?.role === 'dealer') {
-      try {
-        const res = await zohoDealerService.updateCartQty(currentUser.id, productId, delta);
-        setCartItems(res.items || []);
-        setCartSubtotal(res.subtotal || 0);
-        setCartDeliveryCharge(res.deliveryCharge || 0);
-        setCartTotalAmount(res.totalAmount || 0);
-        setCartCount(res.itemCount || 0);
-      } catch (err) {
-        console.error('Error updating dealer wholesale cart qty:', err);
-      }
-    }
-  };
-
-  const handleRemoveCartItem = async (productId) => {
-    if (currentUser?.role === 'customer') {
-      try {
-        await customerService.removeFromCart(currentUser.id, productId);
-        await fetchCustomerCart(currentUser.id);
-      } catch (err) {
-        console.error('Error removing cart item:', err);
-      }
-    } else if (currentUser?.role === 'dealer') {
-      try {
-        await zohoDealerService.removeCartItem(currentUser.id, productId);
-        await fetchDealerCart(currentUser.id);
-      } catch (err) {
-        console.error('Error removing dealer wholesale cart item:', err);
-      }
-    }
-  };
-
-  const handleClearCart = async () => {
-    if (currentUser?.role === 'customer') {
-      try {
-        await customerService.clearCart(currentUser.id);
-        setCartItems([]);
-        setCartSubtotal(0);
-        setCartDeliveryCharge(0);
-        setCartTotalAmount(0);
-        setCartCount(0);
-      } catch (err) {
-        console.error('Error clearing cart:', err);
-      }
-    } else if (currentUser?.role === 'dealer') {
-      try {
-        await zohoDealerService.clearCart(currentUser.id);
-        setCartItems([]);
-        setCartSubtotal(0);
-        setCartDeliveryCharge(0);
-        setCartTotalAmount(0);
-        setCartCount(0);
-      } catch (err) {
-        console.error('Error clearing dealer wholesale cart:', err);
-      }
-    }
-  };
-
-  // Customer Dynamic Address Actions
-  const handleSelectAddress = (addressId) => {
-    setSelectedAddressId(addressId);
-    const addr = addresses.find((a) => a.id === addressId);
-    if (addr) {
-      setShippingAddress(`${addr.addressLine}, ${addr.city} - ${addr.pincode}`);
-    }
-  };
-
-  const handleAddNewAddress = async (addrData) => {
-    if (!currentUser) return;
     try {
-      const res = await customerService.addAddress(currentUser.id, addrData);
-      setAddresses(res.addresses || []);
-      if (res.newAddress) {
-        setSelectedAddressId(res.newAddress.id);
-        setShippingAddress(`${res.newAddress.addressLine}, ${res.newAddress.city} - ${res.newAddress.pincode}`);
-      }
-    } catch (err) {
-      console.error('Error adding address:', err);
+      localStorage.removeItem('plumbmart_user');
+    } catch {
+      // ignore
     }
+    showToast('Signed out of account');
   };
 
-  // Place Order (Customer Direct Payment or Dealer Credit)
-  const handlePlaceOrder = async () => {
-    setCheckoutError('');
-    setIsSubmittingOrder(true);
+  const handleAdminLoginSuccess = (adminUser) => {
+    setCurrentUser(adminUser);
     try {
-      const payload = {
-        userId: currentUser.id,
-        role: currentUser.role,
-        items: cartItems.map((i) => ({ productId: i.product.id, qty: i.qty })),
-        paymentMethod: currentUser.role === 'customer' ? 'DIRECT_PAYMENT' : dealerPaymentMethod,
-        paymentSubType:
-          currentUser.role === 'customer'
-            ? customerPaymentMode
-            : dealerPaymentMethod === 'CREDIT_90_DAYS'
-            ? 'Zoho Approved 90-Day Credit'
-            : dealerPaymentMethod === 'CREDIT_30_DAYS'
-            ? 'Zoho 30-Day Dealer Credit'
-            : 'Upfront Corporate Payment',
-        shippingAddress
-      };
-
-      const res = await customerService.createOrder(payload);
-
-      // Refresh cart, orders, and products
-      if (currentUser.role === 'customer') {
-        await fetchCustomerCart(currentUser.id);
-        await fetchCustomerOrders(currentUser.id);
-        await fetchCustomerNotifications(currentUser.id);
-      } else if (currentUser.role === 'dealer') {
-        await fetchDealerCart(currentUser.id);
-        const dealerOrders = await apiRequest(`/api/orders?role=dealer&userId=${currentUser.id}`);
-        setOrders(dealerOrders.orders || []);
-        const dNotifs = await apiRequest(`/api/notifications?role=dealer&userId=${currentUser.id}`);
-        setNotifications(dNotifs.notifications || []);
-      }
-
-      setActiveOrder(res.order);
-      await fetchDynamicProducts(currentUser.role, selectedCategory, searchQuery);
-      await fetchOverview();
-      navigateTo('ORDER_CONFIRMATION');
-    } catch (err) {
-      setCheckoutError(err.data ? err.data.error : err.message);
-    } finally {
-      setIsSubmittingOrder(false);
+      localStorage.setItem('plumbmart_user', JSON.stringify(adminUser));
+    } catch {
+      // ignore
     }
+    showToast('Authenticated as Administrator!');
   };
-
-  // Customer Profile Update
-  const handleUpdateCustomerProfile = async (profileData) => {
-    if (!currentUser) return;
-    const res = await customerService.updateProfile(currentUser.id, profileData);
-    if (res.customer) {
-      setCurrentUser(res.customer);
-      if (profileData.address) setShippingAddress(profileData.address);
-      await fetchCustomerAddresses(currentUser.id);
-    }
-  };
-
-  // Notification Mark as Read
-  const handleMarkNotificationRead = async (notifId) => {
-    if (!currentUser) return;
-    await customerService.markNotificationRead(currentUser.id, notifId);
-    await fetchCustomerNotifications(currentUser.id);
-  };
-
-  // Plumber Actions (100% Dynamic & Role-Secured)
-  const handlePlumberStatusUpdate = async (activityId, status, remarks = '') => {
-    if (!currentUser) return;
-    const res = await plumberService.updateActivityStatus(currentUser, activityId, status, remarks);
-    if (res.plumber) {
-      setCurrentUser(res.plumber);
-      setPlumberDashboardData((prev) => (prev ? { ...prev, plumber: res.plumber } : null));
-    }
-    await fetchPlumberDashboard(currentUser);
-    await fetchPlumberActivities(currentUser);
-    await fetchPlumberNotifications(currentUser);
-    await fetchOverview();
-    return res;
-  };
-
-  const handlePlumberUpdateRemarks = async (activityId, remarks) => {
-    if (!currentUser) return;
-    const res = await plumberService.updateActivityRemarks(currentUser, activityId, remarks);
-    await fetchPlumberActivities(currentUser);
-    return res;
-  };
-
-  const handlePlumberSubmitRequest = async (reqData) => {
-    if (!currentUser) return;
-    const res = await plumberService.createProductRequest(currentUser, reqData);
-    await fetchPlumberProductRequests(currentUser);
-    await fetchPlumberDashboard(currentUser);
-    await fetchPlumberNotifications(currentUser);
-    return res;
-  };
-
-  const handlePlumberCancelRequest = async (requestId) => {
-    if (!currentUser) return;
-    const res = await plumberService.cancelProductRequest(currentUser, requestId);
-    await fetchPlumberProductRequests(currentUser);
-    await fetchPlumberDashboard(currentUser);
-    await fetchPlumberNotifications(currentUser);
-    return res;
-  };
-
-  const handlePlumberMarkNotificationRead = async (notifId) => {
-    if (!currentUser) return;
-    await plumberService.markNotificationRead(currentUser, notifId);
-    await fetchPlumberNotifications(currentUser);
-  };
-
-  const handlePlumberMarkAllNotificationsRead = async () => {
-    if (!currentUser) return;
-    await plumberService.markAllNotificationsRead(currentUser);
-    await fetchPlumberNotifications(currentUser);
-  };
-
-  const handlePlumberUpdateProfile = async (profileData) => {
-    if (!currentUser) return;
-    const res = await plumberService.updateProfile(currentUser, profileData);
-    if (res.plumber) {
-      setCurrentUser(res.plumber);
-      setPlumberDashboardData((prev) => (prev ? { ...prev, plumber: res.plumber } : null));
-      setPlumberData({ plumber: res.plumber });
-    }
-    return res;
-  };
-
-  const handlePlumberUpdateSettings = async (settingsData) => {
-    if (!currentUser) return;
-    return await plumberService.updateSettings(currentUser, settingsData);
-  };
-
-  // Admin Actions
-  const handleAdminUpdateDealer = async (dealerId, updates) => {
-    const res = await apiRequest(`/api/admin/dealers/${dealerId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(updates)
-    });
-    await fetchOverview();
-    if (currentUser?.id === dealerId && res.dealer) {
-      setCurrentUser(res.dealer);
-    }
-  };
-
-  const handleAdminUpdatePlumber = async (plumberId, updates) => {
-    await apiRequest(`/api/admin/plumbers/${plumberId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(updates)
-    });
-    await fetchOverview();
-    if (currentUser?.id === plumberId) {
-      await fetchPlumberInfo(plumberId);
-    }
-  };
-
-  const handleAdminUpdateProductRow = async (productId, updates) => {
-    await zohoProductService.updateProductInWorkbook(productId, updates);
-    await fetchOverview();
-    if (currentUser) {
-      await fetchDynamicProducts(currentUser.role, selectedCategory, searchQuery);
-    }
-  };
-
-  const handleAdminUpdateOrder = async (orderId, updates) => {
-    await apiRequest(`/api/admin/orders/${orderId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(updates)
-    });
-    await fetchOverview();
-    if (currentUser) {
-      if (currentUser.role === 'customer') {
-        await fetchCustomerOrders(currentUser.id);
-      } else {
-        const dealerOrders = await apiRequest(`/api/orders?role=dealer&userId=${currentUser.id}`);
-        setOrders(dealerOrders.orders || []);
-      }
-    }
-  };
-
-  const handleTriggerZohoSync = async () => {
-    await zohoProductService.syncZohoWorkbook();
-    await fetchOverview();
-    if (currentUser) {
-      await fetchDynamicProducts(currentUser.role, selectedCategory, searchQuery);
-    }
-  };
-
-  const handleResetDemo = async () => {
-    await apiRequest('/api/admin/reset-demo', { method: 'POST' });
-    await fetchOverview();
-    if (currentUser) {
-      await loginSuccess(currentUser);
-    }
-  };
-
-  const personasList = [
-    {
-      role: 'customer',
-      mobile: '9876543210',
-      name: 'Rahul Sharma',
-      tag: '1. CUSTOMER A (Rahul)',
-      color: 'blue',
-      desc: 'Dynamic Profile • Own Cart & Addresses • Retail Price Only • Stock Hidden'
-    },
-    {
-      role: 'customer',
-      mobile: '9848011223',
-      name: 'Priya Nair',
-      tag: '1B. CUSTOMER B (Priya)',
-      color: 'blue',
-      desc: 'Separate Customer Account • Own Cart, Orders & Notifications'
-    },
-    {
-      role: 'dealer',
-      mobile: '9000011111',
-      name: 'Sri Venkateswara Distributors',
-      tag: '2A. DEALER (90D APPROVED)',
-      color: 'amber',
-      desc: 'Zoho Verified • Sees Exact Stock • Upfront, 30-Day & 90-Day Credit Approved'
-    },
-    {
-      role: 'dealer',
-      mobile: '9000022222',
-      name: 'Metro Pipe Syndicate',
-      tag: '2B. DEALER (30D ONLY)',
-      color: 'amber',
-      desc: 'Zoho Verified • Sees Stock • Upfront & 30-Day Credit (90-Day Credit Locked)'
-    },
-    {
-      role: 'dealer',
-      mobile: '9000033333',
-      name: 'Coastal Builders Mart',
-      tag: '2C. UNVERIFIED DEALER',
-      color: 'rose',
-      desc: 'Demonstrates Zoho CRM Gate: Login Blocked until Admin approves in Zoho'
-    },
-    {
-      role: 'plumber',
-      mobile: '9111122222',
-      name: 'Ramesh Babu (Master Plumber)',
-      tag: '3. MASTER PLUMBER',
-      color: 'purple',
-      desc: 'Trade Verified • Assigned jobs • Product technical specs & reward wallet'
-    }
-  ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-blue-600 selection:text-white">
-      {/* Sleek Top Navigation Bar */}
-      <header className="sticky top-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
-          {/* Logo & Brand */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-400 flex items-center justify-center font-black text-white text-sm shadow-md shadow-blue-500/30">
-              PM
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="font-extrabold text-white text-sm sm:text-base tracking-tight">PlumbMart</span>
-              <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                <FileSpreadsheet className="w-2.5 h-2.5" /> Zoho Live
-              </span>
-            </div>
-          </div>
-
-          {/* Persona Switcher Trigger */}
-          <button
-            onClick={() => setShowPersonaDrawer(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-900/60 to-purple-900/60 hover:from-blue-800/80 hover:to-purple-800/80 border border-blue-500/40 text-white text-[11px] font-bold shadow transition"
-            title="Switch Demo Role"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-spin" />
-            <span className="hidden sm:inline">User:</span>
-            <span className="text-blue-300 truncate max-w-[120px]">
-              {currentUser ? currentUser.name : selectedRole}
-            </span>
-            <ChevronDown className="w-3 h-3 text-slate-400" />
-          </button>
-
-          {/* Navigation Mode Switcher */}
-          <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
-            <button
-              onClick={() => setMainView('mobile')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition ${
-                mainView === 'mobile'
-                  ? 'bg-blue-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Smartphone className="w-3 h-3" />
-              <span className="hidden xs:inline">App</span>
-            </button>
-            <button
-              onClick={() => setMainView('admin')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition ${
-                mainView === 'admin'
-                  ? 'bg-blue-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <ShieldCheck className="w-3 h-3" />
-              <span className="hidden xs:inline">Admin</span>
-            </button>
-            <button
-              onClick={() => setMainView('blueprint')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition ${
-                mainView === 'blueprint'
-                  ? 'bg-blue-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Layers className="w-3 h-3" />
-              <span className="hidden sm:inline">Blueprint</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-7xl mx-auto flex flex-col justify-start">
-        {/* VIEW 1: BLUEPRINT */}
-        {mainView === 'blueprint' && (
-          <div className="p-4 sm:p-6 w-full">
-            <BlueprintAndComparison
-              zohoMeta={zohoMeta}
-              products={adminData?.products || products}
-              onTriggerZohoSync={handleTriggerZohoSync}
-              onSwitchView={setMainView}
-            />
-          </div>
-        )}
-
-        {/* VIEW 2: ADMIN MANAGEMENT PORTAL */}
-        {mainView === 'admin' && (
-          <div className="p-4 sm:p-6 w-full">
-            <AdminPortal
-              adminData={adminData}
-              onUpdateDealer={handleAdminUpdateDealer}
-              onUpdatePlumber={handleAdminUpdatePlumber}
-              onUpdateProductRow={handleAdminUpdateProductRow}
-              onUpdateOrder={handleAdminUpdateOrder}
-              onTriggerZohoSync={handleTriggerZohoSync}
-              onResetDemo={handleResetDemo}
-            />
-          </div>
-        )}
-
-        {/* VIEW 3: MOBILE APP SIMULATOR */}
-        {mainView === 'mobile' && (
-          <div className="w-full flex-1 flex flex-col lg:py-6 lg:items-center justify-center">
-            <div className="w-full lg:max-w-[440px] bg-slate-900 lg:border-[6px] lg:border-slate-800 lg:rounded-[44px] lg:shadow-2xl overflow-hidden flex flex-col flex-1 min-h-[calc(100vh-56px)] lg:min-h-[760px] lg:max-h-[840px]">
-              {/* Phone Top Status Bar */}
-              <div className="hidden lg:flex bg-slate-950 px-6 py-2.5 items-center justify-between border-b border-slate-800/80 text-[11px] text-slate-400">
-                <span className="font-semibold text-slate-200">PlumbMart Mobile</span>
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 text-emerald-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Zoho Live
-                  </span>
-                  <span>5G • 100%</span>
-                </div>
-              </div>
-
-              {/* Mobile Header (When Logged In) */}
-              {authStep === 'AUTHENTICATED' && currentUser && (
-                <MobileHeader
-                  currentUser={currentUser}
-                  currentScreen={mobileScreen}
-                  cartCount={cartCount}
-                  unreadNotificationsCount={unreadNotificationsCount}
-                  onBack={handleBack}
-                  onOpenCart={() => navigateTo('CART')}
-                  onOpenNotifications={() => navigateTo('NOTIFICATIONS')}
-                  onLogout={handleLogout}
-                />
-              )}
-
-              {/* Scrollable Screen Body */}
-              <div className="flex-1 overflow-y-auto p-4 flex flex-col">
-                {/* Invisible reCAPTCHA container for Firebase Phone Auth */}
-                <div id="recaptcha-container"></div>
-
-                {/* 1. Splash */}
-                {authStep === 'SPLASH' && (
-                  <SplashScreen onStart={() => setAuthStep('LOGIN')} />
-                )}
-
-                {/* 2. Login Screen */}
-                {authStep === 'LOGIN' && (
-                  <LoginScreen
-                    selectedRole={selectedRole}
-                    onSelectRole={(r) => {
-                      setSelectedRole(r);
-                      setAuthError(null);
-                      if (r === 'customer') {
-                        setMobileInput('');
-                        setNameInput('');
-                      }
-                      if (r === 'dealer') setMobileInput('9000011111');
-                      if (r === 'plumber') setMobileInput('9111122222');
-                      if (r === 'admin') setMobileInput('9999999999');
-                    }}
-                    mobileInput={mobileInput}
-                    onChangeMobile={setMobileInput}
-                    nameInput={nameInput}
-                    onChangeName={setNameInput}
-                    authError={authError}
-                    onSubmit={handleSendOtp}
-                    onQuickSelectPersona={quickSelectPersona}
-                  />
-                )}
-
-                {/* 3. OTP Screen */}
-                {authStep === 'OTP' && (
-                  <OtpVerificationScreen
-                    mobile={mobileInput}
-                    role={selectedRole}
-                    otpInput={otpInput}
-                    onChangeOtp={setOtpInput}
-                    demoOtp={demoOtp}
-                    error={authError}
-                    smsNotice={smsNotice}
-                    isVerifying={isVerifying}
-                    onBack={() => setAuthStep('LOGIN')}
-                    onVerify={handleVerifyOtp}
-                    onResendOtp={handleResendOtp}
-                  />
-                )}
-
-                {/* 4. Zoho Dealer Verification Gate Screen */}
-                {authStep === 'ZOHO_VERIFY' && (
-                  <ZohoVerificationScreen
-                    dealer={pendingDealerVerification}
-                    onProceed={() => loginSuccess(pendingDealerVerification)}
-                    onBackToLogin={() => setAuthStep('LOGIN')}
-                    onOpenAdminToVerify={() => setMainView('admin')}
-                  />
-                )}
-
-                {/* 5. Authenticated Dashboards */}
-                {authStep === 'AUTHENTICATED' && currentUser && (
-                  <>
-                    {/* CUSTOMER SIDE (FULLY DYNAMIC) */}
-                    {currentUser.role === 'customer' && (
-                      <>
-                        {mobileScreen === 'DASHBOARD' && (
-                          <CustomerDashboard
-                            customer={currentUser}
-                            banners={customerBanners}
-                            categories={categories}
-                            products={products}
-                            isLoading={isProductsLoading}
-                            error={productsError}
-                            searchQuery={searchQuery}
-                            onSearchChange={(q) => {
-                              setSearchQuery(q);
-                              fetchDynamicProducts('customer', selectedCategory, q, sortOption, activeFilter);
-                            }}
-                            selectedCategory={selectedCategory}
-                            onSelectCategory={(catId) => {
-                              setSelectedCategory(catId);
-                              fetchDynamicProducts('customer', catId, searchQuery, sortOption, activeFilter);
-                            }}
-                            sortOption={sortOption}
-                            onSortChange={(s) => {
-                              setSortOption(s);
-                              fetchDynamicProducts('customer', selectedCategory, searchQuery, s, activeFilter);
-                            }}
-                            activeFilter={activeFilter}
-                            onFilterChange={(f) => {
-                              setActiveFilter(f);
-                              fetchDynamicProducts('customer', selectedCategory, searchQuery, sortOption, f);
-                            }}
-                            onOpenProductDetails={(prod) => {
-                              setActiveProduct(prod);
-                              navigateTo('PRODUCT_DETAIL');
-                            }}
-                            onAddToCart={(prod, qty) => handleAddToCart(prod, qty)}
-                            onOpenCart={() => navigateTo('CART')}
-                            onOpenCategories={() => navigateTo('CATEGORIES')}
-                            onOpenOrders={() => navigateTo('ORDERS')}
-                            onRetry={() => fetchDynamicProducts('customer', selectedCategory, searchQuery)}
-                          />
-                        )}
-
-                        {mobileScreen === 'CATEGORIES' && (
-                          <div className="space-y-3 py-2">
-                            <h2 className="text-base font-extrabold text-white">Dynamic Categories</h2>
-                            <div className="space-y-2.5">
-                              <button
-                                onClick={() => {
-                                  setSelectedCategory('all');
-                                  fetchDynamicProducts('customer', 'all', searchQuery, sortOption, activeFilter);
-                                  navigateTo('PRODUCTS');
-                                }}
-                                className="w-full p-3.5 rounded-xl bg-blue-600/20 border border-blue-500/40 text-left flex items-center justify-between"
-                              >
-                                <span className="font-bold text-sm text-white">All Products ({products.length})</span>
-                                <ArrowRight className="w-4 h-4 text-blue-400" />
-                              </button>
-                              {categories.map((cat) => (
-                                <button
-                                  key={cat.id}
-                                  onClick={() => {
-                                    setSelectedCategory(cat.id);
-                                    fetchDynamicProducts('customer', cat.id, searchQuery, sortOption, activeFilter);
-                                    navigateTo('PRODUCTS');
-                                  }}
-                                  className="w-full p-3.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-blue-500/50 text-left flex items-center justify-between transition"
-                                >
-                                  <div>
-                                    <div className="font-bold text-sm text-white flex items-center gap-1.5">
-                                      <span>{cat.name}</span>
-                                      {cat.productCount !== undefined && (
-                                        <span className="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] text-blue-300 font-mono">
-                                          {cat.productCount} items
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="text-xs text-slate-400 mt-0.5">{cat.description}</div>
-                                  </div>
-                                  <ArrowRight className="w-4 h-4 text-slate-400" />
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {mobileScreen === 'PRODUCTS' && (
-                          <CustomerDashboard
-                            customer={currentUser}
-                            banners={[]}
-                            categories={categories}
-                            products={products}
-                            isLoading={isProductsLoading}
-                            error={productsError}
-                            searchQuery={searchQuery}
-                            onSearchChange={(q) => {
-                              setSearchQuery(q);
-                              fetchDynamicProducts('customer', selectedCategory, q, sortOption, activeFilter);
-                            }}
-                            selectedCategory={selectedCategory}
-                            onSelectCategory={(catId) => {
-                              setSelectedCategory(catId);
-                              fetchDynamicProducts('customer', catId, searchQuery, sortOption, activeFilter);
-                            }}
-                            sortOption={sortOption}
-                            onSortChange={(s) => {
-                              setSortOption(s);
-                              fetchDynamicProducts('customer', selectedCategory, searchQuery, s, activeFilter);
-                            }}
-                            activeFilter={activeFilter}
-                            onFilterChange={(f) => {
-                              setActiveFilter(f);
-                              fetchDynamicProducts('customer', selectedCategory, searchQuery, sortOption, f);
-                            }}
-                            onOpenProductDetails={(prod) => {
-                              setActiveProduct(prod);
-                              navigateTo('PRODUCT_DETAIL');
-                            }}
-                            onAddToCart={(prod, qty) => handleAddToCart(prod, qty)}
-                            onOpenCart={() => navigateTo('CART')}
-                            onOpenCategories={() => navigateTo('CATEGORIES')}
-                            onOpenOrders={() => navigateTo('ORDERS')}
-                            onRetry={() => fetchDynamicProducts('customer', selectedCategory, searchQuery)}
-                          />
-                        )}
-
-                        {mobileScreen === 'PRODUCT_DETAIL' && (
-                          <CustomerProductDetails
-                            product={activeProduct}
-                            customerId={currentUser.id}
-                            onBack={handleBack}
-                            onAddToCart={(prod, qty) => handleAddToCart(prod, qty)}
-                            onGoToCart={() => navigateTo('CART')}
-                          />
-                        )}
-
-                        {mobileScreen === 'CART' && (
-                          <CustomerCart
-                            cart={cartItems}
-                            subtotal={cartSubtotal}
-                            deliveryCharge={cartDeliveryCharge}
-                            totalAmount={cartTotalAmount}
-                            isLoading={isCartLoading}
-                            error={cartError}
-                            onUpdateQty={handleUpdateCartQty}
-                            onRemoveItem={handleRemoveCartItem}
-                            onClearCart={handleClearCart}
-                            onProceedToCheckout={() => navigateTo('CHECKOUT')}
-                            onContinueShopping={() => navigateTo('DASHBOARD')}
-                            onRetry={() => fetchCustomerCart(currentUser.id)}
-                          />
-                        )}
-
-                        {mobileScreen === 'CHECKOUT' && (
-                          <CustomerCheckout
-                            cart={cartItems}
-                            customer={currentUser}
-                            addresses={addresses}
-                            selectedAddressId={selectedAddressId}
-                            onSelectAddress={handleSelectAddress}
-                            onAddNewAddress={handleAddNewAddress}
-                            paymentMode={customerPaymentMode}
-                            onChangePaymentMode={setCustomerPaymentMode}
-                            subtotal={cartSubtotal}
-                            deliveryCharge={cartDeliveryCharge}
-                            totalAmount={cartTotalAmount}
-                            error={checkoutError}
-                            isSubmitting={isSubmittingOrder}
-                            onPlaceOrder={handlePlaceOrder}
-                            onBackToCart={() => navigateTo('CART')}
-                          />
-                        )}
-
-                        {mobileScreen === 'ORDER_CONFIRMATION' && (
-                          <CustomerOrderConfirmation
-                            order={activeOrder}
-                            onTrackOrder={() => navigateTo('ORDERS')}
-                            onContinueShopping={() => navigateTo('DASHBOARD')}
-                          />
-                        )}
-
-                        {mobileScreen === 'ORDERS' && (
-                          <CustomerOrderTracking
-                            orders={orders}
-                            activeOrder={activeOrder}
-                            onSelectOrder={(ord) => setActiveOrder(ord)}
-                            isLoading={isOrdersLoading}
-                            error={ordersError}
-                            onRetry={() => fetchCustomerOrders(currentUser.id)}
-                            onBrowseProducts={() => navigateTo('DASHBOARD')}
-                          />
-                        )}
-
-                        {mobileScreen === 'PROFILE' && (
-                          <CustomerProfile
-                            customer={currentUser}
-                            onUpdateProfile={handleUpdateCustomerProfile}
-                            onLogout={handleLogout}
-                          />
-                        )}
-
-                        {mobileScreen === 'NOTIFICATIONS' && (
-                          <CustomerNotifications
-                            notifications={notifications}
-                            onMarkAsRead={handleMarkNotificationRead}
-                          />
-                        )}
-                      </>
-                    )}
-
-                    {/* DEALER SIDE */}
-                    {currentUser.role === 'dealer' && (
-                      <>
-                        {mobileScreen === 'DASHBOARD' && (
-                          <DealerDashboard
-                            dealer={currentUser}
-                            products={products}
-                            categories={categories}
-                            orders={orders}
-                            cartCount={cartCount}
-                            onNavigate={navigateTo}
-                            onSelectCategory={(catId) => {
-                              setSelectedCategory(catId);
-                              fetchDynamicProducts('dealer', catId, searchQuery, sortOption, activeFilter);
-                            }}
-                          />
-                        )}
-
-                        {mobileScreen === 'PRODUCTS' && (
-                          <DealerProductList
-                            products={products}
-                            categories={categories}
-                            selectedCategory={selectedCategory}
-                            onSelectCategory={(catId) => {
-                              setSelectedCategory(catId);
-                              fetchDynamicProducts('dealer', catId, searchQuery, sortOption, activeFilter);
-                            }}
-                            searchQuery={searchQuery}
-                            onSearchChange={(q) => {
-                              setSearchQuery(q);
-                              fetchDynamicProducts('dealer', selectedCategory, q, sortOption, activeFilter);
-                            }}
-                            sortOption={sortOption}
-                            onSortChange={(s) => {
-                              setSortOption(s);
-                              fetchDynamicProducts('dealer', selectedCategory, searchQuery, s, activeFilter);
-                            }}
-                            onAddToCart={(prod, qty) => {
-                              handleAddToCart(prod, qty);
-                            }}
-                            onOpenCart={() => navigateTo('CART')}
-                          />
-                        )}
-
-                        {mobileScreen === 'CART' && (
-                          <DealerCart
-                            cart={cartItems}
-                            isLoading={isCartLoading}
-                            error={cartError}
-                            onUpdateQty={handleUpdateCartQty}
-                            onRemoveItem={handleRemoveCartItem}
-                            onClearCart={handleClearCart}
-                            onProceedToCheckout={() => navigateTo('CHECKOUT')}
-                            onContinueShopping={() => navigateTo('PRODUCTS')}
-                            onRetry={() => fetchDealerCart(currentUser.id)}
-                          />
-                        )}
-
-                        {mobileScreen === 'CHECKOUT' && (
-                          <DealerCheckout
-                            cart={cartItems}
-                            dealer={currentUser}
-                            paymentMethod={dealerPaymentMethod}
-                            onChangePaymentMethod={setDealerPaymentMethod}
-                            shippingAddress={shippingAddress}
-                            onChangeShippingAddress={setShippingAddress}
-                            error={checkoutError}
-                            isSubmitting={isSubmittingOrder}
-                            onPlaceOrder={handlePlaceOrder}
-                            onBackToCart={() => navigateTo('CART')}
-                          />
-                        )}
-
-                        {mobileScreen === 'ORDER_CONFIRMATION' && (
-                          <DealerOrderConfirmation
-                            order={activeOrder}
-                            onViewOrders={() => navigateTo('ORDERS')}
-                            onContinueWholesale={() => navigateTo('PRODUCTS')}
-                          />
-                        )}
-
-                        {mobileScreen === 'ORDERS' && (
-                          <DealerOrders orders={orders} />
-                        )}
-
-                        {mobileScreen === 'PROFILE' && (
-                          <DealerProfile
-                            dealer={currentUser}
-                            onLogout={handleLogout}
-                          />
-                        )}
-
-                        {mobileScreen === 'NOTIFICATIONS' && (
-                          <DealerNotifications notifications={notifications} />
-                        )}
-                      </>
-                    )}
-
-                    {/* PLUMBER SIDE (100% DYNAMIC & FULL ROLE IMPLEMENTATION) */}
-                    {currentUser.role === 'plumber' && (
-                      <>
-                        {mobileScreen === 'DASHBOARD' && (
-                          <PlumberDashboard
-                            plumber={plumberDashboardData?.plumber || currentUser}
-                            dashboardData={plumberDashboardData}
-                            isLoading={isPlumberLoading}
-                            error={plumberError}
-                            onRetry={() => {
-                              fetchPlumberDashboard(currentUser);
-                              fetchPlumberActivities(currentUser);
-                              fetchPlumberProducts(currentUser);
-                              fetchPlumberProductRequests(currentUser);
-                              fetchPlumberNotifications(currentUser);
-                            }}
-                            onNavigateTab={navigateTo}
-                            onOpenActivity={(act) => {
-                              setActivePlumberActivity(act);
-                              navigateTo('ACTIVITIES');
-                            }}
-                            onOpenProduct={() => navigateTo('PRODUCTS')}
-                          />
-                        )}
-
-                        {(mobileScreen === 'ACTIVITIES' || mobileScreen === 'ASSIGNED_JOBS') && (
-                          <PlumberActivities
-                            activities={plumberActivities}
-                            isLoading={isPlumberLoading}
-                            error={plumberError}
-                            onRetry={() => fetchPlumberActivities(currentUser)}
-                            onUpdateStatus={handlePlumberStatusUpdate}
-                            onUpdateRemarks={handlePlumberUpdateRemarks}
-                          />
-                        )}
-
-                        {(mobileScreen === 'PRODUCTS' || mobileScreen === 'PRODUCT_GUIDE' || mobileScreen === 'PRODUCT_REQUESTS') && (
-                          <PlumberProducts
-                            products={plumberProducts}
-                            categories={plumberCategories.length > 0 ? plumberCategories : categories}
-                            productRequests={plumberProductRequests}
-                            activeActivities={(plumberActivities || []).filter((a) => a.status !== 'COMPLETED')}
-                            isLoading={isPlumberLoading}
-                            error={plumberError}
-                            onRetry={() => {
-                              fetchPlumberProducts(currentUser);
-                              fetchPlumberProductRequests(currentUser);
-                            }}
-                            onSelectCategory={(catId) => {
-                              setSelectedCategory(catId);
-                              fetchPlumberProducts(currentUser, { categoryId: catId, search: searchQuery });
-                            }}
-                            selectedCategory={selectedCategory}
-                            searchQuery={searchQuery}
-                            onSearchChange={(q) => {
-                              setSearchQuery(q);
-                              fetchPlumberProducts(currentUser, { categoryId: selectedCategory, search: q });
-                            }}
-                            onSubmitRequest={handlePlumberSubmitRequest}
-                            onCancelRequest={handlePlumberCancelRequest}
-                          />
-                        )}
-
-                        {mobileScreen === 'PROFILE' && (
-                          <PlumberProfile
-                            plumber={plumberDashboardData?.plumber || currentUser}
-                            onUpdateProfile={handlePlumberUpdateProfile}
-                            onUpdateSettings={handlePlumberUpdateSettings}
-                            onLogout={handleLogout}
-                          />
-                        )}
-
-                        {mobileScreen === 'NOTIFICATIONS' && (
-                          <PlumberNotifications
-                            notifications={notifications}
-                            onMarkAsRead={handlePlumberMarkNotificationRead}
-                            onMarkAllAsRead={handlePlumberMarkAllNotificationsRead}
-                          />
-                        )}
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Dynamic Bottom Navigation */}
-              {authStep === 'AUTHENTICATED' && currentUser && (
-                <MobileBottomNav
-                  role={currentUser.role}
-                  activeTab={mobileScreen}
-                  onSelectTab={(tabId) => navigateTo(tabId)}
-                />
-              )}
-            </div>
-          </div>
-        )}
-      </main>
-
-      {/* Slide-Up Persona Drawer */}
-      {showPersonaDrawer && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-center items-end sm:items-center p-0 sm:p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto animate-slide-up">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-amber-400" />
-                <h3 className="font-extrabold text-sm sm:text-base text-white">
-                  1-Click Interview Role Switcher
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowPersonaDrawer(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-400">
-              Select any persona to immediately log in and demonstrate their exact flow, pricing tier, and permission rules (Demo OTP: <strong className="text-emerald-400 font-mono">123456</strong>):
-            </p>
-
-            <div className="space-y-2.5">
-              {personasList.map((p) => (
-                <button
-                  key={p.tag}
-                  onClick={() => quickSelectPersona(p.role, p.mobile, p.name)}
-                  className={`w-full p-3.5 rounded-2xl border text-left transition flex items-start justify-between gap-3 ${
-                    currentUser?.mobile === p.mobile
-                      ? 'bg-blue-950/80 border-blue-500 text-white shadow'
-                      : 'bg-slate-950/80 border-slate-800 hover:border-slate-700 text-slate-300'
-                  }`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          p.color === 'amber'
-                            ? 'bg-amber-500/20 text-amber-300'
-                            : p.color === 'purple'
-                            ? 'bg-purple-500/20 text-purple-300'
-                            : p.color === 'rose'
-                            ? 'bg-rose-500/20 text-rose-300'
-                            : 'bg-blue-500/20 text-blue-300'
-                        }`}
-                      >
-                        {p.tag}
-                      </span>
-                      <span className="font-bold text-xs text-white truncate max-w-[200px]">
-                        {p.name}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-mono">+91 {p.mobile}</div>
-                    <p className="text-[11px] text-slate-400 pt-0.5 leading-snug">{p.desc}</p>
-                  </div>
-
-                  <ArrowRight className="w-4 h-4 text-blue-400 shrink-0 mt-1" />
-                </button>
-              ))}
-
-              {/* Admin Portal Shortcut */}
-              <button
-                onClick={() => {
-                  quickSelectPersona('admin', '9999999999');
-                  setShowPersonaDrawer(false);
-                }}
-                className="w-full p-3.5 rounded-2xl border border-rose-500/40 bg-rose-950/40 text-left transition flex items-center justify-between"
-              >
-                <div>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300">
-                    4. SUPER ADMIN
-                  </span>
-                  <div className="text-xs font-bold text-white mt-1">Open 11-Module Admin Panel</div>
-                  <div className="text-[10px] text-slate-400">Manage Dealers, 30/90D Credit, Zoho Workbook Rows</div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-rose-400 shrink-0" />
-              </button>
-            </div>
-          </div>
+    <BrowserRouter>
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-20 right-5 z-50 flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl shadow-xl border border-blue-500 text-xs font-semibold animate-in fade-in slide-in-from-top-2 duration-300">
+          <CheckCircle2 className="w-4 h-4 shrink-0 text-white" />
+          <span>{toastMessage}</span>
         </div>
       )}
-    </div>
+
+      <Routes>
+        {/* Home Page at URL '/' */}
+        <Route
+          path="/"
+          element={
+            <HomePage
+              products={products}
+              cartItems={cartItems}
+              onAddToCart={handleAddToCart}
+              onUpdateQuantity={handleUpdateQuantity}
+              onRemoveItem={handleRemoveItem}
+              onClearCart={handleClearCart}
+              onCheckoutSuccess={handleCheckoutSuccess}
+              currentUser={currentUser}
+              onLogout={handleLogout}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              isProfileOpen={isProfileOpen}
+              setIsProfileOpen={setIsProfileOpen}
+              isCartOpen={isCartOpen}
+              setIsCartOpen={setIsCartOpen}
+            />
+          }
+        />
+
+        {/* Dedicated Login Page at URL '/login' */}
+        <Route
+          path="/login"
+          element={<LoginPage onLoginSuccess={handleLoginSuccess} />}
+        />
+
+        {/* Dedicated Register Page at URL '/register' */}
+        <Route
+          path="/register"
+          element={<RegisterPage onRegisterSuccess={handleRegisterSuccess} />}
+        />
+
+        {/* Customer Dashboard at URL '/customer' and '/dashboard/customer' */}
+        <Route
+          path="/customer"
+          element={<CustomerDashboard currentUser={currentUser} onLogout={handleLogout} />}
+        />
+        <Route
+          path="/dashboard/customer"
+          element={<CustomerDashboard currentUser={currentUser} onLogout={handleLogout} />}
+        />
+
+        {/* Dealer Dashboard at URL '/dealer' and '/dashboard/dealer' */}
+        <Route
+          path="/dealer"
+          element={<DealerDashboard currentUser={currentUser} onLogout={handleLogout} />}
+        />
+        <Route
+          path="/dashboard/dealer"
+          element={<DealerDashboard currentUser={currentUser} onLogout={handleLogout} />}
+        />
+
+        {/* Plumber Dashboard at URL '/plumber' and '/dashboard/plumber' */}
+        <Route
+          path="/plumber"
+          element={<PlumberDashboard currentUser={currentUser} onLogout={handleLogout} />}
+        />
+        <Route
+          path="/dashboard/plumber"
+          element={<PlumberDashboard currentUser={currentUser} onLogout={handleLogout} />}
+        />
+
+        {/* Dedicated Admin Login at URL '/admin/login' */}
+        <Route
+          path="/admin/login"
+          element={<AdminLoginPage onAdminLoginSuccess={handleAdminLoginSuccess} />}
+        />
+
+        {/* Dedicated Admin Dashboard at URL '/admin' and '/admin/dashboard' */}
+        <Route
+          path="/admin"
+          element={<AdminDashboard currentUser={currentUser} onLogout={handleLogout} />}
+        />
+        <Route
+          path="/admin/dashboard"
+          element={<AdminDashboard currentUser={currentUser} onLogout={handleLogout} />}
+        />
+
+        {/* Fallback to Home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
