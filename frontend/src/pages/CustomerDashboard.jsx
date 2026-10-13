@@ -79,10 +79,10 @@ export default function CustomerDashboard({ currentUser, onLogout }) {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
+    <div className="h-screen bg-slate-50 text-slate-800 flex flex-col font-sans overflow-hidden">
       
       {/* Top Navbar */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 py-3 px-4 sm:px-6">
+      <header className="shrink-0 bg-white/95 backdrop-blur-md border-b border-slate-200 py-3 px-4 sm:px-6 z-30">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             {/* Toggle Sidebar Button */}
@@ -131,11 +131,11 @@ export default function CustomerDashboard({ currentUser, onLogout }) {
       </header>
 
       {/* Main Container with Sidebar + Content */}
-      <div className="flex-1 flex w-full relative">
+      <div className="flex-1 flex w-full relative overflow-hidden min-h-0">
         
         {/* Collapsible Sidebar */}
         {isSidebarOpen && (
-          <aside className="w-64 sm:w-72 shrink-0 bg-white border-r border-slate-200 p-5 flex flex-col justify-between transition-all duration-300 min-h-[calc(100vh-57px)]">
+          <aside className="w-64 sm:w-72 shrink-0 bg-white border-r border-slate-200 p-5 flex flex-col justify-between transition-all duration-300 h-full overflow-y-auto">
             <div>
               {/* Sidebar Header */}
               <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
@@ -267,7 +267,7 @@ export default function CustomerDashboard({ currentUser, onLogout }) {
         )}
 
         {/* Main Content Area */}
-        <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-8 py-8">
+        <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-8 py-8 h-full overflow-y-auto">
           
           {/* Quick Toggle pill when sidebar is closed */}
           {!isSidebarOpen && (
@@ -544,13 +544,12 @@ export default function CustomerDashboard({ currentUser, onLogout }) {
           </div>
         )}
 
+        {/* Footer copyright */}
+        <footer className="mt-12 py-4 text-center text-xs text-slate-400 border-t border-slate-200">
+          © 2026 PlumbMart Technologies Pvt. Ltd. • Customer Experience Portal
+        </footer>
       </main>
       </div>
-
-      {/* Footer copyright */}
-      <footer className="py-4 text-center text-xs text-slate-400 border-t border-slate-200 bg-white">
-        © 2026 PlumbMart Technologies Pvt. Ltd. • Customer Experience Portal
-      </footer>
     </div>
   );
 }
