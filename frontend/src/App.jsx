@@ -4,10 +4,17 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import CustomerDashboard from './pages/CustomerDashboard';
-import DealerDashboard from './pages/DealerDashboard';
 import PlumberDashboard from './pages/PlumberDashboard';
 import AdminLoginPage from './pages/AdminLoginPage';
 import AdminDashboard from './pages/AdminDashboard';
+import DealerProductsPage from './pages/DealerProductsPage';
+import DealerCartPage from './pages/DealerCartPage';
+import DealerCheckoutPage from './pages/DealerCheckoutPage';
+import DealerOrdersPage from './pages/DealerOrdersPage';
+import CustomerProductsPage from './pages/CustomerProductsPage';
+import CustomerCartPage from './pages/CustomerCartPage';
+import CustomerCheckoutPage from './pages/CustomerCheckoutPage';
+import CustomerOrdersPage from './pages/CustomerOrdersPage';
 import { CheckCircle2 } from 'lucide-react';
 
 const DEFAULT_PRODUCTS = [
@@ -22,7 +29,7 @@ const DEFAULT_PRODUCTS = [
     reviews: 142,
     stock: 85,
     tag: 'Bestseller',
-    image: 'https://images.unsplash.com/photo-1541888946425-d0fbb18615f8?auto=format&fit=crop&w=600&q=80',
+    image: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=600&q=80',
     description: 'Lead-free, heavy-duty CPVC plumbing pipe suitable for hot and cold potable water applications.'
   },
   {
@@ -307,24 +314,88 @@ export default function App() {
           element={<RegisterPage onRegisterSuccess={handleRegisterSuccess} />}
         />
 
-        {/* Customer Dashboard at URL '/customer' and '/dashboard/customer' */}
+        {/* Customer routes redirect directly to dedicated products page */}
         <Route
           path="/customer"
-          element={<CustomerDashboard currentUser={currentUser} onLogout={handleLogout} />}
+          element={<Navigate to="/customer/products" replace />}
         />
         <Route
           path="/dashboard/customer"
-          element={<CustomerDashboard currentUser={currentUser} onLogout={handleLogout} />}
+          element={<Navigate to="/customer/products" replace />}
         />
 
-        {/* Dealer Dashboard at URL '/dealer' and '/dashboard/dealer' */}
+        {/* 1. View products and prices (stock quantity hidden) at '/customer/products' */}
+        <Route
+          path="/customer/products"
+          element={<CustomerProductsPage currentUser={currentUser} onLogout={handleLogout} />}
+        />
+
+        {/* 2. Add products to cart at '/customer/cart' */}
+        <Route
+          path="/customer/cart"
+          element={<CustomerCartPage currentUser={currentUser} onLogout={handleLogout} />}
+        />
+
+        {/* 3. Online checkout & direct payment at '/customer/checkout' */}
+        <Route
+          path="/customer/checkout"
+          element={<CustomerCheckoutPage currentUser={currentUser} onLogout={handleLogout} />}
+        />
+        <Route
+          path="/customer/payment"
+          element={<CustomerCheckoutPage currentUser={currentUser} onLogout={handleLogout} />}
+        />
+
+        {/* 4. Order history & live tracking at '/customer/orders' */}
+        <Route
+          path="/customer/orders"
+          element={<CustomerOrdersPage currentUser={currentUser} onLogout={handleLogout} />}
+        />
+        <Route
+          path="/customer/orders/:orderId"
+          element={<CustomerOrdersPage currentUser={currentUser} onLogout={handleLogout} />}
+        />
+
+        {/* Dealer routes redirect directly to dedicated Step 1 workflow page */}
         <Route
           path="/dealer"
-          element={<DealerDashboard currentUser={currentUser} onLogout={handleLogout} />}
+          element={<Navigate to="/dealer/products" replace />}
         />
         <Route
           path="/dashboard/dealer"
-          element={<DealerDashboard currentUser={currentUser} onLogout={handleLogout} />}
+          element={<Navigate to="/dealer/products" replace />}
+        />
+
+        {/* 1. View products, prices and stock at '/dealer/products' */}
+        <Route
+          path="/dealer/products"
+          element={<DealerProductsPage currentUser={currentUser} onLogout={handleLogout} />}
+        />
+
+        {/* 2. Add products to cart & stock check at '/dealer/cart' */}
+        <Route
+          path="/dealer/cart"
+          element={<DealerCartPage currentUser={currentUser} onLogout={handleLogout} />}
+        />
+
+        {/* 3. Choose a payment method (Upfront / Approved Credit) at '/dealer/checkout' */}
+        <Route
+          path="/dealer/checkout"
+          element={<DealerCheckoutPage currentUser={currentUser} onLogout={handleLogout} />}
+        />
+        <Route
+          path="/dealer/payment"
+          element={<DealerCheckoutPage currentUser={currentUser} onLogout={handleLogout} />}
+        />
+
+        {/* 4. Place and track orders & check due dates at '/dealer/orders' */}
+        <Route
+          path="/dealer/orders"
+          element={<DealerOrdersPage currentUser={currentUser} onLogout={handleLogout} />}
+        />
+        <Route
+          path="/dealer/orders/:orderId"
+          element={<DealerOrdersPage currentUser={currentUser} onLogout={handleLogout} />}
         />
 
         {/* Plumber Dashboard at URL '/plumber' and '/dashboard/plumber' */}

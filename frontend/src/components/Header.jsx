@@ -90,6 +90,36 @@ export default function Header({
           {/* Action Icons & Buttons */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             
+            {/* Customer Portal Quick Link */}
+            <Link
+              to="/customer/products"
+              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition"
+              title="Go to Customer Portal"
+            >
+              <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+              <span>Customer Portal</span>
+            </Link>
+
+            {/* Dealer Portal Quick Link */}
+            <Link
+              to="/dealer/products"
+              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition"
+              title="Go to Dealer B2B Wholesale Portal"
+            >
+              <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
+              <span>Dealer Portal</span>
+            </Link>
+
+            {/* Plumber Portal Quick Link */}
+            <Link
+              to="/plumber"
+              className="hidden xl:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition"
+              title="Go to Plumber Pro Portal"
+            >
+              <span className="w-2 h-2 rounded-full bg-amber-600"></span>
+              <span>Plumber Portal</span>
+            </Link>
+
             {/* Bucket (Cart) Icon */}
             <button
               onClick={onOpenCart}
