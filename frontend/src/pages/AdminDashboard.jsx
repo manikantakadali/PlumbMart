@@ -2549,9 +2549,16 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
               {/* Notification History Feed */}
               <div className="space-y-3">
-                {notifications
-                  .filter(n => notifFilter === 'All' || n.targetGroup === notifFilter)
-                  .map(notif => {
+                {notifications.filter(n => notifFilter === 'All' || n.targetGroup === notifFilter).length === 0 ? (
+                  <div className="p-10 text-center text-slate-400 bg-slate-950 rounded-2xl border border-slate-800">
+                    <Bell className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                    <p className="text-sm font-bold text-slate-300">No broadcast announcements</p>
+                    <p className="text-xs text-slate-500 mt-1">Send a broadcast alert to reach customers, dealers, or plumbers.</p>
+                  </div>
+                ) : (
+                  notifications
+                    .filter(n => notifFilter === 'All' || n.targetGroup === notifFilter)
+                    .map(notif => {
                     let badgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
                     if (notif.targetGroup === 'Dealers') badgeClass = 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
                     else if (notif.targetGroup === 'Plumbers') badgeClass = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
@@ -2594,7 +2601,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                         </button>
                       </div>
                     );
-                  })}
+                  })
+                )}
               </div>
 
             </div>

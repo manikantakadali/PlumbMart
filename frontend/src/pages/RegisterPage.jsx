@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { 
   Droplets, 
   User, 
@@ -24,6 +24,8 @@ import {
 export default function RegisterPage({ onRegisterSuccess }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const redirectTarget = searchParams.get('redirect'); // e.g. 'checkout'
   const { verifiedMobile, idToken: stateIdToken } = location.state || {};
 
   const [formData, setFormData] = useState({
@@ -148,21 +150,20 @@ export default function RegisterPage({ onRegisterSuccess }) {
 
       setIsPhoneVerified(true);
       setOtpStepActive(false);
-      setSuccessMsg(`Email & Mobile verified successfully! Account created for ${data.user.name}.`);
+      setSuccessMsg(`Email & Mobile verified! Account created for ${data.user.name}. Redirecting to Login...`);
 
-      if (onRegisterSuccess) {
-        onRegisterSuccess(data.user);
-      }
+      const query = new URLSearchParams({
+        registered: 'true',
+        redirect: redirectTarget || 'checkout',
+        mobile: clean,
+        name: data.user.name || formData.name.trim(),
+        email: formData.email.trim(),
+        role: formData.role
+      }).toString();
 
       setTimeout(() => {
-        if (data.user.role === 'Dealer') {
-          navigate('/dealer');
-        } else if (data.user.role === 'Plumber') {
-          navigate('/plumber');
-        } else {
-          navigate('/customer');
-        }
-      }, 700);
+        navigate(`/login?${query}`);
+      }, 900);
 
     } catch (err) {
       console.error('[Verify OTP Error]:', err);

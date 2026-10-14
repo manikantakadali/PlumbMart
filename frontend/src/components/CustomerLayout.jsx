@@ -120,6 +120,87 @@ export default function CustomerLayout({ children, currentUser, onLogout }) {
   const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState('');
 
+  // Live Broadcast Announcements (Customer & All)
+  const [announcements, setAnnouncements] = useState([]);
+  const [isNotifMenuOpen, setIsNotifMenuOpen] = useState(false);
+  const [readAnnouncements, setReadAnnouncements] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('plumbmart_customer_read_announcements') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const notifDropdownRef = useRef(null);
+
+  const fetchCustomerAnnouncements = async () => {
+    try {
+      let res;
+      try {
+        res = await fetch('/api/notifications?role=Customer');
+      } catch (e1) {
+        res = await fetch('http://localhost:5000/api/notifications?role=Customer');
+      }
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.data)) {
+        setAnnouncements(data.data);
+      }
+    } catch (err) {}
+  };
+
+  useEffect(() => {
+    fetchCustomerAnnouncements();
+
+    let ch;
+    try {
+      ch = new BroadcastChannel('plumbmart_announcements');
+      ch.onmessage = (event) => {
+        if (event.data && event.data.type === 'NEW_ANNOUNCEMENT') {
+          const target = (event.data.announcement?.targetGroup || 'All').toLowerCase();
+          if (target === 'all' || target.includes('customer')) {
+            fetchCustomerAnnouncements();
+          }
+        }
+      };
+    } catch {}
+
+    const handleStorage = (e) => {
+      if (e.key === 'plumbmart_announcement_broadcast') {
+        fetchCustomerAnnouncements();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('plumbmart_announcement_created', fetchCustomerAnnouncements);
+
+    const poll = setInterval(fetchCustomerAnnouncements, 3000);
+
+    return () => {
+      if (ch) ch.close();
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('plumbmart_announcement_created', fetchCustomerAnnouncements);
+      clearInterval(poll);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutsideNotif = (e) => {
+      if (notifDropdownRef.current && !notifDropdownRef.current.contains(e.target)) {
+        setIsNotifMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutsideNotif);
+    return () => document.removeEventListener('mousedown', handleClickOutsideNotif);
+  }, []);
+
+  const unreadAnnouncementsCount = announcements.filter(a => !readAnnouncements.includes(a.id)).length;
+
+  const handleMarkAllCustomerRead = () => {
+    const allIds = announcements.map(a => a.id);
+    setReadAnnouncements(allIds);
+    try {
+      localStorage.setItem('plumbmart_customer_read_announcements', JSON.stringify(allIds));
+    } catch {}
+  };
+
   // Sync when currentUser changes
   useEffect(() => {
     if (currentUser) {
@@ -302,15 +383,67 @@ export default function CustomerLayout({ children, currentUser, onLogout }) {
 
           {/* Header Right Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Track Orders Icon */}
-            <Link
-              to="/customer/orders"
-              className="p-2 text-slate-600 hover:text-blue-600 rounded-xl transition flex items-center justify-center hover:bg-slate-50"
-              title="Track Orders"
-              aria-label="Track Orders"
-            >
-              <Truck className="w-5 h-5" />
-            </Link>
+            {/* Announcements Notification Bell */}
+            <div className="relative" ref={notifDropdownRef}>
+              <button
+                onClick={() => {
+                  setIsNotifMenuOpen(!isNotifMenuOpen);
+                  if (!isNotifMenuOpen && unreadAnnouncementsCount > 0) {
+                    handleMarkAllCustomerRead();
+                  }
+                }}
+                className="relative p-2 text-slate-600 hover:text-blue-600 rounded-xl transition flex items-center justify-center hover:bg-slate-50 cursor-pointer"
+                title="Company Announcements & Updates"
+                aria-label="Announcements"
+              >
+                <Bell className="w-5 h-5" />
+                {unreadAnnouncementsCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black bg-rose-600 text-white flex items-center justify-center shadow-xs animate-pulse">
+                    {unreadAnnouncementsCount}
+                  </span>
+                )}
+              </button>
+
+              {isNotifMenuOpen && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs font-bold text-slate-900">Announcements</span>
+                    </div>
+                    {announcements.length > 0 && (
+                      <span className="text-[10px] font-semibold text-slate-500 font-mono">
+                        {announcements.length} Alert{announcements.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 text-xs">
+                    {announcements.length > 0 ? (
+                      announcements.map(item => (
+                        <div key={item.id} className="p-3.5 hover:bg-slate-50/80 transition space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <h4 className="font-bold text-slate-900 text-xs">{item.title}</h4>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                              {item.targetGroup}
+                            </span>
+                          </div>
+                          <p className="text-slate-600 text-[11px] leading-relaxed">{item.message}</p>
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 font-mono">
+                            <span>{item.sentAt || 'Recently'}</span>
+                            <span>By {item.sender || 'Admin'}</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="py-6 text-center text-slate-400 text-xs">
+                        No new announcements at this time.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Cart Icon Only (No Text, No Background) */}
             <Link
