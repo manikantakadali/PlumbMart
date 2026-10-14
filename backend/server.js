@@ -90,29 +90,38 @@ app.get('/', (req, res) => {
 // Products catalog endpoint (Live Zoho Inventory sync with fallback)
 app.get('/api/products', async (req, res) => {
   try {
+    let products = [];
     const status = getConnectionStatus();
     if (status.isConnected) {
       try {
         const zohoList = await getSyncedZohoProducts(req.query.refresh === 'true');
         if (zohoList && zohoList.length > 0) {
-          return res.json({
-            success: true,
-            count: zohoList.length,
-            data: zohoList,
-            source: 'zoho'
-          });
+          products = [...zohoList];
         }
       } catch (zErr) {
         console.warn('[Zoho Products Fallback] Live fetch failed, reading from local DB:', zErr.message);
       }
     }
 
-    const list = await getProductsList();
+    const localList = await getProductsList();
+    if (products.length === 0) {
+      products = localList;
+    } else {
+      // Merge products (e.g. Water Tanks & Storage and Drainage & Sanitary) from local DB
+      const existingSkus = new Set(products.map(p => (p.sku || '').toUpperCase()));
+      for (const item of localList) {
+        if (!existingSkus.has((item.sku || '').toUpperCase())) {
+          products.push(item);
+          existingSkus.add((item.sku || '').toUpperCase());
+        }
+      }
+    }
+
     res.json({
       success: true,
-      count: list.length,
-      data: list,
-      source: 'database'
+      count: products.length,
+      data: products,
+      source: 'zoho+database'
     });
   } catch (err) {
     console.error('Failed to get products:', err);
