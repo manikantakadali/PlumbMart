@@ -141,7 +141,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       name: adminProfileForm.name.trim(),
       email: adminProfileForm.email.trim(),
       mobile: adminProfileForm.mobile.trim(),
-      accessLevel: adminProfileForm.accessLevel.trim() || 'SuperAdmin'
+      accessLevel: admin.accessLevel || 'SuperAdmin'
     };
 
     setAdmin(updatedAdmin);
@@ -1184,15 +1184,6 @@ export default function AdminDashboard({ currentUser, onLogout }) {
             <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${isSyncingZoho ? 'animate-spin text-blue-400' : ''}`} />
           </div>
 
-          {/* Return to store button on mobile */}
-          <Link
-            to="/"
-            className="md:hidden p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition"
-            title="Return to Store"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-
           {/* Admin Profile Dropdown Menu */}
           <div className="relative" ref={adminMenuRef}>
             <button
@@ -1200,7 +1191,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                 playClickSound();
                 setIsAdminMenuOpen(!isAdminMenuOpen);
               }}
-              className="flex items-center gap-2.5 p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 sm:gap-2.5 p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition active:scale-95 cursor-pointer"
               title="Admin Profile & Account Menu"
               aria-label="Admin Profile & Account Menu"
             >
@@ -1208,8 +1199,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                 <p className="text-xs font-bold text-white leading-none">{admin.name}</p>
                 <p className="text-[10px] text-blue-400 font-mono mt-0.5">{admin.accessLevel}</p>
               </div>
-              <div className="p-1 rounded-lg bg-slate-800 text-slate-300 flex items-center justify-center">
-                <LogOut className="w-4 h-4 text-slate-300" />
+              <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300 flex items-center justify-center">
+                <User className="w-4 h-4 text-slate-300" />
               </div>
             </button>
 
@@ -2376,13 +2367,13 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Dealer Credit Governance Table (Requested in Feature 7) */}
-              <div className="bg-slate-950 rounded-2xl border border-slate-800 p-5 space-y-4 shadow-xl">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="bg-slate-950 rounded-2xl border border-slate-800 p-4 sm:p-5 space-y-4 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-800">
                   <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                    <ShieldCheck className="w-4 h-4 text-indigo-400 shrink-0" />
                     <span>Dealer Credit Terms Policy Matrix</span>
                   </h3>
-                  <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/20">
+                  <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/20 self-start sm:self-auto">
                     Backend Enforced
                   </span>
                 </div>
@@ -2436,19 +2427,19 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Transactions Stream & Reconciliation */}
-              <div className="bg-slate-950 rounded-2xl border border-slate-800 p-5 space-y-4 shadow-xl">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="bg-slate-950 rounded-2xl border border-slate-800 p-4 sm:p-5 space-y-4 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
                   <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-blue-400" />
+                    <CreditCard className="w-4 h-4 text-blue-400 shrink-0" />
                     <span>Payment Transactions &amp; Gateway Reconciliation</span>
                   </h3>
 
-                  <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl text-xs">
+                  <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl text-xs self-start sm:self-auto overflow-x-auto max-w-full">
                     {['All', 'Successful', 'Pending'].map(st => (
                       <button
                         key={st}
                         onClick={() => setPaymentStatusFilter(st)}
-                        className={`px-3 py-1 rounded-lg font-semibold transition ${
+                        className={`px-3 py-1 rounded-lg font-semibold transition shrink-0 ${
                           paymentStatusFilter === st ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
                         }`}
                       >
@@ -3850,22 +3841,6 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                       placeholder="e.g. +91 98765 43210"
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-mono focus:outline-none focus:border-blue-500 transition"
                     />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-400 text-[11px] font-semibold mb-1">
-                      Access Level / Role
-                    </label>
-                    <select
-                      value={adminProfileForm.accessLevel}
-                      onChange={(e) => setAdminProfileForm({ ...adminProfileForm, accessLevel: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-blue-500 transition"
-                    >
-                      <option value="SuperAdmin">SuperAdmin (Master Access)</option>
-                      <option value="Senior Manager">Senior Operations Manager</option>
-                      <option value="Inventory Lead">Inventory Lead</option>
-                      <option value="Auditor">Security Auditor</option>
-                    </select>
                   </div>
                 </div>
 

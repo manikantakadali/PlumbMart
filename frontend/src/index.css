@@ -17,3 +17,32 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Dark mode scrollbars */
+.dark ::-webkit-scrollbar-track,
+.bg-slate-900 ::-webkit-scrollbar-track,
+.bg-slate-950 ::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+.dark ::-webkit-scrollbar-thumb,
+.bg-slate-900 ::-webkit-scrollbar-thumb,
+.bg-slate-950 ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+.dark ::-webkit-scrollbar-thumb:hover,
+.bg-slate-900 ::-webkit-scrollbar-thumb:hover,
+.bg-slate-950 ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
