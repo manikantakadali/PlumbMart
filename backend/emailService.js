@@ -587,11 +587,356 @@ async function sendDealerAppealEmail({ dealer = {}, adminEmail = 'admin@plumbmar
   };
 }
 
+/**
+ * Send Account Suspension Notification Email to Dealer with Admin Officer Details
+ * @param {object} params { dealer, adminOfficer, reason }
+ */
+async function sendDealerSuspensionNotificationEmail({ dealer = {}, adminOfficer = {}, reason }) {
+  const cleanDealerEmail = String(dealer.email || 'dealer@plumbmart-demo.com').trim().toLowerCase();
+  const dealerName = dealer.name || 'Sri Venkateswara Distributors';
+  const dealerContact = dealer.contactPerson || dealerName;
+  const dealerId = dealer.id || 'DLR-01';
+  const dealerGstin = dealer.gstin || '29ABCDE1234F1Z5';
+
+  const adminName = adminOfficer.name || 'System Administrator';
+  const adminEmail = String(adminOfficer.email || 'admin@plumbmart.com').trim().toLowerCase();
+  const adminRole = adminOfficer.role || 'SuperAdmin';
+  const adminPhone = adminOfficer.phone || '+91 8000 123 456';
+  const adminDept = adminOfficer.department || 'Corporate Credit Governance & Compliance Desk';
+  const auditReason = reason || adminOfficer.reason || 'Regulatory credit KYC audit & pending governance review';
+  const timestamp = adminOfficer.suspendedAt || new Date().toLocaleString('en-IN', { dateStyle: 'full', timeStyle: 'short' });
+
+  const mailOptions = {
+    from: process.env.SMTP_FROM || (process.env.GMAIL_USER ? `"PlumbMart Governance" <${process.env.GMAIL_USER}>` : '"PlumbMart Governance" <governance@plumbmart.com>'),
+    to: cleanDealerEmail,
+    replyTo: adminEmail,
+    subject: `🚨 [URGENT] Wholesale Account Access Suspended - ${dealerName} (${dealerId})`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8"></head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 24px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 650px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
+          
+          <!-- BANNER HEADER -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #991b1b 0%, #dc2626 50%, #b91c1c 100%); padding: 32px 28px; text-align: center; color: #ffffff;">
+              <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; background: rgba(0,0,0,0.3); display: inline-block; padding: 4px 14px; border-radius: 9999px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.2);">
+                Corporate Governance Notice
+              </div>
+              <h1 style="margin: 0; font-size: 22px; font-weight: 900; letter-spacing: -0.5px;">Account Access Suspended</h1>
+              <p style="margin: 6px 0 0 0; font-size: 13px; color: #fee2e2;">Wholesale Ordering, Credit Lines & Consignments Temporarily Locked</p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 28px;">
+              <p style="margin: 0 0 16px 0; font-size: 14px; color: #334155;">
+                Dear <strong>${dealerContact}</strong>,
+              </p>
+              <p style="margin: 0 0 20px 0; font-size: 13px; line-height: 1.6; color: #475569;">
+                This is an official communication from PlumbMart Corporate Administration. Your wholesale B2B dealer account (<strong>${dealerName}</strong> &bull; ID: <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 700;">${dealerId}</code>) has been placed on <strong>SUSPENDED</strong> status effective immediately.
+              </p>
+
+              <!-- RESTRICTION IMPACT TABLE -->
+              <table width="100%" style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 14px 18px; margin-bottom: 24px; font-size: 12px;">
+                <tr>
+                  <td style="padding: 4px 0; color: #991b1b; font-weight: 700;">&bull; B2B Wholesale Ordering:</td>
+                  <td style="padding: 4px 0; text-align: right; font-weight: 800; color: #dc2626;">LOCKED</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; color: #991b1b; font-weight: 700;">&bull; Approved Credit Line:</td>
+                  <td style="padding: 4px 0; text-align: right; font-weight: 800; color: #dc2626;">FROZEN (₹0 AVAILABLE)</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; color: #991b1b; font-weight: 700;">&bull; Active Dispatches:</td>
+                  <td style="padding: 4px 0; text-align: right; font-weight: 800; color: #dc2626;">ON GOVERNANCE HOLD</td>
+                </tr>
+              </table>
+
+              <!-- SUSPENDING OFFICER DETAILS CARD -->
+              <div style="background-color: #f8fafc; border: 2px solid #e2e8f0; border-radius: 14px; padding: 20px; margin-bottom: 24px;">
+                <div style="font-size: 11px; text-transform: uppercase; font-weight: 800; color: #64748b; letter-spacing: 0.5px; margin-bottom: 12px;">
+                  Suspending Authority & Case Officer
+                </div>
+                
+                <table width="100%" style="font-size: 13px;">
+                  <tr>
+                    <td style="padding: 5px 0; color: #64748b; width: 35%;">Admin Name:</td>
+                    <td style="padding: 5px 0; font-weight: 800; color: #0f172a;">${adminName}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 0; color: #64748b;">Designation / Role:</td>
+                    <td style="padding: 5px 0; font-weight: 800; color: #b91c1c;">
+                      <span style="background: #fee2e2; padding: 2px 8px; border-radius: 6px;">${adminRole}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 0; color: #64748b;">Official Email:</td>
+                    <td style="padding: 5px 0; font-weight: 700; color: #0284c7;">
+                      <a href="mailto:${adminEmail}" style="color: #0284c7; text-decoration: none;">${adminEmail}</a>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 0; color: #64748b;">Direct Phone / Desk:</td>
+                    <td style="padding: 5px 0; font-weight: 800; color: #0f172a;">${adminPhone}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 0; color: #64748b;">Department:</td>
+                    <td style="padding: 5px 0; font-weight: 600; color: #475569;">${adminDept}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 0; color: #64748b;">Suspension Timestamp:</td>
+                    <td style="padding: 5px 0; font-weight: 600; color: #475569;">${timestamp}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 0; color: #64748b;">Regulatory Audit Reason:</td>
+                    <td style="padding: 5px 0; font-weight: 700; color: #991b1b;">${auditReason}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- APPEAL INSTRUCTIONS -->
+              <h3 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; margin: 0 0 10px 0;">How to Appeal & Re-activate Your Account</h3>
+              <p style="margin: 0 0 20px 0; font-size: 13px; line-height: 1.6; color: #475569;">
+                You can submit a formal reinstatement appeal directly to <strong>${adminName}</strong> through the Dealer Portal, or by replying directly to this email with updated KYC/GST documents and account reconciliation proof.
+              </p>
+
+              <!-- BUTTON -->
+              <div style="text-align: center; margin: 28px 0 10px 0;">
+                <a href="http://localhost:3000/dealer" style="display: inline-block; background-color: #b91c1c; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 700; padding: 13px 28px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(185, 28, 28, 0.3);">
+                  Open Dealer Portal & Contact Support &rarr;
+                </a>
+              </div>
+
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="background-color: #0f172a; color: #94a3b8; padding: 22px 28px; text-align: center; font-size: 11px; border-top: 1px solid #e2e8f0; line-height: 1.6;">
+              <div style="font-weight: 700; color: #ffffff; margin-bottom: 4px;">PlumbMart Technologies Pvt. Ltd. &bull; Corporate Credit Governance</div>
+              <div>Peenya Industrial Area, Bengaluru, Karnataka - 560058</div>
+              <div style="margin-top: 6px;">
+                📞 24x7 Support Helpline: <b>${adminPhone}</b> &bull; ✉️ <b>${adminEmail}</b>
+              </div>
+            </td>
+          </tr>
+
+        </table>
+      </body>
+      </html>
+    `
+  };
+
+  const currentTransporter = getTransporter();
+  let emailSentViaSmtp = false;
+
+  if (currentTransporter) {
+    try {
+      const info = await currentTransporter.sendMail(mailOptions);
+      emailSentViaSmtp = true;
+      console.log(`[Email Service] Dealer suspension notification dispatched to ${cleanDealerEmail} (MsgID: ${info?.messageId || 'OK'})`);
+    } catch (err) {
+      console.warn(`[Email Service Warning] Failed to dispatch dealer suspension notification via SMTP: ${err.message}`);
+    }
+  }
+
+  console.log('====================================================');
+  console.log(`[PLUMBMART DEALER SUSPENSION EMAIL DISPATCHED]`);
+  console.log(`To Dealer: ${dealerName} <${cleanDealerEmail}>`);
+  console.log(`Suspended By Officer: ${adminName} <${adminEmail}> (${adminRole})`);
+  console.log(`Phone: ${adminPhone}`);
+  console.log(`Timestamp: ${timestamp}`);
+  console.log(`Dispatched via SMTP: ${emailSentViaSmtp}`);
+  console.log('====================================================');
+
+  return {
+    success: true,
+    dealerEmail: cleanDealerEmail,
+    adminEmail,
+    adminName,
+    adminPhone,
+    emailSentViaSmtp,
+    timestamp
+  };
+}
+
+/**
+ * Send Account Approval & Activation Notification Email to Dealer with Admin Officer Details
+ * @param {object} params { dealer, adminOfficer }
+ */
+async function sendDealerApprovalNotificationEmail({ dealer = {}, adminOfficer = {} }) {
+  const cleanDealerEmail = String(dealer.email || 'dealer@plumbmart-demo.com').trim().toLowerCase();
+  const dealerName = dealer.name || 'Sri Venkateswara Distributors';
+  const dealerContact = dealer.contactPerson || dealerName;
+  const dealerId = dealer.id || 'DLR-01';
+  const dealerGstin = dealer.gstin || '29ABCDE1234F1Z5';
+  const creditLimitNum = typeof dealer.creditLimit === 'number' 
+    ? dealer.creditLimit 
+    : (parseInt((dealer.creditLimit || '500000').toString().replace(/[^0-9]/g, ''), 10) || 500000);
+
+  const adminName = adminOfficer.name || 'System Administrator';
+  const adminEmail = String(adminOfficer.email || 'admin@plumbmart.com').trim().toLowerCase();
+  const adminRole = adminOfficer.role || 'SuperAdmin';
+  const adminPhone = adminOfficer.phone || '+91 8000 123 456';
+  const adminDept = adminOfficer.department || 'Corporate Credit Governance & Compliance Desk';
+  const timestamp = adminOfficer.approvedAt || new Date().toLocaleString('en-IN', { dateStyle: 'full', timeStyle: 'short' });
+
+  const mailOptions = {
+    from: process.env.SMTP_FROM || (process.env.GMAIL_USER ? `"PlumbMart Approvals" <${process.env.GMAIL_USER}>` : '"PlumbMart Approvals" <approvals@plumbmart.com>'),
+    to: cleanDealerEmail,
+    replyTo: adminEmail,
+    subject: `✅ [CONGRATULATIONS] Wholesale B2B Account Approved & Activated - ${dealerName}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8"></head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 24px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 650px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
+          
+          <!-- BANNER HEADER -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #065f46 0%, #059669 50%, #10b981 100%); padding: 32px 28px; text-align: center; color: #ffffff;">
+              <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; background: rgba(0,0,0,0.25); display: inline-block; padding: 4px 14px; border-radius: 9999px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.2);">
+                Account Approved & Verified
+              </div>
+              <h1 style="margin: 0; font-size: 22px; font-weight: 900; letter-spacing: -0.5px;">Welcome Back to PlumbMart Wholesale!</h1>
+              <p style="margin: 6px 0 0 0; font-size: 13px; color: #d1fae5;">Your B2B Credit Line & Ordering Privileges Have Been Fully Re-activated</p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 28px;">
+              <p style="margin: 0 0 16px 0; font-size: 14px; color: #334155;">
+                Dear <strong>${dealerContact}</strong>,
+              </p>
+              <p style="margin: 0 0 20px 0; font-size: 13px; line-height: 1.6; color: #475569;">
+                We are pleased to inform you that your PlumbMart wholesale dealer account (<strong>${dealerName}</strong> &bull; ID: <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 700;">${dealerId}</code>) has been <strong>APPROVED & RE-ACTIVATED</strong> by PlumbMart Corporate Governance.
+              </p>
+
+              <!-- CREDIT LINE HIGHLIGHT BADGE -->
+              <table width="100%" style="background-color: #ecfdf5; border: 2px solid #a7f3d0; border-radius: 14px; padding: 18px 20px; margin-bottom: 24px; text-align: center;">
+                <tr>
+                  <td>
+                    <div style="font-size: 11px; text-transform: uppercase; font-weight: 800; color: #047857; letter-spacing: 1px;">Approved Credit Limit</div>
+                    <div style="font-size: 26px; font-weight: 900; color: #065f46; font-family: monospace; margin-top: 4px;">
+                      ₹${creditLimitNum.toLocaleString('en-IN')}
+                    </div>
+                    <div style="font-size: 12px; font-weight: 700; color: #059669; margin-top: 4px;">
+                      ✓ 30-Day Credit &bull; ✓ 90-Day Credit Line (Tier 1) Unlocked
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- APPROVING OFFICER DETAILS CARD -->
+              <div style="background-color: #f8fafc; border: 2px solid #e2e8f0; border-radius: 14px; padding: 20px; margin-bottom: 24px;">
+                <div style="font-size: 11px; text-transform: uppercase; font-weight: 800; color: #64748b; letter-spacing: 0.5px; margin-bottom: 12px;">
+                  Approving Officer & Account Manager
+                </div>
+                
+                <table width="100%" style="font-size: 13px;">
+                  <tr>
+                    <td style="padding: 5px 0; color: #64748b; width: 35%;">Admin Name:</td>
+                    <td style="padding: 5px 0; font-weight: 800; color: #0f172a;">${adminName}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 0; color: #64748b;">Designation / Role:</td>
+                    <td style="padding: 5px 0; font-weight: 800; color: #059669;">
+                      <span style="background: #d1fae5; padding: 2px 8px; border-radius: 6px;">${adminRole}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 0; color: #64748b;">Official Email:</td>
+                    <td style="padding: 5px 0; font-weight: 700; color: #0284c7;">
+                      <a href="mailto:${adminEmail}" style="color: #0284c7; text-decoration: none;">${adminEmail}</a>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 0; color: #64748b;">Direct Phone / Desk:</td>
+                    <td style="padding: 5px 0; font-weight: 800; color: #0f172a;">${adminPhone}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 0; color: #64748b;">Department:</td>
+                    <td style="padding: 5px 0; font-weight: 600; color: #475569;">${adminDept}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 0; color: #64748b;">Approved Timestamp:</td>
+                    <td style="padding: 5px 0; font-weight: 600; color: #475569;">${timestamp}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- BUTTON -->
+              <div style="text-align: center; margin: 28px 0 10px 0;">
+                <a href="http://localhost:3000/dealer/products" style="display: inline-block; background-color: #059669; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 700; padding: 13px 28px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(5, 150, 105, 0.3);">
+                  Browse Wholesale Catalog & Order Now &rarr;
+                </a>
+              </div>
+
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="background-color: #0f172a; color: #94a3b8; padding: 22px 28px; text-align: center; font-size: 11px; border-top: 1px solid #e2e8f0; line-height: 1.6;">
+              <div style="font-weight: 700; color: #ffffff; margin-bottom: 4px;">PlumbMart Technologies Pvt. Ltd. &bull; Peenya Central Distribution Hub</div>
+              <div>Outer Ring Road &bull; Peenya Phase 1, Bengaluru, Karnataka - 560058</div>
+              <div style="margin-top: 6px;">
+                📞 24x7 Corporate Helpline: <b>${adminPhone}</b> &bull; ✉️ <b>${adminEmail}</b>
+              </div>
+            </td>
+          </tr>
+
+        </table>
+      </body>
+      </html>
+    `
+  };
+
+  const currentTransporter = getTransporter();
+  let emailSentViaSmtp = false;
+
+  if (currentTransporter) {
+    try {
+      const info = await currentTransporter.sendMail(mailOptions);
+      emailSentViaSmtp = true;
+      console.log(`[Email Service] Dealer approval notification dispatched to ${cleanDealerEmail} (MsgID: ${info?.messageId || 'OK'})`);
+    } catch (err) {
+      console.warn(`[Email Service Warning] Failed to dispatch dealer approval notification via SMTP: ${err.message}`);
+    }
+  }
+
+  console.log('====================================================');
+  console.log(`[PLUMBMART DEALER APPROVAL EMAIL DISPATCHED]`);
+  console.log(`To Dealer: ${dealerName} <${cleanDealerEmail}>`);
+  console.log(`Approved By Officer: ${adminName} <${adminEmail}> (${adminRole})`);
+  console.log(`Credit Limit: ₹${creditLimitNum.toLocaleString('en-IN')}`);
+  console.log(`Phone: ${adminPhone}`);
+  console.log(`Timestamp: ${timestamp}`);
+  console.log(`Dispatched via SMTP: ${emailSentViaSmtp}`);
+  console.log('====================================================');
+
+  return {
+    success: true,
+    dealerEmail: cleanDealerEmail,
+    adminEmail,
+    adminName,
+    adminPhone,
+    creditLimit: creditLimitNum,
+    emailSentViaSmtp,
+    timestamp
+  };
+}
+
 module.exports = {
   sendEmailOtp,
   verifyEmailOtp,
   generateOtp,
   sendOrderReceiptEmail,
-  sendDealerAppealEmail
+  sendDealerAppealEmail,
+  sendDealerSuspensionNotificationEmail,
+  sendDealerApprovalNotificationEmail
 };
 

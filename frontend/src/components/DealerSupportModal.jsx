@@ -38,13 +38,9 @@ export default function DealerSupportModal({ isOpen, onClose, dealerProfile }) {
   const dealerGstin = dealerProfile?.gstin || '29ABCDE1234F1Z5';
   const dealerId = dealerProfile?.id || 'DLR-01';
 
-  // Form State
-  const [subject, setSubject] = useState(
-    `[URGENT APPEAL] Wholesale Account Reinstatement Request - ${dealerName} (${dealerId})`
-  );
-  const [message, setMessage] = useState(
-    `Dear ${suspendingOfficer.name},\n\nWe are writing to officially appeal the suspension of our wholesale dealer account (${dealerName} - GSTIN: ${dealerGstin}).\n\nAll regulatory compliance requirements, address records, and account reconciliation details are up to date. We kindly request an expedited review of our file and reinstatement of our B2B ordering and credit line privileges.\n\nThank you,\nAuthorized Signatory\n${dealerName}\nMobile: ${dealerMobile}`
-  );
+  // Form State (Left empty for suspended dealer to write manually)
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
   
   // onSend & onResponse states
   const [isSending, setIsSending] = useState(false);
@@ -87,8 +83,12 @@ export default function DealerSupportModal({ isOpen, onClose, dealerProfile }) {
   // Submit Handler (onSend -> onResponse)
   const handleSubmitAppeal = async (e) => {
     if (e) e.preventDefault();
+    if (!subject.trim()) {
+      setErrorMessage('Please enter an appeal subject.');
+      return;
+    }
     if (!message.trim()) {
-      setErrorMessage('Please type a message before submitting.');
+      setErrorMessage('Please write your appeal message before submitting.');
       return;
     }
 
@@ -145,7 +145,7 @@ export default function DealerSupportModal({ isOpen, onClose, dealerProfile }) {
     }
   };
 
-  const mailtoUrl = `mailto:${suspendingOfficer.email || 'admin@plumbmart.com'}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+  const mailtoUrl = `mailto:${suspendingOfficer.email || 'admin@plumbmart.com'}?subject=${encodeURIComponent(subject.trim() || 'Dealer Account Reinstatement Appeal')}&body=${encodeURIComponent(message.trim())}`;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
@@ -356,6 +356,7 @@ export default function DealerSupportModal({ isOpen, onClose, dealerProfile }) {
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   disabled={isSending}
+                  placeholder="Enter your appeal subject (e.g. Request to reinstate wholesale dealer account)"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-rose-500 focus:ring-2 focus:ring-rose-200 text-xs font-semibold text-slate-900 transition outline-none disabled:bg-slate-100"
                   required
                 />
@@ -375,7 +376,7 @@ export default function DealerSupportModal({ isOpen, onClose, dealerProfile }) {
                   onChange={(e) => setMessage(e.target.value)}
                   disabled={isSending}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-rose-500 focus:ring-2 focus:ring-rose-200 text-xs text-slate-800 leading-relaxed font-normal transition outline-none resize-none disabled:bg-slate-100"
-                  placeholder="Explain your account status appeal, compliance updates, or payment confirmation..."
+                  placeholder="Write your appeal message, reasons, payment details, or compliance updates to the administrator..."
                   required
                 />
               </div>
@@ -410,7 +411,7 @@ export default function DealerSupportModal({ isOpen, onClose, dealerProfile }) {
 
                   <button
                     type="submit"
-                    disabled={isSending || !message.trim()}
+                    disabled={isSending || !subject.trim() || !message.trim()}
                     className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-700 via-rose-600 to-red-600 hover:from-rose-800 hover:to-red-700 text-white text-xs font-bold transition shadow-md shadow-rose-600/25 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {isSending ? (

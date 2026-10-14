@@ -35,11 +35,13 @@ import {
   Info,
   Lock,
   Unlock,
-  Mail
+  Mail,
+  PartyPopper
 } from 'lucide-react';
 import { addToDealerCart, getDealerCart } from '../utils/dealerCart';
 import DealerSuspendedModal from '../components/DealerSuspendedModal';
 import DealerSupportModal from '../components/DealerSupportModal';
+import DealerWelcomeBackModal from '../components/DealerWelcomeBackModal';
 
 const CATEGORIES = [
   'All Categories',
@@ -105,6 +107,8 @@ export default function DealerDashboard({ currentUser, onLogout }) {
   const [isRefreshingOrders, setIsRefreshingOrders] = useState(false);
   const [isSuspendedModalOpen, setIsSuspendedModalOpen] = useState(false);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
+  const [isWelcomeBackModalOpen, setIsWelcomeBackModalOpen] = useState(false);
+  const [isWelcomeBackActive, setIsWelcomeBackActive] = useState(false);
 
   // Resilient API Helper
   const resilientFetch = async (endpoint, options = {}) => {
@@ -144,16 +148,21 @@ export default function DealerDashboard({ currentUser, onLogout }) {
           // Detect status change from Admin
           if (prev.status && d.status && prev.status !== d.status) {
             if (d.status === 'Suspended') {
+              setIsWelcomeBackModalOpen(false);
+              setIsWelcomeBackActive(false);
               setGovernanceNotice({
                 title: 'Account Suspended by Super Admin',
                 message: 'Your wholesale account access and credit lines have been suspended.',
                 time: new Date().toLocaleTimeString(),
                 isSuspended: true
               });
-            } else if (d.status === 'Approved') {
+            } else if (d.status === 'Approved' || d.status === 'Active') {
+              setIsSuspendedModalOpen(false);
+              setIsWelcomeBackModalOpen(true);
+              setIsWelcomeBackActive(true);
               setGovernanceNotice({
-                title: 'Account Approved & Re-activated',
-                message: 'Your wholesale account has been approved and unlocked!',
+                title: '🎉 Welcome Back! Account Approved & Re-activated',
+                message: 'Your wholesale account has been approved and unlocked by corporate administration.',
                 time: new Date().toLocaleTimeString(),
                 isApproved: true
               });
@@ -349,16 +358,22 @@ export default function DealerDashboard({ currentUser, onLogout }) {
       });
 
       if (updates.status === 'Suspended') {
+        setIsWelcomeBackModalOpen(false);
+        setIsWelcomeBackActive(false);
+        setIsSuspendedModalOpen(true);
         setGovernanceNotice({
           title: 'Account Suspended by Super Admin',
           message: 'Your wholesale account access and credit lines have been suspended. Purchasing is locked.',
           time: new Date().toLocaleTimeString(),
           isSuspended: true
         });
-      } else if (updates.status === 'Approved') {
+      } else if (updates.status === 'Approved' || payload.isApproved || payload.isWelcomeBack) {
+        setIsSuspendedModalOpen(false);
+        setIsWelcomeBackModalOpen(true);
+        setIsWelcomeBackActive(true);
         setGovernanceNotice({
-          title: 'Account Approved & Re-activated',
-          message: 'Your wholesale account has been approved and unlocked by administration.',
+          title: '🎉 Welcome Back! Account Approved & Re-activated',
+          message: 'Your wholesale account has been approved and unlocked by corporate administration.',
           time: new Date().toLocaleTimeString(),
           isApproved: true
         });
@@ -366,6 +381,17 @@ export default function DealerDashboard({ currentUser, onLogout }) {
       setTimeout(() => setGovernanceNotice(null), 6000);
       fetchDealerProfile();
     };
+
+    // Check if dealer was recently approved
+    try {
+      const wb = localStorage.getItem('plumbmart_dealer_welcome_back');
+      if (wb) {
+        localStorage.removeItem('plumbmart_dealer_welcome_back');
+        setIsSuspendedModalOpen(false);
+        setIsWelcomeBackModalOpen(true);
+        setIsWelcomeBackActive(true);
+      }
+    } catch (e) {}
 
     // 2. BroadcastChannel listeners for immediate Admin-to-Dealer sync
     let dealersChannel;
@@ -415,6 +441,11 @@ export default function DealerDashboard({ currentUser, onLogout }) {
           const payload = JSON.parse(e.newValue);
           handleGovernanceUpdate(payload);
         } catch (err) {}
+      }
+      if (e.key === 'plumbmart_dealer_welcome_back') {
+        setIsSuspendedModalOpen(false);
+        setIsWelcomeBackModalOpen(true);
+        setIsWelcomeBackActive(true);
       }
       if (e.key === 'plumbmart_user') {
         fetchDealerProfile();
@@ -679,6 +710,52 @@ export default function DealerDashboard({ currentUser, onLogout }) {
               <Mail className="w-3.5 h-3.5 text-rose-600" />
               <span>Contact Support</span>
             </button>
+          </div>
+        )}
+
+        {/* Welcome Back Celebration Banner (When Approved after Suspension) */}
+        {dealerProfile.status === 'Approved' && isWelcomeBackActive && (
+          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 text-white p-4 sm:p-5 rounded-2xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-2 border-emerald-300 animate-in fade-in slide-in-from-top-3 duration-300 w-full min-w-0">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
+                <PartyPopper className="w-6 h-6 text-white animate-bounce" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-sm font-black uppercase tracking-wider text-emerald-100 flex items-center gap-2">
+                  <span>🎉 Welcome Back, {dealerProfile.name}!</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-white text-emerald-800 font-extrabold uppercase">Approved &amp; Active</span>
+                </h4>
+                <p className="text-xs text-emerald-100 mt-0.5">
+                  Your wholesale B2B account has been officially approved by Corporate Governance. All wholesale catalog pricing, 30D/90D credit lines, and express warehouse dispatches are completely unlocked!
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsWelcomeBackModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs transition flex items-center gap-1.5 cursor-pointer backdrop-blur-xs"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>View Details</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/dealer/products')}
+                className="px-4 py-2 rounded-xl bg-white text-emerald-800 font-bold text-xs hover:bg-emerald-50 transition shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <span>Order Now</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsWelcomeBackActive(false)}
+                className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                title="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -1660,6 +1737,17 @@ export default function DealerDashboard({ currentUser, onLogout }) {
         isOpen={isSupportModalOpen}
         onClose={() => setIsSupportModalOpen(false)}
         dealerProfile={dealerProfile}
+      />
+
+      {/* Welcome Back Celebration Modal on Approval */}
+      <DealerWelcomeBackModal
+        isOpen={isWelcomeBackModalOpen}
+        onClose={() => setIsWelcomeBackModalOpen(false)}
+        dealerName={dealerProfile.name || 'Sri Venkateswara Distributors'}
+        creditLimit={`₹${Number(dealerProfile.creditLimit || 500000).toLocaleString('en-IN')}`}
+        availableCredit={`₹${Number(dealerProfile.availableCredit || 500000).toLocaleString('en-IN')}`}
+        hubName="Peenya Central 01"
+        onExploreCatalog={() => navigate('/dealer/products')}
       />
     </DealerLayout>
   );

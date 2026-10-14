@@ -367,6 +367,14 @@ export default function AdminDashboard({ currentUser, onLogout }) {
         reason: 'Regulatory credit KYC audit & pending governance review'
       };
     } else if (updates.status === 'Approved') {
+      updates.approvedBy = {
+        name: admin?.name || 'System Administrator',
+        email: admin?.email || 'admin@plumbmart.com',
+        role: admin?.accessLevel || admin?.role || 'SuperAdmin',
+        phone: '+91 8000 123 456',
+        department: 'Corporate Credit Governance & Compliance Desk',
+        approvedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+      };
       updates.suspendedBy = null;
     }
 
@@ -398,11 +406,19 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     }
 
     // 1. Broadcast immediately across tabs so Dealer portal updates instantly with zero latency
+    const isApprovedAction = updates.status === 'Approved';
     const broadcastPayload = {
       type: 'DEALER_GOVERNANCE_UPDATED',
       dealerId,
-      updates,
+      updates: {
+        ...updates,
+        isApproved: isApprovedAction,
+        isWelcomeBack: isApprovedAction
+      },
       status: updates.status,
+      isApproved: isApprovedAction,
+      isWelcomeBack: isApprovedAction,
+      dealerName: selectedDealer?.name || 'Sri Venkateswara Distributors',
       timestamp: Date.now()
     };
 
@@ -421,6 +437,13 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     try {
       localStorage.setItem('plumbmart_dealer_governance_broadcast', JSON.stringify(broadcastPayload));
       localStorage.setItem('plumbmart_dealer_status_broadcast', JSON.stringify(broadcastPayload));
+      if (isApprovedAction) {
+        localStorage.setItem('plumbmart_dealer_welcome_back', JSON.stringify({
+          dealerId,
+          dealerName: selectedDealer?.name || 'Sri Venkateswara Distributors',
+          timestamp: Date.now()
+        }));
+      }
     } catch (e) {}
 
     try {
@@ -437,18 +460,29 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     window.dispatchEvent(new CustomEvent('plumbmart_dealer_updated', { detail: broadcastPayload }));
 
     // Instant In-App notification broadcast to Dealers
-    const dealerNoticeMsg = updates.creditLimit !== undefined
-      ? `Credit line updated to ₹${Number(updates.creditLimit).toLocaleString('en-IN')}. Available limit and ledger synced.`
-      : (updates.status ? `Dealer account status updated to "${updates.status}".` : 'Your dealer terms and governance have been updated by Admin.');
+    if (isApprovedAction) {
+      dispatchInAppNotification({
+        title: '🎉 Welcome Back! Account Approved & Re-Activated',
+        message: `Wholesale B2B account for "${selectedDealer?.name || 'Sri Venkateswara Distributors'}" is now officially APPROVED & ACTIVE! Full credit limit and wholesale ordering are unlocked.`,
+        targetGroup: 'Dealers',
+        priority: 'urgent',
+        type: 'DEALER_APPROVED',
+        sender: 'Corporate Governance Desk'
+      });
+    } else {
+      const dealerNoticeMsg = updates.creditLimit !== undefined
+        ? `Credit line updated to ₹${Number(updates.creditLimit).toLocaleString('en-IN')}. Available limit and ledger synced.`
+        : (updates.status ? `Dealer account status updated to "${updates.status}".` : 'Your dealer terms and governance have been updated by Admin.');
 
-    dispatchInAppNotification({
-      title: 'Dealer Account & Credit Updated',
-      message: dealerNoticeMsg,
-      targetGroup: 'Dealers',
-      priority: 'urgent',
-      type: 'DEALER_UPDATE',
-      sender: 'Credit Governance Desk'
-    });
+      dispatchInAppNotification({
+        title: 'Dealer Account & Credit Updated',
+        message: dealerNoticeMsg,
+        targetGroup: 'Dealers',
+        priority: 'urgent',
+        type: 'DEALER_UPDATE',
+        sender: 'Credit Governance Desk'
+      });
+    }
 
     // 2. Resilient PUT request to backend
     const syncDealer = async () => {
@@ -486,10 +520,11 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     syncDealer();
 
     // 3. User feedback toast
+    const targetDealer = dealers.find(d => d.id === dealerId) || { name: 'Dealer', email: 'dealer@plumbmart-demo.com' };
     if (updates.status === 'Suspended') {
-      setSyncToast(`Dealer #${dealerId} access SUSPENDED. Dealer dashboard updated live!`);
+      setSyncToast(`Dealer #${dealerId} SUSPENDED! Official email alert dispatched to ${targetDealer.email || 'dealer'}.`);
     } else if (updates.status === 'Approved') {
-      setSyncToast(`Dealer #${dealerId} APPROVED and re-activated!`);
+      setSyncToast(`Dealer #${dealerId} APPROVED! Welcome & credit activation email sent to ${targetDealer.email || 'dealer'}.`);
     } else {
       setSyncToast(`Dealer #${dealerId} credit policy updated!`);
     }

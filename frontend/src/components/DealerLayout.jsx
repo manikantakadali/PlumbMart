@@ -23,6 +23,7 @@ import {
 import { getDealerCart } from '../utils/dealerCart';
 import InAppNotificationToast from './InAppNotificationToast';
 import DealerSupportModal from './DealerSupportModal';
+import DealerWelcomeBackModal from './DealerWelcomeBackModal';
 
 const SIDEBAR_CATEGORIES = [
   { name: 'All Categories', query: '', icon: Layers, count: 9 },
@@ -101,6 +102,7 @@ export default function DealerLayout({ children, currentUser, onLogout, products
   });
 
   const [isAppealModalOpen, setIsAppealModalOpen] = useState(false);
+  const [isWelcomeBackModalOpen, setIsWelcomeBackModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -113,20 +115,35 @@ export default function DealerLayout({ children, currentUser, onLogout, products
           const json = await res.json();
           if (json && json.success && json.data) {
             const d = json.data;
-            setDealer(prev => ({
-              ...prev,
-              ...d,
-              status: d.status || prev.status,
-              suspendedBy: d.suspendedBy || prev.suspendedBy,
-              creditLimit: `₹${(d.creditLimit || 500000).toLocaleString('en-IN')}`,
-              availableCredit: `₹${(d.availableCredit !== undefined ? d.availableCredit : 500000).toLocaleString('en-IN')}`
-            }));
+            setDealer(prev => {
+              // Detect approval change
+              if (prev.status === 'Suspended' && (d.status === 'Approved' || d.status === 'Active')) {
+                setIsWelcomeBackModalOpen(true);
+              }
+              return {
+                ...prev,
+                ...d,
+                status: d.status || prev.status,
+                suspendedBy: d.suspendedBy || prev.suspendedBy,
+                creditLimit: `₹${(d.creditLimit || 500000).toLocaleString('en-IN')}`,
+                availableCredit: `₹${(d.availableCredit !== undefined ? d.availableCredit : 500000).toLocaleString('en-IN')}`
+              };
+            });
           }
         }
       } catch (e) {}
     };
 
     fetchProfile();
+
+    // Check if dealer was recently approved
+    try {
+      const wb = localStorage.getItem('plumbmart_dealer_welcome_back');
+      if (wb) {
+        localStorage.removeItem('plumbmart_dealer_welcome_back');
+        setIsWelcomeBackModalOpen(true);
+      }
+    } catch (e) {}
 
     // High frequency 1.5s live polling
     const pollTimer = setInterval(fetchProfile, 1500);
@@ -137,6 +154,9 @@ export default function DealerLayout({ children, currentUser, onLogout, products
       chDealers = new BroadcastChannel('plumbmart_dealers');
       chDealers.onmessage = (event) => {
         if (event.data?.type === 'DEALER_GOVERNANCE_UPDATED') {
+          if (event.data.isApproved || event.data.isWelcomeBack || event.data.updates?.status === 'Approved') {
+            setIsWelcomeBackModalOpen(true);
+          }
           if (event.data.updates?.status) {
             setDealer(prev => ({ ...prev, status: event.data.updates.status }));
           }
@@ -149,6 +169,9 @@ export default function DealerLayout({ children, currentUser, onLogout, products
       chOrders = new BroadcastChannel('plumbmart_orders');
       chOrders.onmessage = (event) => {
         if (event.data?.type === 'DEALER_GOVERNANCE_UPDATED') {
+          if (event.data.isApproved || event.data.isWelcomeBack || event.data.updates?.status === 'Approved') {
+            setIsWelcomeBackModalOpen(true);
+          }
           if (event.data.updates?.status) {
             setDealer(prev => ({ ...prev, status: event.data.updates.status }));
           }
@@ -158,9 +181,15 @@ export default function DealerLayout({ children, currentUser, onLogout, products
     } catch (e) {}
 
     const handleStorage = (e) => {
+      if (e.key === 'plumbmart_dealer_welcome_back') {
+        setIsWelcomeBackModalOpen(true);
+      }
       if (e.key === 'plumbmart_dealer_governance_broadcast' || e.key === 'plumbmart_dealer_status_broadcast' || e.key === 'plumbmart_user') {
         try {
           const payload = JSON.parse(e.newValue);
+          if (payload?.isApproved || payload?.isWelcomeBack || payload?.updates?.status === 'Approved') {
+            setIsWelcomeBackModalOpen(true);
+          }
           if (payload?.updates?.status) {
             setDealer(prev => ({ ...prev, status: payload.updates.status }));
           }
@@ -171,6 +200,9 @@ export default function DealerLayout({ children, currentUser, onLogout, products
     window.addEventListener('storage', handleStorage);
 
     const handleCustom = (e) => {
+      if (e.detail?.isApproved || e.detail?.isWelcomeBack || e.detail?.updates?.status === 'Approved') {
+        setIsWelcomeBackModalOpen(true);
+      }
       if (e.detail?.updates?.status) {
         setDealer(prev => ({ ...prev, status: e.detail.updates.status }));
       }
@@ -635,8 +667,8 @@ export default function DealerLayout({ children, currentUser, onLogout, products
 
         {/* Main Content Area */}
         <div className="flex-1 min-w-0 w-full flex flex-col h-full overflow-y-auto pb-20 md:pb-0">
-          {/* Universal Real-Time Suspended Alert Banner across all dealer views */}
-          {dealer.status === 'Suspended' && (
+          {/* Universal Real-Time Suspended Alert Banner across all dealer views (except dashboard which has its dedicated card) */}
+          {dealer.status === 'Suspended' && location.pathname !== '/dealer' && location.pathname !== '/dealer/' && (
             <div className="bg-gradient-to-r from-rose-700 via-rose-600 to-red-600 text-white px-4 sm:px-6 py-3 shadow-md flex items-center justify-between gap-3 border-b border-rose-800 shrink-0">
               <div className="flex items-center gap-2.5 min-w-0">
                 <AlertTriangle className="w-5 h-5 text-rose-200 shrink-0 animate-pulse" />
@@ -803,6 +835,19 @@ export default function DealerLayout({ children, currentUser, onLogout, products
         onClose={() => setIsAppealModalOpen(false)}
         dealerProfile={dealer}
       />
+
+      {/* Universal Welcome Back Celebration Modal on Approval */}
+      {location.pathname !== '/dealer' && location.pathname !== '/dashboard/dealer' && (
+        <DealerWelcomeBackModal
+          isOpen={isWelcomeBackModalOpen}
+          onClose={() => setIsWelcomeBackModalOpen(false)}
+          dealerName={dealer.name || 'Sri Venkateswara Distributors'}
+          creditLimit={dealer.creditLimit || '₹5,00,000'}
+          availableCredit={dealer.availableCredit || '₹5,00,000'}
+          hubName="Peenya Central 01"
+          onExploreCatalog={() => navigate('/dealer/products')}
+        />
+      )}
 
     </div>
   );

@@ -20,7 +20,14 @@ const {
   checkConnection,
   getProductsList
 } = require('./db');
-const { sendEmailOtp, verifyEmailOtp, sendOrderReceiptEmail, sendDealerAppealEmail } = require('./emailService');
+const { 
+  sendEmailOtp, 
+  verifyEmailOtp, 
+  sendOrderReceiptEmail, 
+  sendDealerAppealEmail,
+  sendDealerSuspensionNotificationEmail,
+  sendDealerApprovalNotificationEmail
+} = require('./emailService');
 const {
   generateAuthUrl,
   exchangeCodeForTokens,
@@ -700,6 +707,56 @@ app.put('/api/dealers/:id', (req, res) => {
       updated.availableCredit = Math.max(0, numericLimit - due);
     }
 
+    // Automatic Email Dispatch on Status Change (Suspend or Approve)
+    if (req.body.status === 'Suspended') {
+      const adminOfficer = req.body.suspendedBy || {
+        name: 'System Administrator',
+        email: 'admin@plumbmart.com',
+        role: 'SuperAdmin',
+        phone: '+91 8000 123 456',
+        department: 'Corporate Credit Governance & Compliance Desk',
+        suspendedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+        reason: req.body.reason || 'Regulatory credit KYC audit & pending governance review'
+      };
+      updated.suspendedBy = adminOfficer;
+      
+      // Async dispatch suspension notification email to dealer
+      (async () => {
+        try {
+          await sendDealerSuspensionNotificationEmail({
+            dealer: updated,
+            adminOfficer,
+            reason: adminOfficer.reason
+          });
+        } catch (mErr) {
+          console.warn('[Auto-Email Suspension Warning]:', mErr.message);
+        }
+      })();
+    } else if (req.body.status === 'Approved') {
+      const adminOfficer = req.body.approvedBy || {
+        name: 'System Administrator',
+        email: 'admin@plumbmart.com',
+        role: 'SuperAdmin',
+        phone: '+91 8000 123 456',
+        department: 'Corporate Credit Governance & Compliance Desk',
+        approvedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+      };
+      updated.approvedBy = adminOfficer;
+      updated.suspendedBy = null;
+
+      // Async dispatch approval notification email to dealer
+      (async () => {
+        try {
+          await sendDealerApprovalNotificationEmail({
+            dealer: updated,
+            adminOfficer
+          });
+        } catch (mErr) {
+          console.warn('[Auto-Email Approval Warning]:', mErr.message);
+        }
+      })();
+    }
+
     db.dealers[index] = updated;
 
     // Create an in-app notification entry for Dealers
@@ -721,6 +778,54 @@ app.put('/api/dealers/:id', (req, res) => {
   
   saveDb(db);
   res.json({ success: true, message: 'Dealer updated successfully', data: db.dealers[index] });
+});
+
+// Explicit endpoint: Send Dealer Suspension Email
+app.post('/api/dealers/:id/send-suspension-email', async (req, res) => {
+  try {
+    const db = getDb();
+    const dealer = (db.dealers || []).find(d => d.id === req.params.id || d.mobile === req.params.id) || { id: req.params.id, ...req.body };
+    const adminOfficer = req.body.adminOfficer || req.body.suspendedBy || {
+      name: 'System Administrator',
+      email: 'admin@plumbmart.com',
+      role: 'SuperAdmin',
+      phone: '+91 8000 123 456',
+      department: 'Corporate Credit Governance & Compliance Desk',
+      suspendedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+      reason: req.body.reason || 'Regulatory credit KYC audit & pending governance review'
+    };
+    const result = await sendDealerSuspensionNotificationEmail({
+      dealer,
+      adminOfficer,
+      reason: req.body.reason || adminOfficer.reason
+    });
+    res.json({ success: true, message: `Suspension notice dispatched to ${dealer.email || 'dealer'}`, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Explicit endpoint: Send Dealer Approval Email
+app.post('/api/dealers/:id/send-approval-email', async (req, res) => {
+  try {
+    const db = getDb();
+    const dealer = (db.dealers || []).find(d => d.id === req.params.id || d.mobile === req.params.id) || { id: req.params.id, ...req.body };
+    const adminOfficer = req.body.adminOfficer || req.body.approvedBy || {
+      name: 'System Administrator',
+      email: 'admin@plumbmart.com',
+      role: 'SuperAdmin',
+      phone: '+91 8000 123 456',
+      department: 'Corporate Credit Governance & Compliance Desk',
+      approvedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+    };
+    const result = await sendDealerApprovalNotificationEmail({
+      dealer,
+      adminOfficer
+    });
+    res.json({ success: true, message: `Approval notice dispatched to ${dealer.email || 'dealer'}`, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // Submit Dealer Suspension Appeal & Send Direct Email to Admin Officer
