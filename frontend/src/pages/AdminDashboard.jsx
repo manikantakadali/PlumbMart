@@ -17,6 +17,8 @@ import {
   Check, 
   AlertTriangle, 
   LogOut, 
+  User,
+  UserCheck,
   ChevronRight, 
   ChevronLeft, 
   DollarSign, 
@@ -71,6 +73,21 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     role: 'Admin',
     accessLevel: 'SuperAdmin'
   };
+
+  // Admin Account Menu Dropdown & Profile Modal State
+  const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(false);
+  const [isAdminProfileModalOpen, setIsAdminProfileModalOpen] = useState(false);
+  const adminMenuRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (adminMenuRef.current && !adminMenuRef.current.contains(event.target)) {
+        setIsAdminMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // ==========================================
   // DATA STATES
@@ -1108,19 +1125,90 @@ export default function AdminDashboard({ currentUser, onLogout }) {
             <ArrowLeft className="w-4 h-4" />
           </Link>
 
-          {/* Admin Profile Details */}
-          <div className="flex items-center gap-2.5 pl-2 border-l border-slate-800">
-            <div className="text-right hidden md:block">
-              <p className="text-xs font-bold text-white leading-none">{admin.name}</p>
-              <p className="text-[10px] text-blue-400 font-mono mt-0.5">{admin.accessLevel}</p>
-            </div>
+          {/* Admin Profile Dropdown Menu */}
+          <div className="relative" ref={adminMenuRef}>
             <button
-              onClick={handleAdminLogout}
-              className="p-2 rounded-xl bg-slate-900 hover:bg-rose-950/60 hover:text-rose-400 text-slate-400 border border-slate-800 hover:border-rose-900/50 transition"
-              title="Logout from Admin Panel"
+              onClick={() => {
+                playClickSound();
+                setIsAdminMenuOpen(!isAdminMenuOpen);
+              }}
+              className="flex items-center gap-2.5 p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition active:scale-95 cursor-pointer"
+              title="Admin Profile & Account Menu"
+              aria-label="Admin Profile & Account Menu"
             >
-              <LogOut className="w-4 h-4" />
+              <div className="text-right hidden md:block">
+                <p className="text-xs font-bold text-white leading-none">{admin.name}</p>
+                <p className="text-[10px] text-blue-400 font-mono mt-0.5">{admin.accessLevel}</p>
+              </div>
+              <div className="p-1 rounded-lg bg-slate-800 text-slate-300 flex items-center justify-center">
+                <LogOut className="w-4 h-4 text-slate-300" />
+              </div>
             </button>
+
+            {/* Profile Dropdown Popup */}
+            {isAdminMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 sm:w-60 bg-white rounded-2xl shadow-2xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 divide-y divide-slate-100">
+                {/* User Info Header */}
+                <div className="px-4 py-3">
+                  <p className="text-xs font-bold text-slate-900 truncate">{admin.name}</p>
+                  <p className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">{admin.email}</p>
+                  <span className="inline-flex items-center gap-1 mt-1.5 text-[9px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                    VERIFIED &bull; {admin.accessLevel || 'SUPERADMIN'}
+                  </span>
+                </div>
+
+                {/* Actions */}
+                <div className="py-1">
+                  <button
+                    onClick={() => {
+                      playClickSound();
+                      setIsAdminMenuOpen(false);
+                      setIsAdminProfileModalOpen(true);
+                    }}
+                    className="w-full px-4 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2.5 transition cursor-pointer"
+                  >
+                    <UserCheck className="w-4 h-4 text-slate-400" />
+                    <span>My Profile &amp; KYC</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      playClickSound();
+                      setIsAdminMenuOpen(false);
+                      setIsAdminProfileModalOpen(true);
+                    }}
+                    className="w-full px-4 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2.5 transition cursor-pointer"
+                  >
+                    <User className="w-4 h-4 text-slate-400" />
+                    <span>Quick Profile Info</span>
+                  </button>
+
+                  <Link
+                    to="/"
+                    onClick={() => setIsAdminMenuOpen(false)}
+                    className="w-full px-4 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2.5 transition"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-slate-400" />
+                    <span>Return to Store</span>
+                  </Link>
+                </div>
+
+                {/* Logout Button */}
+                <div className="p-1">
+                  <button
+                    onClick={() => {
+                      setIsAdminMenuOpen(false);
+                      handleAdminLogout();
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2.5 transition cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4 text-rose-500" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -3590,6 +3678,76 @@ export default function AdminDashboard({ currentUser, onLogout }) {
           })}
         </div>
       </nav>
+
+      {/* Admin Profile Details Modal */}
+      {isAdminProfileModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 space-y-5 text-white relative">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-md shadow-blue-600/30">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white leading-tight">Admin Profile &amp; KYC</h3>
+                  <p className="text-xs text-slate-400">Security Clearance &bull; Level 5 Master</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAdminProfileModalOpen(false)}
+                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Profile Info Cards */}
+            <div className="space-y-3 text-xs">
+              <div className="p-3.5 bg-slate-950/70 rounded-2xl border border-slate-800/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Administrator Name</span>
+                  <span className="font-bold text-white">{admin.name}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Admin Email</span>
+                  <span className="font-mono text-blue-400">{admin.email}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Admin ID</span>
+                  <span className="font-mono text-slate-300">{admin.id || 'ADM-01'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Role &amp; Privilege</span>
+                  <span className="font-bold text-emerald-400">{admin.accessLevel || 'SuperAdmin'}</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-950/70 rounded-2xl border border-slate-800/80 space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  System Permissions &amp; Capabilities
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-medium">Zoho Live Sync</span>
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-medium">Dealer Approval</span>
+                  <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-medium">Payment Reconcile</span>
+                  <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-medium">Broadcast Engine</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setIsAdminProfileModalOpen(false)}
+                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition text-center shadow-md shadow-blue-600/25"
+              >
+                Close Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
