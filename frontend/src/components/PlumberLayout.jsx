@@ -149,10 +149,10 @@ export default function PlumberLayout({
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
+    <div className="h-screen bg-slate-50 flex flex-col font-sans text-slate-800 overflow-hidden">
       
       {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs">
+      <header className="shrink-0 z-40 bg-white border-b border-slate-200 shadow-xs">
         <div className="px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
           
           <div className="flex items-center gap-3">
@@ -256,10 +256,10 @@ export default function PlumberLayout({
       </header>
 
       {/* Main Body with Sidebar + Tab Content */}
-      <div className="flex-1 flex w-full relative">
+      <div className="flex-1 flex w-full relative overflow-hidden min-h-0">
         
         {/* Plumber Sidebar - Desktop */}
-        <aside className={`${isCollapsed ? 'w-16 sm:w-18 p-2' : 'w-56 sm:w-60 p-3.5'} hidden md:flex shrink-0 bg-white border-r border-slate-200 flex-col justify-between transition-all duration-200 min-h-[calc(100vh-65px)]`}>
+        <aside className={`${isCollapsed ? 'w-16 sm:w-18 p-2' : 'w-56 sm:w-60 p-3.5'} hidden md:flex shrink-0 bg-white border-r border-slate-200 flex-col justify-between transition-all duration-200 h-full overflow-y-auto overflow-x-hidden z-20`}>
           <div>
             {/* Sidebar Corner Toggle Button */}
             <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-end'} pb-2 mb-2 border-b border-slate-100`}>
@@ -331,7 +331,7 @@ export default function PlumberLayout({
         </aside>
 
         {/* Content Page Area */}
-        <div className="flex-1 overflow-x-hidden min-w-0 pb-20 md:pb-0">
+        <div className="flex-1 min-w-0 w-full h-full overflow-y-auto pb-20 md:pb-0">
           {children}
         </div>
 

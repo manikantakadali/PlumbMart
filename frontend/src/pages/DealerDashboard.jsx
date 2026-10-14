@@ -808,7 +808,7 @@ export default function DealerDashboard({ currentUser, onLogout }) {
               <Box className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
               <span className="truncate">
                 <span className="sm:hidden">Stock</span>
-                <span className="hidden sm:inline">Live Stock & Inventory (స్టాక్)</span>
+                <span className="hidden sm:inline">Live Stock & Inventory</span>
               </span>
               <span className={`hidden sm:inline-block px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold shrink-0 ${
                 activeMainTab === 'stock' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-600'
@@ -829,7 +829,7 @@ export default function DealerDashboard({ currentUser, onLogout }) {
               <Truck className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
               <span className="truncate">
                 <span className="sm:hidden">Tracking</span>
-                <span className="hidden sm:inline">Shipment Tracking (ట్రాకింగ్)</span>
+                <span className="hidden sm:inline">Shipment Tracking</span>
               </span>
               {activeShipmentsCount > 0 && (
                 <span className="hidden sm:inline-block px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-amber-500 text-white animate-pulse shrink-0">
@@ -865,7 +865,7 @@ export default function DealerDashboard({ currentUser, onLogout }) {
         </div>
 
         {/* ========================================================================= */}
-        {/* TAB 1: LIVE STOCK & INVENTORY (స్టాక్ చూడటానికి)                             */}
+        {/* TAB 1: LIVE STOCK & INVENTORY                                           */}
         {/* ========================================================================= */}
         {activeMainTab === 'stock' && (
           <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-200 w-full min-w-0">
@@ -1137,7 +1137,7 @@ export default function DealerDashboard({ currentUser, onLogout }) {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 2: SHIPMENT & ORDER TRACKING (ట్రాక్ చేయడానికి)                            */}
+        {/* TAB 2: SHIPMENT & ORDER TRACKING                                        */}
         {/* ========================================================================= */}
         {activeMainTab === 'tracking' && (
           <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-200 w-full min-w-0">
@@ -1450,7 +1450,7 @@ export default function DealerDashboard({ currentUser, onLogout }) {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 3: CREDIT & INVOICES (క్రెడిట్ స్టేటస్ & ఇన్వాయిస్‌లు)                       */}
+        {/* TAB 3: CREDIT & INVOICES                                                */}
         {/* ========================================================================= */}
         {activeMainTab === 'credit' && (
           <div className="space-y-4 sm:space-y-5 animate-in fade-in duration-200 w-full min-w-0">
