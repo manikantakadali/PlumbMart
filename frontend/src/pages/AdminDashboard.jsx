@@ -48,6 +48,12 @@ import {
   Trash2
 } from 'lucide-react';
 import { dispatchInAppNotification } from '../utils/inAppNotificationDispatcher';
+import { 
+  playSuccessSound, 
+  playClickSound, 
+  playToggleSound, 
+  playWarningSound 
+} from '../utils/soundEffects';
 
 export default function AdminDashboard({ currentUser, onLogout }) {
   const navigate = useNavigate();
@@ -311,6 +317,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
           latencyMs: data.latencyMs || 142,
           errorsCount: 0
         });
+        playSuccessSound();
         setSyncToast('Zoho Master Workbook successfully synchronized! 0 sync errors.');
       }
     } catch {
@@ -321,6 +328,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
         lastSyncedAt: now.toLocaleTimeString() + ' Today',
         latencyMs: 135
       }));
+      playSuccessSound();
       setSyncToast('Zoho Master Workbook synchronized locally (Live Stream Active).');
     } finally {
       setIsSyncingZoho(false);
@@ -330,6 +338,11 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
   // Customer Account Status Toggle (Active / Suspended / Restricted)
   const handleUpdateCustomerStatus = (customerId, newStatus) => {
+    if (newStatus === 'Suspended' || newStatus === 'Restricted') {
+      playWarningSound();
+    } else {
+      playSuccessSound();
+    }
     setCustomers(prev => prev.map(c => 
       c.id === customerId ? { ...c, status: newStatus } : c
     ));
@@ -406,6 +419,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     }
 
     // 1. Broadcast immediately across tabs so Dealer portal updates instantly with zero latency
+    const targetDealer = dealers.find(d => d.id === dealerId) || selectedDealer;
+    const dealerName = targetDealer?.name || 'Sri Venkateswara Distributors';
     const isApprovedAction = updates.status === 'Approved';
     const broadcastPayload = {
       type: 'DEALER_GOVERNANCE_UPDATED',
@@ -418,7 +433,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       status: updates.status,
       isApproved: isApprovedAction,
       isWelcomeBack: isApprovedAction,
-      dealerName: selectedDealer?.name || 'Sri Venkateswara Distributors',
+      dealerName,
       timestamp: Date.now()
     };
 
@@ -438,11 +453,15 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       localStorage.setItem('plumbmart_dealer_governance_broadcast', JSON.stringify(broadcastPayload));
       localStorage.setItem('plumbmart_dealer_status_broadcast', JSON.stringify(broadcastPayload));
       if (isApprovedAction) {
+        localStorage.setItem('plumbmart_show_welcome_back', 'true');
         localStorage.setItem('plumbmart_dealer_welcome_back', JSON.stringify({
           dealerId,
-          dealerName: selectedDealer?.name || 'Sri Venkateswara Distributors',
+          dealerName,
           timestamp: Date.now()
         }));
+      } else if (updates.status === 'Suspended') {
+        localStorage.removeItem('plumbmart_show_welcome_back');
+        localStorage.removeItem('plumbmart_dealer_welcome_back');
       }
     } catch (e) {}
 
@@ -519,13 +538,22 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     };
     syncDealer();
 
-    // 3. User feedback toast
-    const targetDealer = dealers.find(d => d.id === dealerId) || { name: 'Dealer', email: 'dealer@plumbmart-demo.com' };
+    // 3. User feedback toast & sound
+    const dealerEmail = targetDealer?.email || 'dealer@plumbmart-demo.com';
     if (updates.status === 'Suspended') {
-      setSyncToast(`Dealer #${dealerId} SUSPENDED! Official email alert dispatched to ${targetDealer.email || 'dealer'}.`);
+      playWarningSound();
+      setSyncToast(`Dealer #${dealerId} SUSPENDED! Official email alert dispatched to ${dealerEmail}.`);
     } else if (updates.status === 'Approved') {
-      setSyncToast(`Dealer #${dealerId} APPROVED! Welcome & credit activation email sent to ${targetDealer.email || 'dealer'}.`);
+      playSuccessSound();
+      setSyncToast(`Dealer #${dealerId} APPROVED! Welcome & credit activation email sent to ${dealerEmail}.`);
     } else {
+      if (updates.credit30Days !== undefined && updates.credit90Days === undefined && updates.creditLimit === undefined) {
+        playToggleSound(updates.credit30Days);
+      } else if (updates.credit90Days !== undefined && updates.credit30Days === undefined && updates.creditLimit === undefined) {
+        playToggleSound(updates.credit90Days);
+      } else {
+        playSuccessSound();
+      }
       setSyncToast(`Dealer #${dealerId} credit policy updated!`);
     }
     setTimeout(() => setSyncToast(null), 3500);
@@ -533,6 +561,11 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
   // Plumber Verification & Status Toggle
   const handleUpdatePlumber = (plumberId, updates) => {
+    if (updates.status === 'SUSPENDED' || updates.status === 'REJECTED') {
+      playWarningSound();
+    } else {
+      playSuccessSound();
+    }
     setPlumbers(prev => prev.map(p => 
       p.id === plumberId ? { ...p, ...updates } : p
     ));
@@ -623,9 +656,11 @@ export default function AdminDashboard({ currentUser, onLogout }) {
           });
         }
       }
+      playSuccessSound();
       setSyncToast(`Order #${orderId} marked as "${newStatus}"! Live customer tracking updated.`);
       setTimeout(() => setSyncToast(null), 3000);
     } catch (err) {
+      playWarningSound();
       console.warn('Order status sync error:', err.message);
     }
   };
@@ -652,11 +687,14 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       }
       const data = await res.json();
       if (data && data.success) {
+        playSuccessSound();
         setReceiptFeedback({ type: 'success', message: `Receipt sent to ${data.emailResult?.email || order.clientEmail || 'registered email'}!` });
       } else {
+        playWarningSound();
         setReceiptFeedback({ type: 'error', message: data?.message || 'Failed to dispatch receipt' });
       }
     } catch (err) {
+      playWarningSound();
       setReceiptFeedback({ type: 'error', message: err.message || 'Error sending receipt' });
     } finally {
       setSendingReceiptId(null);
@@ -684,6 +722,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     setNotifications(prev => [newNotif, ...prev]);
     setBroadcastModalOpen(false);
     setBroadcastForm({ targetGroup: 'All', title: '', message: '' });
+    playSuccessSound();
     setSyncToast(`Broadcast announcement dispatched to ${cleanTarget}!`);
     setTimeout(() => setSyncToast(null), 4000);
 
@@ -1091,7 +1130,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                 </span>
               )}
               <button
-                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                onClick={() => {
+                  playClickSound();
+                  setIsSidebarCollapsed(!isSidebarCollapsed);
+                }}
                 className="w-6 h-6 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition"
                 title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               >
@@ -1112,7 +1154,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                 return (
                   <button
                     key={item.id}
-                    onClick={() => setActiveTab(item.id)}
+                    onClick={() => {
+                      playClickSound();
+                      setActiveTab(item.id);
+                    }}
                     title={item.label}
                     className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2.5'} rounded-xl text-xs font-semibold transition ${
                       isSelected
@@ -1149,7 +1194,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                 return (
                   <button
                     key={item.id}
-                    onClick={() => setActiveTab(item.id)}
+                    onClick={() => {
+                      playClickSound();
+                      setActiveTab(item.id);
+                    }}
                     title={item.label}
                     className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2.5'} rounded-xl text-xs font-semibold transition ${
                       isSelected
@@ -1211,7 +1259,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={handleTriggerZohoSync}
+                    onClick={() => {
+                      playClickSound();
+                      handleTriggerZohoSync();
+                    }}
                     disabled={isSyncingZoho}
                     className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/20 transition active:scale-95"
                   >
@@ -1226,7 +1277,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                 
                 {/* Metric 1: Total Users */}
                 <div 
-                  onClick={() => setActiveTab('customers')}
+                  onClick={() => {
+                    playClickSound();
+                    setActiveTab('customers');
+                  }}
                   className="cursor-pointer bg-slate-950 p-4 sm:p-5 rounded-2xl border border-slate-800 hover:border-slate-700 transition space-y-2 group"
                 >
                   <div className="flex items-center justify-between text-slate-400">
@@ -1248,7 +1302,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
                 {/* Metric 2: Orders Total & Revenue */}
                 <div 
-                  onClick={() => setActiveTab('orders')}
+                  onClick={() => {
+                    playClickSound();
+                    setActiveTab('orders');
+                  }}
                   className="cursor-pointer bg-slate-950 p-4 sm:p-5 rounded-2xl border border-slate-800 hover:border-slate-700 transition space-y-2 group"
                 >
                   <div className="flex items-center justify-between text-slate-400">
@@ -1270,7 +1327,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
                 {/* Metric 3: Dealer Credit Outstandings */}
                 <div 
-                  onClick={() => setActiveTab('payments')}
+                  onClick={() => {
+                    playClickSound();
+                    setActiveTab('payments');
+                  }}
                   className="cursor-pointer bg-slate-950 p-4 sm:p-5 rounded-2xl border border-slate-800 hover:border-slate-700 transition space-y-2 group"
                 >
                   <div className="flex items-center justify-between text-slate-400">
@@ -1292,7 +1352,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
                 {/* Metric 4: Zoho Master Sync */}
                 <div 
-                  onClick={() => setActiveTab('products')}
+                  onClick={() => {
+                    playClickSound();
+                    setActiveTab('products');
+                  }}
                   className="cursor-pointer bg-slate-950 p-4 sm:p-5 rounded-2xl border border-slate-800 hover:border-slate-700 transition space-y-2 group"
                 >
                   <div className="flex items-center justify-between text-slate-400">
@@ -1378,7 +1441,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                     ].map((item, idx) => (
                       <div
                         key={idx}
-                        onClick={() => setActiveTab(item.tab)}
+                        onClick={() => {
+                          playClickSound();
+                          setActiveTab(item.tab);
+                        }}
                         className="cursor-pointer p-3 rounded-xl bg-slate-900 hover:bg-slate-800/80 border border-slate-800/80 transition flex items-center justify-between"
                       >
                         <div>
@@ -1658,7 +1724,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                         {/* Approval / Suspension Actions */}
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => setSelectedDealer(dealer)}
+                            onClick={() => {
+                              playClickSound();
+                              setSelectedDealer(dealer);
+                            }}
                             className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold border border-slate-800"
                           >
                             Edit Credit Limit
@@ -2907,6 +2976,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                     type="checkbox"
                     defaultChecked={selectedDealer.credit30Days}
                     id="credit30Check"
+                    onChange={(e) => playToggleSound(e.target.checked)}
                     className="w-4 h-4 text-indigo-600 rounded"
                   />
                   <span className="text-slate-200">Enable 30-Day Pay Later Terms</span>
@@ -2916,6 +2986,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                     type="checkbox"
                     defaultChecked={selectedDealer.credit90Days}
                     id="credit90Check"
+                    onChange={(e) => playToggleSound(e.target.checked)}
                     className="w-4 h-4 text-emerald-600 rounded"
                   />
                   <span className="text-slate-200">Grant 90-Day Tier-1 Credit Facility</span>
@@ -2925,7 +2996,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
             <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
               <button
-                onClick={() => setSelectedDealer(null)}
+                onClick={() => {
+                  playClickSound();
+                  setSelectedDealer(null);
+                }}
                 className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
               >
                 Cancel
