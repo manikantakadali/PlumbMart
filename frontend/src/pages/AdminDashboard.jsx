@@ -804,7 +804,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
+    <div className="h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white overflow-hidden">
       
       {/* Toast Notification */}
       {syncToast && (
@@ -839,7 +839,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       )}
 
       {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
+      <header className="shrink-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-md shadow-blue-600/30">
             <ShieldCheck className="w-5 h-5" />
@@ -887,10 +887,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       </header>
 
       {/* Main Body with Sidebar + Workspace */}
-      <div className="flex-1 flex w-full relative">
+      <div className="flex-1 flex w-full relative overflow-hidden min-h-0">
         
         {/* Left Admin Navigation Sidebar */}
-        <aside className={`${isSidebarCollapsed ? 'w-16 p-2' : 'w-64 p-3.5'} shrink-0 bg-slate-950 border-r border-slate-800 flex flex-col justify-between transition-all duration-200 min-h-[calc(100vh-57px)]`}>
+        <aside className={`${isSidebarCollapsed ? 'w-16 p-2' : 'w-64 p-3.5'} shrink-0 bg-slate-950 border-r border-slate-800 flex flex-col justify-between transition-all duration-200 h-full overflow-y-auto overflow-x-hidden z-20`}>
           <div className="space-y-5">
             {/* Sidebar Toggle Corner */}
             <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} pb-2 border-b border-slate-800/80`}>
@@ -998,7 +998,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
         </aside>
 
         {/* Content Workspace Area */}
-        <main className="flex-1 overflow-x-hidden p-4 sm:p-6 lg:p-8 space-y-6">
+        <main className="flex-1 min-w-0 h-full overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 space-y-6">
 
           {/* ======================================================== */}
           {/* 1. DASHBOARD OVERVIEW                                    */}

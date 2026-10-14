@@ -220,17 +220,20 @@ export default function RegisterPage({ onRegisterSuccess }) {
       }
 
       const registeredUser = data.user;
-      if (onRegisterSuccess) {
-        onRegisterSuccess(registeredUser);
-      }
+      setSuccessMsg(`Account created for ${registeredUser.name}! Redirecting to Login...`);
 
-      if (registeredUser.role === 'Dealer') {
-        navigate('/dealer');
-      } else if (registeredUser.role === 'Plumber') {
-        navigate('/plumber');
-      } else {
-        navigate('/customer');
-      }
+      const query = new URLSearchParams({
+        registered: 'true',
+        redirect: redirectTarget || 'checkout',
+        mobile: clean,
+        name: registeredUser.name || formData.name.trim(),
+        email: formData.email.trim(),
+        role: formData.role
+      }).toString();
+
+      setTimeout(() => {
+        navigate(`/login?${query}`);
+      }, 900);
     } catch (err) {
       setError(err.message || 'Connection error. Please try again.');
     } finally {
@@ -287,6 +290,19 @@ export default function RegisterPage({ onRegisterSuccess }) {
           {error && (
             <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium animate-in fade-in duration-200">
               {error}
+            </div>
+          )}
+
+          {/* Checkout Banner for New Customers */}
+          {redirectTarget === 'checkout' && (
+            <div className="mb-4 p-3.5 bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded-2xl flex items-start gap-2.5 shadow-2xs">
+              <Lock className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-blue-900 text-xs">New Customer Registration</p>
+                <p className="text-[11px] text-blue-700 mt-0.5 leading-relaxed">
+                  Register your account to buy. Once registered, you will log in to complete checkout with your saved cart items!
+                </p>
+              </div>
             </div>
           )}
 

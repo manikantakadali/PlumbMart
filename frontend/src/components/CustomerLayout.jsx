@@ -383,6 +383,16 @@ export default function CustomerLayout({ children, currentUser, onLogout }) {
 
           {/* Header Right Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Track Orders Icon */}
+            <Link
+              to="/customer/orders"
+              className="p-2 text-slate-600 hover:text-blue-600 rounded-xl transition flex items-center justify-center hover:bg-slate-50"
+              title="Track Orders"
+              aria-label="Track Orders"
+            >
+              <Truck className="w-5 h-5" />
+            </Link>
+
             {/* Announcements Notification Bell */}
             <div className="relative" ref={notifDropdownRef}>
               <button
