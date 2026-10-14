@@ -16,9 +16,13 @@ import {
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
-  Bell
+  Bell,
+  AlertTriangle,
+  Mail
 } from 'lucide-react';
 import { getDealerCart } from '../utils/dealerCart';
+import InAppNotificationToast from './InAppNotificationToast';
+import DealerSupportModal from './DealerSupportModal';
 
 const SIDEBAR_CATEGORIES = [
   { name: 'All Categories', query: '', icon: Layers, count: 9 },
@@ -79,22 +83,32 @@ export default function DealerLayout({ children, currentUser, onLogout, products
   }, [isCollapsed]);
 
   const [dealer, setDealer] = useState(() => {
-    return currentUser && currentUser.role === 'Dealer' ? currentUser : {
+    let saved = null;
+    try {
+      const item = localStorage.getItem('plumbmart_user');
+      saved = item ? JSON.parse(item) : null;
+    } catch (e) {}
+
+    return (currentUser && currentUser.role === 'Dealer') ? currentUser : (saved && (saved.role === 'Dealer' || saved.id === 'DLR-01') ? saved : {
       id: 'DLR-01',
       name: 'Sri Venkateswara Distributors',
       mobile: '9000011111',
       gstin: '29ABCDE1234F1Z5',
-      availableCredit: '₹3,40,000',
+      status: 'Approved',
+      availableCredit: '₹5,00,000',
       creditLimit: '₹5,00,000'
-    };
+    });
   });
+
+  const [isAppealModalOpen, setIsAppealModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        let res = await fetch('/api/dealers/DLR-01');
-        if (!res || !res.ok) res = await fetch('http://localhost:5000/api/dealers/DLR-01');
-        if (!res || !res.ok) res = await fetch('http://localhost:4000/api/dealers/DLR-01');
+        const targetId = currentUser?.id || currentUser?.mobile || dealer.id || 'DLR-01';
+        let res = await fetch(`/api/dealers/${targetId}`);
+        if (!res || !res.ok) res = await fetch(`http://localhost:5000/api/dealers/${targetId}`);
+        if (!res || !res.ok) res = await fetch(`http://localhost:4000/api/dealers/${targetId}`);
         if (res && res.ok) {
           const json = await res.json();
           if (json && json.success && json.data) {
@@ -102,8 +116,10 @@ export default function DealerLayout({ children, currentUser, onLogout, products
             setDealer(prev => ({
               ...prev,
               ...d,
+              status: d.status || prev.status,
+              suspendedBy: d.suspendedBy || prev.suspendedBy,
               creditLimit: `₹${(d.creditLimit || 500000).toLocaleString('en-IN')}`,
-              availableCredit: `₹${(d.availableCredit !== undefined ? d.availableCredit : 340000).toLocaleString('en-IN')}`
+              availableCredit: `₹${(d.availableCredit !== undefined ? d.availableCredit : 500000).toLocaleString('en-IN')}`
             }));
           }
         }
@@ -112,26 +128,62 @@ export default function DealerLayout({ children, currentUser, onLogout, products
 
     fetchProfile();
 
-    let channel;
+    // High frequency 1.5s live polling
+    const pollTimer = setInterval(fetchProfile, 1500);
+
+    let chDealers;
+    let chOrders;
     try {
-      channel = new BroadcastChannel('plumbmart_orders');
-      channel.onmessage = (event) => {
+      chDealers = new BroadcastChannel('plumbmart_dealers');
+      chDealers.onmessage = (event) => {
         if (event.data?.type === 'DEALER_GOVERNANCE_UPDATED') {
+          if (event.data.updates?.status) {
+            setDealer(prev => ({ ...prev, status: event.data.updates.status }));
+          }
+          fetchProfile();
+        }
+      };
+    } catch (e) {}
+
+    try {
+      chOrders = new BroadcastChannel('plumbmart_orders');
+      chOrders.onmessage = (event) => {
+        if (event.data?.type === 'DEALER_GOVERNANCE_UPDATED') {
+          if (event.data.updates?.status) {
+            setDealer(prev => ({ ...prev, status: event.data.updates.status }));
+          }
           fetchProfile();
         }
       };
     } catch (e) {}
 
     const handleStorage = (e) => {
-      if (e.key === 'plumbmart_dealer_governance_broadcast') {
+      if (e.key === 'plumbmart_dealer_governance_broadcast' || e.key === 'plumbmart_dealer_status_broadcast' || e.key === 'plumbmart_user') {
+        try {
+          const payload = JSON.parse(e.newValue);
+          if (payload?.updates?.status) {
+            setDealer(prev => ({ ...prev, status: payload.updates.status }));
+          }
+        } catch (err) {}
         fetchProfile();
       }
     };
     window.addEventListener('storage', handleStorage);
 
+    const handleCustom = (e) => {
+      if (e.detail?.updates?.status) {
+        setDealer(prev => ({ ...prev, status: e.detail.updates.status }));
+      }
+      fetchProfile();
+    };
+    window.addEventListener('plumbmart_dealer_updated', handleCustom);
+
     return () => {
-      if (channel) channel.close();
+      clearInterval(pollTimer);
+      if (chDealers) chDealers.close();
+      if (chOrders) chOrders.close();
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('plumbmart_dealer_updated', handleCustom);
     };
   }, []);
 
@@ -158,6 +210,7 @@ export default function DealerLayout({ children, currentUser, onLogout, products
     }
   });
   const notifDropdownRef = useRef(null);
+  const knownAnnouncementsRef = useRef(null);
 
   const fetchDealerAnnouncements = async () => {
     try {
@@ -169,6 +222,23 @@ export default function DealerLayout({ children, currentUser, onLogout, products
       }
       const data = await res.json();
       if (data && data.success && Array.isArray(data.data)) {
+        if (knownAnnouncementsRef.current === null) {
+          knownAnnouncementsRef.current = new Set(data.data.map(a => a.id));
+        } else {
+          // Detect fresh announcements and trigger in-app toast
+          const fresh = data.data.filter(a => !knownAnnouncementsRef.current.has(a.id));
+          if (fresh.length > 0) {
+            fresh.forEach(item => {
+              knownAnnouncementsRef.current.add(item.id);
+              window.dispatchEvent(new CustomEvent('plumbmart_inapp_notify', {
+                detail: {
+                  ...item,
+                  type: 'ANNOUNCEMENT'
+                }
+              }));
+            });
+          }
+        }
         setAnnouncements(data.data);
       }
     } catch (err) {}
@@ -253,6 +323,8 @@ export default function DealerLayout({ children, currentUser, onLogout, products
 
   return (
     <div className="h-screen bg-slate-50 flex flex-col font-sans text-slate-800 w-full max-w-full overflow-hidden min-w-0">
+      {/* Real-Time In-App Notification Toast */}
+      <InAppNotificationToast role="Dealer" />
       
       {/* Main Top Header */}
       <header className="shrink-0 z-40 bg-white border-b border-slate-200 shadow-xs">
@@ -272,6 +344,11 @@ export default function DealerLayout({ children, currentUser, onLogout, products
                   <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
                     B2B
                   </span>
+                  {dealer.status === 'Suspended' && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-600 text-white shadow-xs animate-pulse">
+                      SUSPENDED
+                    </span>
+                  )}
                 </div>
               </div>
             </Link>
@@ -418,6 +495,17 @@ export default function DealerLayout({ children, currentUser, onLogout, products
                   <div className="px-3.5 py-2 border-b border-slate-100">
                     <p className="text-xs font-bold text-slate-900 truncate">{dealer.name}</p>
                     <p className="text-[10px] text-slate-500 font-mono">GSTIN: {dealer.gstin}</p>
+                    {dealer.status === 'Suspended' ? (
+                      <span className="inline-flex items-center gap-1 mt-1 text-[9px] font-black uppercase tracking-wider text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-md">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
+                        Account Suspended
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 mt-1 text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Verified Active
+                      </span>
+                    )}
                   </div>
 
                   <Link
@@ -547,6 +635,32 @@ export default function DealerLayout({ children, currentUser, onLogout, products
 
         {/* Main Content Area */}
         <div className="flex-1 min-w-0 w-full flex flex-col h-full overflow-y-auto pb-20 md:pb-0">
+          {/* Universal Real-Time Suspended Alert Banner across all dealer views */}
+          {dealer.status === 'Suspended' && (
+            <div className="bg-gradient-to-r from-rose-700 via-rose-600 to-red-600 text-white px-4 sm:px-6 py-3 shadow-md flex items-center justify-between gap-3 border-b border-rose-800 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <AlertTriangle className="w-5 h-5 text-rose-200 shrink-0 animate-pulse" />
+                <div className="min-w-0">
+                  <p className="text-xs sm:text-sm font-black uppercase tracking-wide text-rose-100 flex items-center gap-2">
+                    <span>Account Suspended by Super Admin</span>
+                    <span className="px-1.5 py-0.2 rounded bg-black/30 text-[9px] font-bold">Access Frozen</span>
+                  </p>
+                  <p className="text-[11px] sm:text-xs text-rose-100/90 truncate sm:whitespace-normal">
+                    Wholesale checkout, credit lines, and dispatch requests are currently locked. Contact support at 1800-2026-PLUM.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAppealModalOpen(true)}
+                className="px-3 py-1.5 bg-white text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-black shadow-xs shrink-0 flex items-center gap-1.5 active:scale-95 transition cursor-pointer"
+              >
+                <Mail className="w-3.5 h-3.5 text-rose-600" />
+                <span>Contact Support</span>
+              </button>
+            </div>
+          )}
+
           {/* Render Page Content */}
           <div className="flex-1 w-full min-w-0">
             {children}
@@ -682,6 +796,13 @@ export default function DealerLayout({ children, currentUser, onLogout, products
           </div>
         </div>
       )}
+
+      {/* Universal Dealer Support & Account Suspension Appeal Modal */}
+      <DealerSupportModal
+        isOpen={isAppealModalOpen}
+        onClose={() => setIsAppealModalOpen(false)}
+        dealerProfile={dealer}
+      />
 
     </div>
   );

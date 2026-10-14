@@ -204,8 +204,394 @@ function verifyEmailOtp(email, otp) {
   };
 }
 
+/**
+ * Send Bill Receipt & Congratulatory Best Wishes Email for placed orders
+ * @param {object} params { order, recipientEmail }
+ */
+async function sendOrderReceiptEmail({ order, recipientEmail }) {
+  const cleanEmail = String(recipientEmail || order.clientEmail || '').trim().toLowerCase();
+  if (!cleanEmail || !cleanEmail.includes('@')) {
+    console.warn(`[Email Service] Cannot send order receipt: Invalid or missing email address (${cleanEmail})`);
+    return { success: false, error: 'Invalid recipient email' };
+  }
+
+  const items = Array.isArray(order.items) ? order.items : [];
+  const itemsSubtotal = items.reduce((sum, it) => sum + (Number(it.price || 0) * Number(it.qty || it.quantity || 1)), 0);
+  const grandTotal = Number(order.total || itemsSubtotal);
+  const gstInclusive = Math.round(grandTotal * 0.18 / 1.18); // 18% inclusive GST
+
+  const clientName = order.clientName || 'Valued Partner';
+  const orderId = order.id || 'PM-ORDER';
+  const zohoSo = order.zohoSalesOrder || ('SO-ZH-' + String(orderId).replace(/\D/g, '').slice(-5));
+  const orderDate = order.date || new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const roleName = order.clientType || 'Customer';
+
+  // Build items rows HTML
+  const itemsHtml = items.length > 0
+    ? items.map((it) => {
+        const qty = it.qty || it.quantity || 1;
+        const price = Number(it.price || 0);
+        const lineTotal = price * qty;
+        return `
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 12px 10px; font-size: 13px; color: #1e293b;">
+              <div style="font-weight: 700; color: #0f172a;">${it.name || 'Plumbing Product'}</div>
+              <div style="font-size: 11px; color: #64748b; font-family: monospace;">SKU: ${it.sku || it.id || 'PLB-SKU'}</div>
+            </td>
+            <td style="padding: 12px 10px; font-size: 13px; color: #334155; text-align: center; font-weight: 600;">
+              ${qty}
+            </td>
+            <td style="padding: 12px 10px; font-size: 13px; color: #334155; text-align: right; font-family: monospace;">
+              ₹${price.toLocaleString('en-IN')}
+            </td>
+            <td style="padding: 12px 10px; font-size: 13px; color: #0f172a; text-align: right; font-weight: 700; font-family: monospace;">
+              ₹${lineTotal.toLocaleString('en-IN')}
+            </td>
+          </tr>
+        `;
+      }).join('')
+    : `
+      <tr>
+        <td colspan="4" style="padding: 16px; text-align: center; color: #64748b; font-size: 13px;">
+          Plumbing supplies order package &bull; ₹${grandTotal.toLocaleString('en-IN')}
+        </td>
+      </tr>
+    `;
+
+  const isCreditOrder = order.paymentMethod && order.paymentMethod.includes('Credit');
+
+  const mailOptions = {
+    from: process.env.SMTP_FROM || (process.env.GMAIL_USER ? `"PlumbMart Orders" <${process.env.GMAIL_USER}>` : '"PlumbMart Orders" <orders@plumbmart.com>'),
+    to: cleanEmail,
+    subject: `🎉 Congratulations! Your PlumbMart Order #${orderId} is Confirmed (Bill Receipt)`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Order Receipt #${orderId} - PlumbMart</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; padding: 24px 12px;">
+          <tr>
+            <td align="center">
+              <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 640px; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01); border: 1px solid #e2e8f0;">
+                
+                <!-- HEADER BRANDING BANNER -->
+                <tr>
+                  <td style="background: linear-gradient(135deg, #1e3a8a 0%, #0284c7 100%); padding: 32px 28px; text-align: center; color: #ffffff;">
+                    <h1 style="margin: 0; font-size: 28px; font-weight: 900; letter-spacing: -0.5px;">Plumb<span style="color: #93c5fd;">Mart</span></h1>
+                    <p style="margin: 6px 0 0 0; font-size: 12px; font-weight: 500; letter-spacing: 0.5px; opacity: 0.9; text-transform: uppercase;">
+                      Official Tax Invoice &amp; Order Confirmation Receipt
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- CONGRATULATIONS & BEST WISHES CARD -->
+                <tr>
+                  <td style="padding: 28px 28px 20px 28px;">
+                    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 16px; padding: 20px 22px; margin-bottom: 24px;">
+                      <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 22px; margin-right: 8px;">🎉</span>
+                        <h2 style="margin: 0; font-size: 18px; font-weight: 800; color: #166534;">
+                          Congratulations &amp; Warm Best Wishes, ${clientName}!
+                        </h2>
+                      </div>
+                      <p style="margin: 8px 0 0 0; font-size: 13px; line-height: 1.6; color: #15803d;">
+                        Thank you for choosing <b>PlumbMart</b> as your trusted plumbing &amp; sanitary supplier! Your order 
+                        <strong style="background-color: #dcfce7; padding: 2px 6px; border-radius: 6px; font-family: monospace; color: #14532d;">#${orderId}</strong> 
+                        has been successfully placed and allocated to our regional Peenya fulfillment center for priority packaging and swift dispatch.
+                      </p>
+                    </div>
+
+                    <!-- INVOICE META & SUMMARY GRID -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; margin-bottom: 24px;">
+                      <tr>
+                        <td style="padding: 16px; width: 50%; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                          <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Order ID</div>
+                          <div style="font-size: 15px; font-weight: 800; color: #0f172a; font-family: monospace; margin-top: 2px;">#${orderId}</div>
+                        </td>
+                        <td style="padding: 16px; width: 50%; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                          <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Zoho Sales Order</div>
+                          <div style="font-size: 14px; font-weight: 700; color: #2563eb; font-family: monospace; margin-top: 2px;">${zohoSo}</div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 16px; width: 50%; border-right: 1px solid #e2e8f0; vertical-align: top;">
+                          <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Order Date &amp; Account</div>
+                          <div style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 2px;">${orderDate}</div>
+                          <div style="font-size: 11px; color: #0284c7; font-weight: 700; margin-top: 2px;">Role: ${roleName}</div>
+                        </td>
+                        <td style="padding: 16px; width: 50%; vertical-align: top;">
+                          <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Payment Status</div>
+                          <div style="font-size: 13px; font-weight: 700; color: ${isCreditOrder ? '#d97706' : '#16a34a'}; margin-top: 2px;">
+                            ${order.paymentStatus || (isCreditOrder ? 'Approved Credit' : 'Paid in Full')}
+                          </div>
+                          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${order.paymentMethod || 'Online Payment'}</div>
+                          ${order.creditDueDate ? `<div style="font-size: 11px; color: #b45309; font-weight: bold; margin-top: 2px;">Due: ${order.creditDueDate}</div>` : ''}
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- DELIVERY ADDRESS CARD -->
+                    <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px 20px; margin-bottom: 24px;">
+                      <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #0369a1; letter-spacing: 0.5px; margin-bottom: 6px;">
+                        📍 Delivery &amp; Site Address
+                      </div>
+                      <div style="font-size: 13px; font-weight: 700; color: #0f172a;">${order.clientName} <span style="font-weight: normal; color: #64748b; font-size: 12px;">(+91 ${order.clientMobile})</span></div>
+                      <div style="font-size: 12px; color: #475569; line-height: 1.5; margin-top: 4px;">
+                        ${order.deliveryAddress || 'Standard Registered Site Address'}
+                      </div>
+                      <div style="font-size: 11px; font-weight: 600; color: #059669; margin-top: 8px;">
+                        🚚 Estimated Delivery: <b>${order.expectedDate || 'Tomorrow Morning'}</b>
+                      </div>
+                    </div>
+
+                    <!-- ITEMIZED BILL / RECEIPT TABLE -->
+                    <div style="margin-bottom: 24px;">
+                      <div style="font-size: 13px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;">
+                        🧾 Itemized Bill Receipt
+                      </div>
+                      <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                        <thead>
+                          <tr style="background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1;">
+                            <th align="left" style="padding: 10px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">Product / Description</th>
+                            <th align="center" style="padding: 10px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; width: 60px;">Qty</th>
+                            <th align="right" style="padding: 10px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; width: 90px;">Rate</th>
+                            <th align="right" style="padding: 10px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; width: 100px;">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${itemsHtml}
+                        </tbody>
+                        <tfoot>
+                          <tr style="background-color: #f8fafc; border-top: 1px solid #e2e8f0;">
+                            <td colspan="3" align="right" style="padding: 10px; font-size: 12px; color: #64748b; font-weight: 600;">Items Subtotal:</td>
+                            <td align="right" style="padding: 10px; font-size: 13px; color: #0f172a; font-family: monospace; font-weight: 700;">₹${itemsSubtotal.toLocaleString('en-IN')}</td>
+                          </tr>
+                          <tr style="background-color: #f8fafc;">
+                            <td colspan="3" align="right" style="padding: 8px 10px; font-size: 12px; color: #64748b; font-weight: 600;">GST / Taxes (18% Included):</td>
+                            <td align="right" style="padding: 8px 10px; font-size: 12px; color: #059669; font-family: monospace; font-weight: 600;">₹${gstInclusive.toLocaleString('en-IN')}</td>
+                          </tr>
+                          <tr style="background-color: #f8fafc;">
+                            <td colspan="3" align="right" style="padding: 8px 10px; font-size: 12px; color: #64748b; font-weight: 600;">Express Dispatch &amp; Freight:</td>
+                            <td align="right" style="padding: 8px 10px; font-size: 12px; color: #059669; font-weight: 700;">FREE</td>
+                          </tr>
+                          <tr style="background-color: #eff6ff; border-top: 2px solid #bfdbfe;">
+                            <td colspan="3" align="right" style="padding: 14px 10px; font-size: 15px; color: #1e3a8a; font-weight: 900;">Grand Total:</td>
+                            <td align="right" style="padding: 14px 10px; font-size: 18px; color: #1d4ed8; font-family: monospace; font-weight: 900;">₹${grandTotal.toLocaleString('en-IN')}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+
+                    <!-- TRACK ORDER CALL TO ACTION -->
+                    <div style="background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 14px; padding: 20px; text-align: center; margin-bottom: 24px;">
+                      <h3 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 700; color: #0f172a;">Track Your Dispatch in Real-Time</h3>
+                      <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748b;">
+                        Follow warehouse allocation, quality inspection, driver vehicle tracking, and estimated arrival updates.
+                      </p>
+                      <a href="https://plumbmart.com" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 13px; padding: 12px 28px; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.25);">
+                        View Live Tracking in Portal &rarr;
+                      </a>
+                    </div>
+
+                  </td>
+                </tr>
+
+                <!-- FOOTER -->
+                <tr>
+                  <td style="background-color: #0f172a; color: #94a3b8; padding: 24px 28px; text-align: center; font-size: 11px; line-height: 1.6; border-top: 1px solid #e2e8f0;">
+                    <div style="font-weight: 700; color: #f8fafc; font-size: 12px; margin-bottom: 4px;">PlumbMart Technologies Pvt. Ltd.</div>
+                    <div>Peenya Industrial Area &bull; Bellandur Outer Ring Road, Bengaluru, Karnataka - 560103</div>
+                    <div style="margin-top: 8px;">
+                      📞 24x7 Support Helpline: <b>+91 8000 123 456</b> &bull; ✉️ <b>support@plumbmart.com</b>
+                    </div>
+                    <div style="margin-top: 8px; color: #64748b;">
+                      This is an electronically generated invoice and receipt. No physical signature required.
+                    </div>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `
+  };
+
+  const currentTransporter = getTransporter();
+  let emailSentViaSmtp = false;
+
+  if (currentTransporter) {
+    try {
+      const info = await currentTransporter.sendMail(mailOptions);
+      emailSentViaSmtp = true;
+      console.log(`[Email Service] Live order receipt dispatched to ${cleanEmail} (MsgID: ${info?.messageId || 'OK'})`);
+    } catch (err) {
+      console.warn(`[Email Service Warning] Failed to dispatch order receipt via SMTP to ${cleanEmail}: ${err.message}.`);
+    }
+  }
+
+  // Always log to console for visibility
+  console.log('====================================================');
+  console.log(`[PLUMBMART ORDER RECEIPT] Sent to: ${cleanEmail}`);
+  console.log(`[PLUMBMART ORDER RECEIPT] Order: #${orderId} | Total: ₹${grandTotal.toLocaleString('en-IN')}`);
+  console.log(`[PLUMBMART ORDER RECEIPT] Client: ${clientName} (${roleName})`);
+  console.log(`[PLUMBMART ORDER RECEIPT] Sent via SMTP: ${emailSentViaSmtp}`);
+  console.log('====================================================');
+
+  return {
+    success: true,
+    email: cleanEmail,
+    orderId,
+    emailSentViaSmtp,
+    grandTotal
+  };
+}
+
+/**
+ * Send Dealer Account Suspension Appeal Email to Administrator
+ * @param {object} params { dealer, adminEmail, adminName, subject, message, ticketId }
+ */
+async function sendDealerAppealEmail({ dealer = {}, adminEmail = 'admin@plumbmart.com', adminName = 'System Administrator', subject, message, ticketId }) {
+  const cleanAdminEmail = String(adminEmail || 'admin@plumbmart.com').trim().toLowerCase();
+  const appealTicket = ticketId || ('TKT-APP-' + Math.floor(100000 + Math.random() * 900000));
+  const dealerName = dealer.name || 'Sri Venkateswara Distributors';
+  const dealerMobile = dealer.mobile || '9000011111';
+  const dealerEmail = dealer.email || 'dealer@plumbmart-demo.com';
+  const dealerGstin = dealer.gstin || '29ABCDE1234F1Z5';
+  const dealerId = dealer.id || 'DLR-01';
+  const appealSubject = subject || `[APPEAL] Account Suspension Review Request - ${dealerName} (${dealerId})`;
+  const appealMessage = message || 'Request for account reinstatement and credit access review.';
+  const nowStr = new Date().toLocaleString('en-IN', { dateStyle: 'full', timeStyle: 'short' });
+
+  const mailOptions = {
+    from: process.env.SMTP_FROM || (process.env.GMAIL_USER ? `"PlumbMart Appeals" <${process.env.GMAIL_USER}>` : '"PlumbMart Appeals" <appeals@plumbmart.com>'),
+    to: cleanAdminEmail,
+    replyTo: dealerEmail,
+    subject: `🚨 [DEALER APPEAL] ${appealSubject} | Ticket #${appealTicket}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8"></head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 24px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 650px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
+          <tr>
+            <td style="background: linear-gradient(135deg, #b91c1c 0%, #dc2626 50%, #ea580c 100%); padding: 32px 28px; text-align: center; color: #ffffff;">
+              <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; background: rgba(0,0,0,0.25); display: inline-block; padding: 4px 14px; border-radius: 9999px; margin-bottom: 12px;">High-Priority Governance Appeal</div>
+              <h1 style="margin: 0; font-size: 22px; font-weight: 900; letter-spacing: -0.5px;">Dealer Account Suspension Appeal</h1>
+              <p style="margin: 6px 0 0 0; font-size: 13px; color: #fee2e2;">Submitted by Suspended Dealer Partner for Administrative Review</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 28px;">
+              <table width="100%" style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 14px 18px; margin-bottom: 24px;">
+                <tr>
+                  <td>
+                    <div style="font-size: 11px; text-transform: uppercase; font-weight: 800; color: #991b1b;">Appeal Ticket Reference</div>
+                    <div style="font-size: 18px; font-family: monospace; font-weight: 900; color: #b91c1c; margin-top: 2px;">#${appealTicket}</div>
+                  </td>
+                  <td align="right">
+                    <div style="font-size: 11px; text-transform: uppercase; font-weight: 800; color: #991b1b;">Target Officer</div>
+                    <div style="font-size: 13px; font-weight: 800; color: #450a0a; margin-top: 2px;">${adminName}</div>
+                    <div style="font-size: 11px; color: #7f1d1d;">${cleanAdminEmail}</div>
+                  </td>
+                </tr>
+              </table>
+
+              <h3 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #334155; margin: 0 0 12px 0;">Suspended Dealer Details</h3>
+              <table width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 24px; font-size: 13px;">
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b; width: 35%;">Business Name:</td>
+                  <td style="padding: 6px 0; font-weight: 700; color: #0f172a;">${dealerName} (${dealerId})</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">GSTIN:</td>
+                  <td style="padding: 6px 0; font-weight: 700; color: #0f172a; font-family: monospace;">${dealerGstin}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Contact Mobile:</td>
+                  <td style="padding: 6px 0; font-weight: 700; color: #0f172a;">${dealerMobile}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Dealer Email:</td>
+                  <td style="padding: 6px 0; font-weight: 700; color: #0284c7;">${dealerEmail}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Current Status:</td>
+                  <td style="padding: 6px 0; font-weight: 800; color: #dc2626;"><span style="background: #fee2e2; padding: 2px 8px; border-radius: 6px;">SUSPENDED (ACCESS LOCKED)</span></td>
+                </tr>
+              </table>
+
+              <h3 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #334155; margin: 0 0 12px 0;">Official Appeal Submission</h3>
+              <div style="background-color: #ffffff; border: 1px solid #cbd5e1; border-left: 4px solid #dc2626; border-radius: 10px; padding: 18px; margin-bottom: 24px;">
+                <div style="font-size: 14px; font-weight: 800; color: #0f172a; margin-bottom: 8px;">Subject: ${appealSubject}</div>
+                <div style="font-size: 13px; line-height: 1.6; color: #334155; white-space: pre-wrap;">${appealMessage}</div>
+                <div style="margin-top: 14px; padding-top: 10px; border-top: 1px dashed #e2e8f0; font-size: 11px; color: #94a3b8;">
+                  Submitted on: ${nowStr}
+                </div>
+              </div>
+
+              <div style="text-align: center; margin-top: 24px;">
+                <a href="http://localhost:5173/admin" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 700; padding: 12px 24px; border-radius: 10px;">
+                  Open Admin Portal & Review Dealer Status &rarr;
+                </a>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #0f172a; color: #94a3b8; padding: 20px; text-align: center; font-size: 11px; border-top: 1px solid #e2e8f0;">
+              PlumbMart Corporate Credit Governance &bull; Peenya Central Hub, Bengaluru<br/>
+              Helpline: +91 8000 123 456 &bull; admin@plumbmart.com
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `
+  };
+
+  const currentTransporter = getTransporter();
+  let emailSentViaSmtp = false;
+
+  if (currentTransporter) {
+    try {
+      const info = await currentTransporter.sendMail(mailOptions);
+      emailSentViaSmtp = true;
+      console.log(`[Email Service] Live dealer appeal dispatched to ${cleanAdminEmail} (MsgID: ${info?.messageId || 'OK'})`);
+    } catch (err) {
+      console.warn(`[Email Service Warning] Failed to dispatch dealer appeal via SMTP: ${err.message}`);
+    }
+  }
+
+  console.log('====================================================');
+  console.log(`[PLUMBMART DEALER APPEAL DISPATCHED]`);
+  console.log(`Ticket: #${appealTicket}`);
+  console.log(`Recipient Officer: ${adminName} <${cleanAdminEmail}>`);
+  console.log(`Dealer: ${dealerName} (${dealerId}, ${dealerMobile})`);
+  console.log(`Subject: ${appealSubject}`);
+  console.log(`Dispatched via SMTP: ${emailSentViaSmtp}`);
+  console.log('====================================================');
+
+  return {
+    success: true,
+    ticketId: appealTicket,
+    adminEmail: cleanAdminEmail,
+    adminName,
+    emailSentViaSmtp,
+    submittedAt: nowStr
+  };
+}
+
 module.exports = {
   sendEmailOtp,
   verifyEmailOtp,
-  generateOtp
+  generateOtp,
+  sendOrderReceiptEmail,
+  sendDealerAppealEmail
 };
+

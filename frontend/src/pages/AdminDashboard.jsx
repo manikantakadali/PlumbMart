@@ -47,6 +47,7 @@ import {
   Printer,
   Trash2
 } from 'lucide-react';
+import { dispatchInAppNotification } from '../utils/inAppNotificationDispatcher';
 
 export default function AdminDashboard({ currentUser, onLogout }) {
   const navigate = useNavigate();
@@ -103,6 +104,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   // 5. Orders
   const [orders, setOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [sendingReceiptId, setSendingReceiptId] = useState(null);
+  const [receiptFeedback, setReceiptFeedback] = useState(null);
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('All');
   const [orderClientFilter, setOrderClientFilter] = useState('All');
@@ -333,6 +336,16 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     if (selectedCustomer && selectedCustomer.id === customerId) {
       setSelectedCustomer(prev => ({ ...prev, status: newStatus }));
     }
+
+    // Instant In-App notification broadcast to Customers
+    dispatchInAppNotification({
+      title: 'Customer Account Updated',
+      message: `Your PlumbMart customer account status has been updated to "${newStatus}".`,
+      targetGroup: 'Customers',
+      type: 'CUSTOMER_UPDATE',
+      sender: admin.name || 'Admin Operations'
+    });
+
     fetch(`http://localhost:4000/api/customers/${customerId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -341,11 +354,26 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   };
 
   // Dealer Approval & Credit Management
-  const handleUpdateDealer = (dealerId, updates) => {
+  const handleUpdateDealer = (dealerId, initialUpdates) => {
+    const updates = { ...initialUpdates };
+    if (updates.status === 'Suspended') {
+      updates.suspendedBy = {
+        name: admin?.name || 'System Administrator',
+        email: admin?.email || 'admin@plumbmart.com',
+        role: admin?.accessLevel || admin?.role || 'SuperAdmin',
+        phone: '+91 8000 123 456',
+        department: 'Corporate Credit Governance & Compliance Desk',
+        suspendedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+        reason: 'Regulatory credit KYC audit & pending governance review'
+      };
+    } else if (updates.status === 'Approved') {
+      updates.suspendedBy = null;
+    }
+
     setDealers(prev => prev.map(d => {
       if (d.id !== dealerId) return d;
       const newLimit = updates.creditLimit !== undefined ? updates.creditLimit : d.creditLimit;
-      const due = typeof d.outstandingDue === 'number' ? d.outstandingDue : 160000;
+      const due = typeof d.outstandingDue === 'number' ? d.outstandingDue : 0;
       const newAvail = updates.availableCredit !== undefined ? updates.availableCredit : Math.max(0, newLimit - due);
       return {
         ...d,
@@ -358,7 +386,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     if (selectedDealer && selectedDealer.id === dealerId) {
       setSelectedDealer(prev => {
         const newLimit = updates.creditLimit !== undefined ? updates.creditLimit : prev.creditLimit;
-        const due = typeof prev.outstandingDue === 'number' ? prev.outstandingDue : 160000;
+        const due = typeof prev.outstandingDue === 'number' ? prev.outstandingDue : 0;
         const newAvail = updates.availableCredit !== undefined ? updates.availableCredit : Math.max(0, newLimit - due);
         return {
           ...prev,
@@ -369,47 +397,103 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       });
     }
 
-    // 1. Broadcast immediately across tabs so Dealer portal updates instantly
+    // 1. Broadcast immediately across tabs so Dealer portal updates instantly with zero latency
     const broadcastPayload = {
       type: 'DEALER_GOVERNANCE_UPDATED',
       dealerId,
       updates,
+      status: updates.status,
       timestamp: Date.now()
     };
+
     try {
-      const ch = new BroadcastChannel('plumbmart_orders');
-      ch.postMessage(broadcastPayload);
-      ch.close();
+      const chDealers = new BroadcastChannel('plumbmart_dealers');
+      chDealers.postMessage(broadcastPayload);
+      setTimeout(() => chDealers.close(), 3000);
     } catch (e) {}
+
+    try {
+      const chOrders = new BroadcastChannel('plumbmart_orders');
+      chOrders.postMessage(broadcastPayload);
+      setTimeout(() => chOrders.close(), 3000);
+    } catch (e) {}
+
     try {
       localStorage.setItem('plumbmart_dealer_governance_broadcast', JSON.stringify(broadcastPayload));
+      localStorage.setItem('plumbmart_dealer_status_broadcast', JSON.stringify(broadcastPayload));
     } catch (e) {}
+
+    try {
+      const savedUserStr = localStorage.getItem('plumbmart_user');
+      if (savedUserStr) {
+        const savedUser = JSON.parse(savedUserStr);
+        if (savedUser && (savedUser.id === dealerId || savedUser.role === 'Dealer' || savedUser.name?.includes('Venkateswara'))) {
+          const updatedUser = { ...savedUser, ...updates };
+          localStorage.setItem('plumbmart_user', JSON.stringify(updatedUser));
+        }
+      }
+    } catch (e) {}
+
+    window.dispatchEvent(new CustomEvent('plumbmart_dealer_updated', { detail: broadcastPayload }));
+
+    // Instant In-App notification broadcast to Dealers
+    const dealerNoticeMsg = updates.creditLimit !== undefined
+      ? `Credit line updated to ₹${Number(updates.creditLimit).toLocaleString('en-IN')}. Available limit and ledger synced.`
+      : (updates.status ? `Dealer account status updated to "${updates.status}".` : 'Your dealer terms and governance have been updated by Admin.');
+
+    dispatchInAppNotification({
+      title: 'Dealer Account & Credit Updated',
+      message: dealerNoticeMsg,
+      targetGroup: 'Dealers',
+      priority: 'urgent',
+      type: 'DEALER_UPDATE',
+      sender: 'Credit Governance Desk'
+    });
 
     // 2. Resilient PUT request to backend
     const syncDealer = async () => {
+      let saved = false;
       try {
-        await fetch(`/api/dealers/${dealerId}`, {
+        const res = await fetch(`/api/dealers/${dealerId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updates)
         });
+        if (res.ok) saved = true;
       } catch (e) {}
-      try {
-        await fetch(`http://localhost:5000/api/dealers/${dealerId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updates)
-        });
-      } catch (e) {}
-      try {
-        await fetch(`http://localhost:4000/api/dealers/${dealerId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updates)
-        });
-      } catch (e) {}
+
+      if (!saved) {
+        try {
+          const res = await fetch(`http://localhost:5000/api/dealers/${dealerId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+          });
+          if (res.ok) saved = true;
+        } catch (e) {}
+      }
+
+      if (!saved) {
+        try {
+          await fetch(`http://localhost:4000/api/dealers/${dealerId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+          });
+        } catch (e) {}
+      }
     };
     syncDealer();
+
+    // 3. User feedback toast
+    if (updates.status === 'Suspended') {
+      setSyncToast(`Dealer #${dealerId} access SUSPENDED. Dealer dashboard updated live!`);
+    } else if (updates.status === 'Approved') {
+      setSyncToast(`Dealer #${dealerId} APPROVED and re-activated!`);
+    } else {
+      setSyncToast(`Dealer #${dealerId} credit policy updated!`);
+    }
+    setTimeout(() => setSyncToast(null), 3500);
   };
 
   // Plumber Verification & Status Toggle
@@ -420,6 +504,21 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     if (selectedPlumber && selectedPlumber.id === plumberId) {
       setSelectedPlumber(prev => ({ ...prev, ...updates }));
     }
+
+    // Instant In-App notification broadcast to Plumbers
+    const plumbMsg = updates.status 
+      ? `Your plumber account verification status is now "${updates.status}".`
+      : 'Your plumber credentials, skills, and rating have been updated by Admin.';
+
+    dispatchInAppNotification({
+      title: 'Plumber Profile & Verification Updated',
+      message: plumbMsg,
+      targetGroup: 'Plumbers',
+      priority: 'high',
+      type: 'PLUMBER_UPDATE',
+      sender: admin.name || 'Admin Operations'
+    });
+
     fetch(`http://localhost:4000/api/plumbers/${plumberId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -449,6 +548,19 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     } catch (e) {}
 
     window.dispatchEvent(new CustomEvent('plumbmart_status_updated', { detail: { orderId, status: newStatus } }));
+
+    // Instant In-App notification broadcast to target role (Dealer or Customer)
+    const targetOrder = orders.find(o => o.id === orderId);
+    const clientTarget = (targetOrder?.clientType || '').toLowerCase().includes('dealer') ? 'Dealers' : 'Customers';
+
+    dispatchInAppNotification({
+      title: `Order #${orderId} ${newStatus}`,
+      message: `Your order #${orderId} status has been updated to "${newStatus}" by PlumbMart Operations.`,
+      targetGroup: clientTarget,
+      priority: newStatus.toLowerCase() === 'delivered' ? 'normal' : 'high',
+      type: 'ORDER_UPDATE',
+      sender: 'PlumbMart Logistics'
+    });
 
     // 3. Persist to Backend API (with resilient proxy / port fallbacks)
     try {
@@ -480,6 +592,39 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       setTimeout(() => setSyncToast(null), 3000);
     } catch (err) {
       console.warn('Order status sync error:', err.message);
+    }
+  };
+
+  // Resend or dispatch Bill Receipt & Congratulatory Email
+  const handleSendOrderReceipt = async (order) => {
+    if (!order) return;
+    setSendingReceiptId(order.id);
+    setReceiptFeedback(null);
+    try {
+      let res;
+      try {
+        res = await fetch(`/api/orders/${order.id}/send-receipt`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: order.clientEmail })
+        });
+      } catch (e1) {
+        res = await fetch(`http://localhost:5000/api/orders/${order.id}/send-receipt`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: order.clientEmail })
+        });
+      }
+      const data = await res.json();
+      if (data && data.success) {
+        setReceiptFeedback({ type: 'success', message: `Receipt sent to ${data.emailResult?.email || order.clientEmail || 'registered email'}!` });
+      } else {
+        setReceiptFeedback({ type: 'error', message: data?.message || 'Failed to dispatch receipt' });
+      }
+    } catch (err) {
+      setReceiptFeedback({ type: 'error', message: err.message || 'Error sending receipt' });
+    } finally {
+      setSendingReceiptId(null);
     }
   };
 
@@ -519,6 +664,17 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     } catch (err) {}
 
     window.dispatchEvent(new CustomEvent('plumbmart_announcement_created', { detail: newNotif }));
+
+    // Instant in-app notification popup across target role screens
+    dispatchInAppNotification({
+      id: newNotif.id,
+      title: newNotif.title,
+      message: newNotif.message,
+      targetGroup: cleanTarget,
+      priority: 'high',
+      type: 'ANNOUNCEMENT',
+      sender: admin.name || 'System Admin'
+    });
 
     // 3. Persist to Backend API with resilient fallbacks
     try {
@@ -2793,26 +2949,29 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
                 <span className="text-[10px] text-slate-400 font-bold uppercase block">Assigned Activities &amp; Status:</span>
-                <div className="space-y-2 divide-y divide-slate-800/80">
-                  <div className="pt-1.5 first:pt-0 flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-white">#JOB-701 &bull; CPVC Pipeline &amp; Stopcock Setup</p>
-                      <p className="text-[10px] text-slate-400">Bellandur &bull; Customer: Rahul Sharma</p>
-                    </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                      In Progress
-                    </span>
+                {Array.isArray(selectedPlumber.jobs) && selectedPlumber.jobs.length > 0 ? (
+                  <div className="space-y-2 divide-y divide-slate-800/80">
+                    {selectedPlumber.jobs.map((job, idx) => (
+                      <div key={job.id || idx} className="pt-1.5 first:pt-0 flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-white">#{job.id || `JOB-${idx+1}`} &bull; {job.title || 'Plumbing Service'}</p>
+                          <p className="text-[10px] text-slate-400">{job.location || selectedPlumber.serviceZone || 'Service Site'} &bull; Customer: {job.customer || 'Direct Request'}</p>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          job.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                          job.status === 'In Progress' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                          'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                        }`}>
+                          {job.status || 'Active'}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                  <div className="pt-1.5 flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-white">#JOB-702 &bull; Booster Pump Mounting</p>
-                      <p className="text-[10px] text-slate-400">Whitefield &bull; Customer: Sanjay Reddy</p>
-                    </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                      Assigned
-                    </span>
+                ) : (
+                  <div className="py-3 text-center text-slate-400 text-xs">
+                    No active job tickets currently assigned to this plumber.
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -3218,16 +3377,43 @@ export default function AdminDashboard({ currentUser, onLogout }) {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between">
-              <span className="text-xs text-slate-400">
-                Order <span className="font-mono font-bold text-slate-200">{selectedOrder.id}</span>
-              </span>
-              <button
-                onClick={() => setSelectedOrder(null)}
-                className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition"
-              >
-                Close
-              </button>
+            <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-400">
+                  Order <span className="font-mono font-bold text-slate-200">{selectedOrder.id}</span>
+                </span>
+                {receiptFeedback && (
+                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-md ${
+                    receiptFeedback.type === 'success' 
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                      : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                  }`}>
+                    {receiptFeedback.message}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSendOrderReceipt(selectedOrder)}
+                  disabled={sendingReceiptId === selectedOrder.id}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-blue-600/20"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>{sendingReceiptId === selectedOrder.id ? 'Sending Bill Receipt...' : 'Email Bill Receipt'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedOrder(null);
+                    setReceiptFeedback(null);
+                  }}
+                  className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

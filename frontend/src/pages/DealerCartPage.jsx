@@ -32,6 +32,14 @@ export default function DealerCartPage({ currentUser, onLogout }) {
     checkedAt: null
   });
   const [isCheckingStock, setIsCheckingStock] = useState(false);
+  const [dealerStatus, setDealerStatus] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('plumbmart_user') || 'null');
+      return saved?.status || currentUser?.status || 'Approved';
+    } catch {
+      return 'Approved';
+    }
+  });
 
   // Sync cart from storage
   const reloadCart = useCallback(() => {
@@ -42,7 +50,32 @@ export default function DealerCartPage({ currentUser, onLogout }) {
   useEffect(() => {
     reloadCart();
     window.addEventListener('dealer_cart_updated', reloadCart);
-    return () => window.removeEventListener('dealer_cart_updated', reloadCart);
+
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch('/api/dealers/DLR-01');
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data?.status) setDealerStatus(json.data.status);
+        }
+      } catch (e) {}
+    };
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 1500);
+
+    let ch;
+    try {
+      ch = new BroadcastChannel('plumbmart_dealers');
+      ch.onmessage = (e) => {
+        if (e.data?.updates?.status) setDealerStatus(e.data.updates.status);
+      };
+    } catch (e) {}
+
+    return () => {
+      window.removeEventListener('dealer_cart_updated', reloadCart);
+      clearInterval(interval);
+      if (ch) ch.close();
+    };
   }, [reloadCart]);
 
   // Live stock verification API call to backend
@@ -357,8 +390,21 @@ export default function DealerCartPage({ currentUser, onLogout }) {
                   </div>
                 </div>
 
-                {/* Checkout Button - Protected by Stock Availability */}
-                {stockCheckResult.allInStock ? (
+                {/* Checkout Button - Protected by Stock Availability & Suspension */}
+                {dealerStatus === 'Suspended' ? (
+                  <div className="space-y-2">
+                    <button
+                      disabled
+                      className="w-full py-3 px-4 rounded-xl bg-rose-100 text-rose-700 font-bold text-xs cursor-not-allowed flex items-center justify-center gap-2 border border-rose-300"
+                    >
+                      <AlertTriangle className="w-4 h-4 text-rose-600" />
+                      <span>Checkout Locked (Account Suspended)</span>
+                    </button>
+                    <p className="text-[10px] text-rose-600 text-center font-medium leading-tight">
+                      Your wholesale account has been suspended by administration.
+                    </p>
+                  </div>
+                ) : stockCheckResult.allInStock ? (
                   <button
                     onClick={() => navigate('/dealer/checkout')}
                     className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white font-bold text-xs shadow-lg shadow-indigo-600/25 transition"

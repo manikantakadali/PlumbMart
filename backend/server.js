@@ -20,7 +20,7 @@ const {
   checkConnection,
   getProductsList
 } = require('./db');
-const { sendEmailOtp, verifyEmailOtp } = require('./emailService');
+const { sendEmailOtp, verifyEmailOtp, sendOrderReceiptEmail, sendDealerAppealEmail } = require('./emailService');
 const {
   generateAuthUrl,
   exchangeCodeForTokens,
@@ -701,10 +701,133 @@ app.put('/api/dealers/:id', (req, res) => {
     }
 
     db.dealers[index] = updated;
+
+    // Create an in-app notification entry for Dealers
+    if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
+    const noticeMsg = req.body.creditLimit !== undefined
+      ? `Credit line updated to ₹${Number(updated.creditLimit).toLocaleString('en-IN')}. Available limit and ledger synced.`
+      : (req.body.status ? `Dealer account status updated to "${req.body.status}".` : 'Dealer account terms updated by Admin.');
+    db.notifications.unshift({
+      id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
+      title: 'Dealer Account & Credit Updated',
+      message: noticeMsg,
+      targetGroup: 'Dealers',
+      priority: 'urgent',
+      sentAt: 'Just now',
+      createdAt: new Date().toISOString(),
+      sender: 'Credit Governance Desk'
+    });
   }
   
   saveDb(db);
   res.json({ success: true, message: 'Dealer updated successfully', data: db.dealers[index] });
+});
+
+// Submit Dealer Suspension Appeal & Send Direct Email to Admin Officer
+app.post('/api/dealers/appeal', async (req, res) => {
+  try {
+    const { 
+      dealerId, 
+      dealerName, 
+      dealerMobile, 
+      dealerEmail, 
+      dealerGstin,
+      adminEmail, 
+      adminName, 
+      subject, 
+      message 
+    } = req.body;
+
+    if (!message || message.trim().length === 0) {
+      return res.status(400).json({ success: false, message: 'Appeal message is required.' });
+    }
+
+    const db = getDb();
+    if (!db.dealers) db.dealers = [];
+    
+    // Find the dealer
+    const dealerIndex = db.dealers.findIndex(d => d.id === dealerId || d.mobile === dealerMobile);
+    const existingDealer = dealerIndex !== -1 ? db.dealers[dealerIndex] : null;
+
+    const finalDealer = {
+      id: dealerId || existingDealer?.id || 'DLR-01',
+      name: dealerName || existingDealer?.name || 'Sri Venkateswara Distributors',
+      mobile: dealerMobile || existingDealer?.mobile || '9000011111',
+      email: dealerEmail || existingDealer?.email || 'dealer@plumbmart-demo.com',
+      gstin: dealerGstin || existingDealer?.gstin || '29ABCDE1234F1Z5'
+    };
+
+    // Determine admin recipient
+    const targetAdminEmail = adminEmail || existingDealer?.suspendedBy?.email || 'admin@plumbmart.com';
+    const targetAdminName = adminName || existingDealer?.suspendedBy?.name || 'System Administrator';
+    const ticketId = 'TKT-APP-' + Math.floor(100000 + Math.random() * 900000);
+    const finalSubject = subject || `[APPEAL] Account Suspension Review - ${finalDealer.name} (${finalDealer.id})`;
+
+    // 1. Dispatch Email via emailService
+    let emailResult = { emailSentViaSmtp: false };
+    try {
+      emailResult = await sendDealerAppealEmail({
+        dealer: finalDealer,
+        adminEmail: targetAdminEmail,
+        adminName: targetAdminName,
+        subject: finalSubject,
+        message: message.trim(),
+        ticketId
+      });
+    } catch (eErr) {
+      console.warn('[Appeal Email Dispatch Warning]:', eErr.message);
+    }
+
+    // 2. Append appeal record to Dealer profile
+    const appealEntry = {
+      ticketId,
+      sentTo: targetAdminEmail,
+      adminName: targetAdminName,
+      subject: finalSubject,
+      message: message.trim(),
+      status: 'Under Review',
+      submittedAt: new Date().toISOString()
+    };
+
+    if (existingDealer) {
+      if (!Array.isArray(existingDealer.appeals)) existingDealer.appeals = [];
+      existingDealer.appeals.unshift(appealEntry);
+      db.dealers[dealerIndex] = existingDealer;
+    }
+
+    // 3. Insert High-Priority Admin Notification so SuperAdmin sees it on Dashboard
+    if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
+    db.notifications.unshift({
+      id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
+      title: `🚨 Urgent: Dealer Appeal #${ticketId}`,
+      message: `Suspended dealer "${finalDealer.name}" submitted an appeal to ${targetAdminName} (${targetAdminEmail}): "${finalSubject}"`,
+      targetGroup: 'Admin',
+      type: 'DEALER_APPEAL',
+      priority: 'urgent',
+      ticketId,
+      dealerId: finalDealer.id,
+      dealerName: finalDealer.name,
+      adminEmail: targetAdminEmail,
+      sentAt: 'Today, ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAt: new Date().toISOString(),
+      sender: `${finalDealer.name} (Suspended Dealer)`
+    });
+
+    saveDb(db);
+
+    return res.status(200).json({
+      success: true,
+      message: `Appeal submitted successfully. Notification and email dispatched to ${targetAdminName} (${targetAdminEmail}).`,
+      ticketId,
+      adminEmail: targetAdminEmail,
+      adminName: targetAdminName,
+      submittedAt: appealEntry.submittedAt,
+      emailSentViaSmtp: emailResult.emailSentViaSmtp
+    });
+  } catch (err) {
+    console.error('[API Error POST /api/dealers/appeal]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to process appeal: ' + err.message });
+  }
 });
 
 // Get Plumbers list
@@ -722,6 +845,23 @@ app.put('/api/plumbers/:id', (req, res) => {
   }
 
   db.plumbers[index] = { ...db.plumbers[index], ...req.body };
+
+  // Create an in-app notification entry for Plumbers
+  if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
+  const plumbNoticeMsg = req.body.status 
+    ? `Your plumber account verification status is now "${req.body.status}".`
+    : 'Your plumber profile credentials, skills, or rating were updated by Admin.';
+  db.notifications.unshift({
+    id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
+    title: 'Plumber Profile & Verification Updated',
+    message: plumbNoticeMsg,
+    targetGroup: 'Plumbers',
+    priority: 'high',
+    sentAt: 'Just now',
+    createdAt: new Date().toISOString(),
+    sender: 'Operations Desk'
+  });
+
   saveDb(db);
   res.json({ success: true, message: 'Plumber updated successfully', data: db.plumbers[index] });
 });
@@ -962,6 +1102,7 @@ app.post('/api/orders', (req, res) => {
     clientId,
     clientName,
     clientMobile,
+    clientEmail,
     clientType,
     items,
     total,
@@ -1031,6 +1172,7 @@ app.post('/api/orders', (req, res) => {
     clientId: clientId || 'CUST-01',
     clientName: clientName || (clientType === 'Dealer' ? 'Sri Venkateswara Distributors' : 'Rahul Sharma'),
     clientMobile: clientMobile || (clientType === 'Dealer' ? '9000011111' : '9876543210'),
+    clientEmail: clientEmail || '',
     deliveryAddress: deliveryAddress || 'Main Delivery Address, Bengaluru',
     poNumber: poNumber || ('PO-' + Math.floor(1000 + Math.random() * 9000)),
     notes: notes || '',
@@ -1079,7 +1221,100 @@ app.post('/api/orders', (req, res) => {
     }
   } catch (err) {}
 
+  // Automatically dispatch bill receipt & congratulations email to registered recipient
+  (async () => {
+    try {
+      let recipientEmail = clientEmail;
+      const cleanMobile = String(newOrder.clientMobile || '').replace(/\D/g, '').slice(-10);
+
+      // Search registered email if not supplied in request
+      if (!recipientEmail || !recipientEmail.includes('@')) {
+        // 1. Search in local customers
+        const cust = (db.customers || []).find(c => c.mobile === cleanMobile || c.id === newOrder.clientId);
+        if (cust && cust.email) recipientEmail = cust.email;
+
+        // 2. Search in local dealers
+        if (!recipientEmail) {
+          const dlr = (db.dealers || []).find(d => d.mobile === cleanMobile || d.id === newOrder.clientId);
+          if (dlr && dlr.email) recipientEmail = dlr.email;
+        }
+
+        // 3. Search in local plumbers
+        if (!recipientEmail) {
+          const plm = (db.plumbers || []).find(p => p.mobile === cleanMobile || p.id === newOrder.clientId);
+          if (plm && plm.email) recipientEmail = plm.email;
+        }
+
+        // 4. Fallback search in Supabase if pool exists
+        if (!recipientEmail) {
+          try {
+            const { pool } = require('./db');
+            if (pool) {
+              const custRes = await pool.query('SELECT email FROM customers WHERE mobile = $1 LIMIT 1', [cleanMobile]);
+              if (custRes.rows.length > 0 && custRes.rows[0].email) {
+                recipientEmail = custRes.rows[0].email;
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      // Role-specific demo fallbacks if still empty
+      if (!recipientEmail || !recipientEmail.includes('@')) {
+        if (newOrder.clientType === 'Dealer') recipientEmail = 'dealer@plumbmart-demo.com';
+        else if (newOrder.clientType === 'Plumber') recipientEmail = 'plumber@plumbmart-demo.com';
+        else recipientEmail = 'customer@plumbmart-demo.com';
+      }
+
+      newOrder.clientEmail = recipientEmail;
+
+      await sendOrderReceiptEmail({
+        order: newOrder,
+        recipientEmail
+      });
+      console.log(`[Order Email] Dispatched bill receipt & congratulations email for order ${newOrder.id} to ${recipientEmail}`);
+    } catch (emailErr) {
+      console.warn(`[Order Email Warning] Could not dispatch email for order ${newOrder.id}:`, emailErr.message);
+    }
+  })();
+
   res.status(201).json({ success: true, order: newOrder });
+});
+
+// Re-send or manually dispatch Bill Receipt & Congratulations email for an order
+app.post('/api/orders/:orderId/send-receipt', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { email } = req.body || {};
+    const db = getDb();
+    const order = (db.orders || []).find(o => o.id === orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, message: `Order #${orderId} not found` });
+    }
+
+    let recipientEmail = email || order.clientEmail;
+    if (!recipientEmail || !recipientEmail.includes('@')) {
+      const cleanMobile = String(order.clientMobile || '').replace(/\D/g, '').slice(-10);
+      const cust = (db.customers || []).find(c => c.mobile === cleanMobile || c.id === order.clientId);
+      if (cust && cust.email) recipientEmail = cust.email;
+      else if (order.clientType === 'Dealer') recipientEmail = 'dealer@plumbmart-demo.com';
+      else recipientEmail = 'customer@plumbmart-demo.com';
+    }
+
+    const emailResult = await sendOrderReceiptEmail({
+      order,
+      recipientEmail
+    });
+
+    return res.json({
+      success: true,
+      message: `Bill receipt and congratulatory email successfully sent to ${recipientEmail}`,
+      emailResult
+    });
+  } catch (err) {
+    console.error('[API Error /api/orders/:orderId/send-receipt]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to send receipt email', error: err.message });
+  }
 });
 
 // User dashboard dynamic data
@@ -1250,6 +1485,42 @@ app.post('/api/customer/orders', async (req, res) => {
   try {
     const orderData = req.body;
     const order = await createCustomerOrder(orderData);
+
+    // Automatically dispatch bill receipt & congratulations email
+    (async () => {
+      try {
+        let recipientEmail = orderData.clientEmail || orderData.customerEmail;
+        const cleanMobile = String(order.client_mobile || orderData.clientMobile || '').replace(/\D/g, '').slice(-10);
+        if (!recipientEmail || !recipientEmail.includes('@')) {
+          const db = getDb();
+          const cust = (db.customers || []).find(c => c.mobile === cleanMobile);
+          if (cust && cust.email) recipientEmail = cust.email;
+        }
+        if (!recipientEmail || !recipientEmail.includes('@')) recipientEmail = 'customer@plumbmart-demo.com';
+
+        await sendOrderReceiptEmail({
+          order: {
+            id: order.id,
+            zohoSalesOrder: 'SO-ZH-' + String(order.id).slice(-5),
+            date: 'Today',
+            clientType: 'Customer',
+            clientName: order.client_name || orderData.clientName || 'Valued Customer',
+            clientMobile: cleanMobile,
+            clientEmail: recipientEmail,
+            deliveryAddress: order.delivery_address || orderData.deliveryAddress,
+            paymentMethod: orderData.paymentMethod || 'Online Payment',
+            paymentStatus: 'Paid',
+            items: orderData.items || [],
+            total: order.total || orderData.total,
+            expectedDate: order.expected_date || 'Today by 04:00 PM'
+          },
+          recipientEmail
+        });
+      } catch (e) {
+        console.warn('[Customer Order Email Warning]', e.message);
+      }
+    })();
+
     return res.status(201).json({
       success: true,
       message: 'Order created successfully and stored in Supabase database.',
@@ -1429,6 +1700,21 @@ app.put('/api/orders/:id/status', async (req, res) => {
       if (idx === 4) t.completed = isDelivered && !isCancelled;
     });
   }
+
+  // Create an in-app notification entry for the target role (Dealers or Customers)
+  const clientTarget = (order.clientType && order.clientType.toLowerCase().includes('dealer')) ? 'Dealers' : 'Customers';
+  if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
+  db.notifications.unshift({
+    id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
+    title: `Order #${order.id} ${status}`,
+    message: `Your order #${order.id} status has been updated to "${status}" by PlumbMart Operations.`,
+    targetGroup: clientTarget,
+    priority: status.toLowerCase() === 'delivered' ? 'normal' : 'high',
+    sentAt: 'Just now',
+    createdAt: new Date().toISOString(),
+    sender: 'PlumbMart Logistics',
+    orderId: order.id
+  });
 
   saveDb(db);
 

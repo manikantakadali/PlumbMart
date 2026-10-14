@@ -15,9 +15,12 @@ import {
   FileText,
   AlertCircle,
   MapPin,
-  Phone
+  Phone,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { getDealerCart, clearDealerCart, getDealerCartTotals } from '../utils/dealerCart';
+import DealerSuspendedModal from '../components/DealerSuspendedModal';
 
 export default function DealerCheckoutPage({ currentUser, onLogout }) {
   const navigate = useNavigate();
@@ -28,17 +31,28 @@ export default function DealerCheckoutPage({ currentUser, onLogout }) {
   const [poNumber, setPoNumber] = useState(() => 'PO-2026-' + Math.floor(1000 + Math.random() * 9000));
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuspendedModalOpen, setIsSuspendedModalOpen] = useState(false);
+  const [checkoutWarning, setCheckoutWarning] = useState(null);
 
-  const dealer = currentUser && currentUser.role === 'Dealer' ? currentUser : {
-    id: 'DLR-01',
-    name: 'Sri Venkateswara Distributors',
-    mobile: '9000011111',
-    gstin: '29ABCDE1234F1Z5',
-    creditLimit: '₹5,00,000',
-    availableCredit: '₹3,40,000',
-    credit30Days: true,
-    credit90Days: true
-  };
+  const [dealer, setDealer] = useState(() => {
+    let saved = null;
+    try {
+      const item = localStorage.getItem('plumbmart_user');
+      saved = item ? JSON.parse(item) : null;
+    } catch (e) {}
+
+    return (currentUser && currentUser.role === 'Dealer') ? currentUser : (saved && (saved.role === 'Dealer' || saved.id === 'DLR-01') ? saved : {
+      id: 'DLR-01',
+      name: 'Sri Venkateswara Distributors',
+      mobile: '9000011111',
+      gstin: '29ABCDE1234F1Z5',
+      status: 'Approved',
+      creditLimit: '₹5,00,000',
+      availableCredit: '₹5,00,000',
+      credit30Days: true,
+      credit90Days: true
+    });
+  });
 
   const [deliveryAddress, setDeliveryAddress] = useState({
     recipientName: dealer.name || 'Sri Venkateswara Distributors',
@@ -52,13 +66,42 @@ export default function DealerCheckoutPage({ currentUser, onLogout }) {
   });
 
   useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const targetId = currentUser?.id || currentUser?.mobile || dealer.id || 'DLR-01';
+        let res = await fetch(`/api/dealers/${targetId}`);
+        if (!res || !res.ok) res = await fetch(`http://localhost:5000/api/dealers/${targetId}`);
+        if (!res || !res.ok) res = await fetch(`http://localhost:4000/api/dealers/${targetId}`);
+        if (res && res.ok) {
+          const json = await res.json();
+          if (json && json.success && json.data) {
+            setDealer(prev => ({ ...prev, ...json.data }));
+          }
+        }
+      } catch (e) {}
+    };
+
+    fetchProfile();
+    const interval = setInterval(fetchProfile, 1500);
+
+    let ch;
+    try {
+      ch = new BroadcastChannel('plumbmart_dealers');
+      ch.onmessage = (event) => {
+        if (event.data?.type === 'DEALER_GOVERNANCE_UPDATED') {
+          fetchProfile();
+        }
+      };
+    } catch (e) {}
+
     const items = getDealerCart();
     setCartItems(items);
-    if (items.length === 0) {
-      // If empty, redirect back to cart
-      // navigate('/dealer/cart');
-    }
-  }, [navigate]);
+
+    return () => {
+      clearInterval(interval);
+      if (ch) ch.close();
+    };
+  }, [currentUser]);
 
   const totals = getDealerCartTotals(cartItems);
 
@@ -86,22 +129,28 @@ export default function DealerCheckoutPage({ currentUser, onLogout }) {
   const isCreditSufficient = numericAvailableCredit >= totals.grandTotal;
 
   const handlePlaceOrder = async () => {
+    if (dealer.status === 'Suspended') {
+      setIsSuspendedModalOpen(true);
+      return;
+    }
+
     if (cartItems.length === 0) {
-      alert('Your cart is empty. Please add products first.');
+      setCheckoutWarning('Your cart is empty. Please add wholesale products first.');
       navigate('/dealer/products');
       return;
     }
 
     if (paymentChoice === 'credit' && !isCreditSufficient) {
-      alert('Order amount exceeds your available credit line. Please choose Upfront payment or reduce quantity.');
+      setCheckoutWarning('Order amount exceeds your available credit line. Please choose Upfront payment or reduce quantity.');
       return;
     }
 
     if (!deliveryAddress.streetAddress || !deliveryAddress.city || !deliveryAddress.pincode) {
-      alert('Please fill in your delivery street address, city, and PIN code.');
+      setCheckoutWarning('Please fill in your delivery street address, city, and PIN code.');
       return;
     }
 
+    setCheckoutWarning(null);
     setIsSubmitting(true);
 
     const paymentMethodLabel = paymentChoice === 'upfront' 
@@ -114,6 +163,7 @@ export default function DealerCheckoutPage({ currentUser, onLogout }) {
       clientId: dealer.id || 'DLR-01',
       clientName: dealer.name || 'Sri Venkateswara Distributors',
       clientMobile: deliveryAddress.phone || dealer.mobile || '9000011111',
+      clientEmail: dealer.email || currentUser?.email || 'dealer@plumbmart-demo.com',
       clientType: 'Dealer',
       deliveryAddress: formattedAddress,
       poNumber,
@@ -215,6 +265,21 @@ export default function DealerCheckoutPage({ currentUser, onLogout }) {
             <span>Back to Cart</span>
           </Link>
         </div>
+
+        {checkoutWarning && (
+          <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center justify-between gap-3 shadow-xs animate-in fade-in duration-200">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <p className="text-xs font-bold">{checkoutWarning}</p>
+            </div>
+            <button 
+              onClick={() => setCheckoutWarning(null)} 
+              className="p-1 rounded-lg hover:bg-amber-100 text-amber-700 transition cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {cartItems.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-500 max-w-md mx-auto my-8">
@@ -720,6 +785,13 @@ export default function DealerCheckoutPage({ currentUser, onLogout }) {
         )}
 
       </main>
+
+      {/* Beautiful Dealer Account Suspended Modal */}
+      <DealerSuspendedModal
+        isOpen={isSuspendedModalOpen}
+        onClose={() => setIsSuspendedModalOpen(false)}
+        dealerName={dealer.name || 'Sri Venkateswara Distributors'}
+      />
     </DealerLayout>
   );
 }

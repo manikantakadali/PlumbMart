@@ -27,6 +27,7 @@ import {
   Bell
 } from 'lucide-react';
 import { getCustomerCart } from '../utils/customerCart';
+import InAppNotificationToast from './InAppNotificationToast';
 
 const SIDEBAR_CATEGORIES = [
   { name: 'All Categories', query: '', icon: Layers },
@@ -131,6 +132,7 @@ export default function CustomerLayout({ children, currentUser, onLogout }) {
     }
   });
   const notifDropdownRef = useRef(null);
+  const knownAnnouncementsRef = useRef(null);
 
   const fetchCustomerAnnouncements = async () => {
     try {
@@ -142,6 +144,23 @@ export default function CustomerLayout({ children, currentUser, onLogout }) {
       }
       const data = await res.json();
       if (data && data.success && Array.isArray(data.data)) {
+        if (knownAnnouncementsRef.current === null) {
+          knownAnnouncementsRef.current = new Set(data.data.map(a => a.id));
+        } else {
+          // Detect fresh announcements and trigger in-app toast
+          const fresh = data.data.filter(a => !knownAnnouncementsRef.current.has(a.id));
+          if (fresh.length > 0) {
+            fresh.forEach(item => {
+              knownAnnouncementsRef.current.add(item.id);
+              window.dispatchEvent(new CustomEvent('plumbmart_inapp_notify', {
+                detail: {
+                  ...item,
+                  type: 'ANNOUNCEMENT'
+                }
+              }));
+            });
+          }
+        }
         setAnnouncements(data.data);
       }
     } catch (err) {}
@@ -357,6 +376,8 @@ export default function CustomerLayout({ children, currentUser, onLogout }) {
 
   return (
     <div className="h-screen bg-slate-50 flex flex-col font-sans text-slate-800 overflow-hidden">
+      {/* Real-Time In-App Notification Toast */}
+      <InAppNotificationToast role="Customer" />
       
       {/* Main Top Header */}
       <header className="shrink-0 z-40 bg-white border-b border-slate-200 shadow-xs">

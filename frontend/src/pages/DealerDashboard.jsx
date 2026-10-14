@@ -34,9 +34,12 @@ import {
   Layers,
   Info,
   Lock,
-  Unlock
+  Unlock,
+  Mail
 } from 'lucide-react';
 import { addToDealerCart, getDealerCart } from '../utils/dealerCart';
+import DealerSuspendedModal from '../components/DealerSuspendedModal';
+import DealerSupportModal from '../components/DealerSupportModal';
 
 const CATEGORIES = [
   'All Categories',
@@ -55,21 +58,27 @@ export default function DealerDashboard({ currentUser, onLogout }) {
 
   // Dynamic Dealer Profile from Admin Credit Governance
   const [dealerProfile, setDealerProfile] = useState(() => {
+    let saved = null;
+    try {
+      const item = localStorage.getItem('plumbmart_user');
+      saved = item ? JSON.parse(item) : null;
+    } catch (e) {}
+
     return {
-      id: 'DLR-01',
-      name: currentUser?.name || 'Sri Venkateswara Distributors',
-      contactPerson: 'Srinivas Rao',
-      mobile: currentUser?.mobile || '9000011111',
-      email: 'dealer@plumbmart-demo.com',
-      gstin: currentUser?.gstin || '29ABCDE1234F1Z5',
+      id: saved?.id || currentUser?.id || 'DLR-01',
+      name: saved?.name || currentUser?.name || 'Sri Venkateswara Distributors',
+      contactPerson: saved?.contactPerson || 'Srinivas Rao',
+      mobile: saved?.mobile || currentUser?.mobile || '9000011111',
+      email: saved?.email || 'dealer@plumbmart-demo.com',
+      gstin: saved?.gstin || currentUser?.gstin || '29ABCDE1234F1Z5',
       zohoVerified: true,
-      status: 'Approved',
-      credit30Days: true,
-      credit90Days: true,
-      creditLimit: 500000,
-      availableCredit: 340000,
-      outstandingDue: 160000,
-      nextDueDate: '02 Nov 2026'
+      status: saved?.status || 'Approved',
+      credit30Days: saved?.credit30Days !== undefined ? saved.credit30Days : true,
+      credit90Days: saved?.credit90Days !== undefined ? saved.credit90Days : true,
+      creditLimit: saved?.creditLimit || 500000,
+      availableCredit: saved?.availableCredit || 500000,
+      outstandingDue: saved?.outstandingDue || 0,
+      nextDueDate: saved?.nextDueDate || 'None'
     };
   });
 
@@ -94,6 +103,8 @@ export default function DealerDashboard({ currentUser, onLogout }) {
   const [settledNotice, setSettledNotice] = useState(null);
   const [governanceNotice, setGovernanceNotice] = useState(null);
   const [isRefreshingOrders, setIsRefreshingOrders] = useState(false);
+  const [isSuspendedModalOpen, setIsSuspendedModalOpen] = useState(false);
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
 
   // Resilient API Helper
   const resilientFetch = async (endpoint, options = {}) => {
@@ -115,7 +126,8 @@ export default function DealerDashboard({ currentUser, onLogout }) {
   // Fetch Dealer Profile from Admin API
   const fetchDealerProfile = async () => {
     try {
-      const res = await resilientFetch('/api/dealers/DLR-01');
+      const targetId = currentUser?.id || currentUser?.mobile || dealerProfile.id || 'DLR-01';
+      const res = await resilientFetch(`/api/dealers/${targetId}`);
       if (res && res.success && res.data) {
         const d = res.data;
         const limit = typeof d.creditLimit === 'number' 
@@ -123,18 +135,39 @@ export default function DealerDashboard({ currentUser, onLogout }) {
           : (parseInt((d.creditLimit || '500000').toString().replace(/[^0-9]/g, ''), 10) || 500000);
         const due = typeof d.outstandingDue === 'number' 
           ? d.outstandingDue 
-          : (parseInt((d.outstandingDue || '160000').toString().replace(/[^0-9]/g, ''), 10) || 160000);
+          : (parseInt((d.outstandingDue || '0').toString().replace(/[^0-9]/g, ''), 10) || 0);
         const avail = typeof d.availableCredit === 'number' 
           ? d.availableCredit 
           : Math.max(0, limit - due);
 
-        setDealerProfile(prev => ({
-          ...prev,
-          ...d,
-          creditLimit: limit,
-          outstandingDue: due,
-          availableCredit: avail
-        }));
+        setDealerProfile(prev => {
+          // Detect status change from Admin
+          if (prev.status && d.status && prev.status !== d.status) {
+            if (d.status === 'Suspended') {
+              setGovernanceNotice({
+                title: 'Account Suspended by Super Admin',
+                message: 'Your wholesale account access and credit lines have been suspended.',
+                time: new Date().toLocaleTimeString(),
+                isSuspended: true
+              });
+            } else if (d.status === 'Approved') {
+              setGovernanceNotice({
+                title: 'Account Approved & Re-activated',
+                message: 'Your wholesale account has been approved and unlocked!',
+                time: new Date().toLocaleTimeString(),
+                isApproved: true
+              });
+            }
+          }
+          return {
+            ...prev,
+            ...d,
+            status: d.status || prev.status,
+            creditLimit: limit,
+            outstandingDue: due,
+            availableCredit: avail
+          };
+        });
       }
     } catch (err) {
       console.warn('Failed to load dealer profile:', err);
@@ -292,44 +325,69 @@ export default function DealerDashboard({ currentUser, onLogout }) {
     fetchProducts();
     fetchOrders(false);
 
-    // 1. Live polling for real-time order, stock, and credit governance sync (every 2.5 seconds)
+    // 1. Live high-frequency polling for real-time dealer status & order sync (every 1.5 seconds)
     const pollingInterval = setInterval(() => {
       fetchOrders(true);
       fetchDealerProfile();
-    }, 2500);
+    }, 1500);
 
-    // 2. BroadcastChannel listener for immediate Admin-to-Dealer sync
+    const handleGovernanceUpdate = (payload) => {
+      if (!payload) return;
+      const updates = payload.updates || (payload.status ? { status: payload.status } : {});
+      setDealerProfile(prev => {
+        const newLimit = updates.creditLimit !== undefined ? updates.creditLimit : prev.creditLimit;
+        const due = typeof updates.outstandingDue === 'number' ? updates.outstandingDue : prev.outstandingDue;
+        const newAvail = updates.availableCredit !== undefined ? updates.availableCredit : Math.max(0, newLimit - due);
+        return {
+          ...prev,
+          ...updates,
+          status: updates.status !== undefined ? updates.status : prev.status,
+          creditLimit: newLimit,
+          availableCredit: newAvail,
+          outstandingDue: due
+        };
+      });
+
+      if (updates.status === 'Suspended') {
+        setGovernanceNotice({
+          title: 'Account Suspended by Super Admin',
+          message: 'Your wholesale account access and credit lines have been suspended. Purchasing is locked.',
+          time: new Date().toLocaleTimeString(),
+          isSuspended: true
+        });
+      } else if (updates.status === 'Approved') {
+        setGovernanceNotice({
+          title: 'Account Approved & Re-activated',
+          message: 'Your wholesale account has been approved and unlocked by administration.',
+          time: new Date().toLocaleTimeString(),
+          isApproved: true
+        });
+      }
+      setTimeout(() => setGovernanceNotice(null), 6000);
+      fetchDealerProfile();
+    };
+
+    // 2. BroadcastChannel listeners for immediate Admin-to-Dealer sync
+    let dealersChannel;
     let orderChannel;
+    try {
+      dealersChannel = new BroadcastChannel('plumbmart_dealers');
+      dealersChannel.onmessage = (event) => {
+        if (!event.data) return;
+        if (event.data.type === 'DEALER_GOVERNANCE_UPDATED') {
+          handleGovernanceUpdate(event.data);
+        }
+      };
+    } catch (e) {}
+
     try {
       orderChannel = new BroadcastChannel('plumbmart_orders');
       orderChannel.onmessage = (event) => {
         if (!event.data) return;
 
-        // (A) Admin updated Credit Governance (Limit, 30D/90D, or Status)
         if (event.data.type === 'DEALER_GOVERNANCE_UPDATED') {
-          const updates = event.data.updates || {};
-          setDealerProfile(prev => {
-            const newLimit = updates.creditLimit !== undefined ? updates.creditLimit : prev.creditLimit;
-            const due = typeof updates.outstandingDue === 'number' ? updates.outstandingDue : prev.outstandingDue;
-            const newAvail = updates.availableCredit !== undefined ? updates.availableCredit : Math.max(0, newLimit - due);
-            return {
-              ...prev,
-              ...updates,
-              creditLimit: newLimit,
-              availableCredit: newAvail,
-              outstandingDue: due
-            };
-          });
-
-          setGovernanceNotice({
-            title: 'Credit Policy Updated by Admin',
-            message: `Spending Limit: ₹${(updates.creditLimit || dealerProfile.creditLimit).toLocaleString('en-IN')} • 30D: ${updates.credit30Days !== false ? 'Enabled' : 'Disabled'} • 90D: ${updates.credit90Days ? 'Approved' : 'Locked'}`,
-            time: new Date().toLocaleTimeString()
-          });
-          setTimeout(() => setGovernanceNotice(null), 5000);
-          fetchDealerProfile();
+          handleGovernanceUpdate(event.data);
         } 
-        // (B) Admin updated Order Shipment Status
         else if (event.data.type === 'STATUS_UPDATED') {
           setOrders(prev => prev.map(o => 
             o.id === event.data.orderId ? { ...o, status: event.data.status } : o
@@ -342,7 +400,6 @@ export default function DealerDashboard({ currentUser, onLogout }) {
           setTimeout(() => setStatusNotification(null), 5000);
           fetchOrders(true);
         } 
-        // (C) New Order placed
         else if (event.data.type === 'NEW_ORDER' || event.data.type === 'ORDER_PLACED') {
           fetchOrders(true);
           fetchProducts();
@@ -353,35 +410,15 @@ export default function DealerDashboard({ currentUser, onLogout }) {
 
     // 3. Storage event listener fallback for cross-tab sync
     const handleStorage = (e) => {
-      // Governance update
-      if (e.key === 'plumbmart_dealer_governance_broadcast') {
+      if (e.key === 'plumbmart_dealer_governance_broadcast' || e.key === 'plumbmart_dealer_status_broadcast') {
         try {
           const payload = JSON.parse(e.newValue);
-          if (payload && payload.updates) {
-            const updates = payload.updates;
-            setDealerProfile(prev => {
-              const newLimit = updates.creditLimit !== undefined ? updates.creditLimit : prev.creditLimit;
-              const due = typeof updates.outstandingDue === 'number' ? updates.outstandingDue : prev.outstandingDue;
-              const newAvail = updates.availableCredit !== undefined ? updates.availableCredit : Math.max(0, newLimit - due);
-              return {
-                ...prev,
-                ...updates,
-                creditLimit: newLimit,
-                availableCredit: newAvail,
-                outstandingDue: due
-              };
-            });
-            setGovernanceNotice({
-              title: 'Credit Policy Updated by Admin',
-              message: `Spending Limit: ₹${(updates.creditLimit || dealerProfile.creditLimit).toLocaleString('en-IN')} • 30D: ${updates.credit30Days !== false ? 'Enabled' : 'Disabled'} • 90D: ${updates.credit90Days ? 'Approved' : 'Locked'}`,
-              time: new Date().toLocaleTimeString()
-            });
-            setTimeout(() => setGovernanceNotice(null), 5000);
-            fetchDealerProfile();
-          }
+          handleGovernanceUpdate(payload);
         } catch (err) {}
       }
-      // Status update
+      if (e.key === 'plumbmart_user') {
+        fetchDealerProfile();
+      }
       if (e.key === 'plumbmart_status_broadcast') {
         try {
           const payload = JSON.parse(e.newValue);
@@ -402,10 +439,18 @@ export default function DealerDashboard({ currentUser, onLogout }) {
     };
     window.addEventListener('storage', handleStorage);
 
+    // 4. In-window custom event listener
+    const handleCustomEvent = (e) => {
+      handleGovernanceUpdate(e.detail);
+    };
+    window.addEventListener('plumbmart_dealer_updated', handleCustomEvent);
+
     return () => {
       clearInterval(pollingInterval);
+      if (dealersChannel) dealersChannel.close();
       if (orderChannel) orderChannel.close();
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('plumbmart_dealer_updated', handleCustomEvent);
     };
   }, []);
 
@@ -475,6 +520,10 @@ export default function DealerDashboard({ currentUser, onLogout }) {
 
   // Add to Wholesale Cart
   const handleAddToCart = (product) => {
+    if (dealerProfile.status === 'Suspended') {
+      setIsSuspendedModalOpen(true);
+      return;
+    }
     const qty = quantities[product.id] || product.moq || 1;
     addToDealerCart(product, qty);
     setAddedToast({
@@ -547,13 +596,23 @@ export default function DealerDashboard({ currentUser, onLogout }) {
 
         {/* Real-time Admin Credit Governance Update Notification */}
         {governanceNotice && (
-          <div className="bg-indigo-600 text-white px-3.5 sm:px-5 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 animate-in fade-in slide-in-from-top-4 duration-300 w-full min-w-0">
+          <div className={`${
+            governanceNotice.isSuspended 
+              ? 'bg-rose-600 border border-rose-400' 
+              : governanceNotice.isApproved 
+                ? 'bg-emerald-600 border border-emerald-400' 
+                : 'bg-indigo-600'
+          } text-white px-3.5 sm:px-5 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 animate-in fade-in slide-in-from-top-4 duration-300 w-full min-w-0`}>
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
               <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-white/20 flex items-center justify-center font-bold shrink-0">
-                <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                {governanceNotice.isSuspended ? (
+                  <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-white animate-pulse" />
+                ) : (
+                  <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                )}
               </div>
               <div className="min-w-0">
-                <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-indigo-200">
+                <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-white/90">
                   {governanceNotice.title}
                 </p>
                 <p className="text-xs sm:text-sm font-semibold truncate">
@@ -561,7 +620,7 @@ export default function DealerDashboard({ currentUser, onLogout }) {
                 </p>
               </div>
             </div>
-            <span className="self-end sm:self-auto text-[10px] sm:text-[11px] bg-indigo-700 px-2 py-0.5 rounded-md font-mono shrink-0">
+            <span className="self-end sm:self-auto text-[10px] sm:text-[11px] bg-black/25 px-2 py-0.5 rounded-md font-mono shrink-0">
               {governanceNotice.time}
             </span>
           </div>
@@ -597,12 +656,29 @@ export default function DealerDashboard({ currentUser, onLogout }) {
 
         {/* Account Suspended Alert Banner (if Admin suspended dealer) */}
         {dealerProfile.status === 'Suspended' && (
-          <div className="bg-rose-600 text-white px-3.5 sm:px-5 py-3 rounded-xl sm:rounded-2xl shadow-lg flex items-center gap-3 animate-in fade-in duration-200 w-full min-w-0">
-            <AlertTriangle className="w-5 h-5 text-rose-200 shrink-0" />
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-rose-200">Account Access Suspended by Admin</p>
-              <p className="text-xs sm:text-sm font-medium">Wholesale credit ordering is temporarily frozen. Contact corporate accounts.</p>
+          <div className="bg-gradient-to-r from-rose-700 via-rose-600 to-red-600 text-white p-4 sm:p-5 rounded-2xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-2 border-rose-400 animate-in fade-in slide-in-from-top-3 duration-200 w-full min-w-0">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6 text-white animate-pulse" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-sm font-black uppercase tracking-wider text-rose-100 flex items-center gap-2">
+                  <span>Account Access Suspended by Admin</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-white text-rose-700 font-extrabold uppercase">Locked</span>
+                </h4>
+                <p className="text-xs text-rose-100 mt-0.5">
+                  Your wholesale B2B account has been suspended by PlumbMart Corporate Governance. Wholesale ordering, credit lines, and shipment dispatches are temporarily frozen.
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setIsSupportModalOpen(true)}
+              className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white text-rose-700 font-bold text-xs hover:bg-rose-50 transition shrink-0 shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <Mail className="w-3.5 h-3.5 text-rose-600" />
+              <span>Contact Support</span>
+            </button>
           </div>
         )}
 
@@ -642,13 +718,13 @@ export default function DealerDashboard({ currentUser, onLogout }) {
 
                 {/* Status Badge */}
                 {dealerProfile.status === 'Suspended' ? (
-                  <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold tracking-wider uppercase bg-rose-500/20 text-rose-300 border border-rose-400/30 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3 text-rose-400" />
-                    Suspended
+                  <span className="px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-black tracking-wider uppercase bg-rose-600 text-white shadow-md shadow-rose-600/40 flex items-center gap-1.5 animate-pulse border border-rose-300">
+                    <AlertTriangle className="w-3.5 h-3.5 text-white" />
+                    Status: Suspended (Access Locked)
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold tracking-wider uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3" />
+                  <span className="px-2.5 py-1 rounded-full text-[9px] sm:text-[10px] font-bold tracking-wider uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5" />
                     Zoho CRM Record Verified
                   </span>
                 )}
@@ -746,18 +822,32 @@ export default function DealerDashboard({ currentUser, onLogout }) {
             </div>
 
             {/* 2. Available Credit */}
-            <div className="bg-slate-800/50 rounded-xl sm:rounded-2xl p-2.5 sm:p-3.5 border border-slate-700/60 backdrop-blur-xs min-w-0">
+            <div className={`rounded-xl sm:rounded-2xl p-2.5 sm:p-3.5 border backdrop-blur-xs min-w-0 ${
+              dealerProfile.status === 'Suspended'
+                ? 'bg-rose-950/50 border-rose-800/80 shadow-md shadow-rose-950/40'
+                : 'bg-slate-800/50 border-slate-700/60'
+            }`}>
               <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs mb-0.5 sm:mb-1">
                 <span>Available Credit</span>
-                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400"></span>
+                {dealerProfile.status === 'Suspended' ? (
+                  <span className="text-[9px] font-black text-rose-300 uppercase tracking-wider bg-rose-600/30 px-1.5 py-0.2 rounded border border-rose-500/40">
+                    LOCKED
+                  </span>
+                ) : (
+                  <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400"></span>
+                )}
               </div>
-              <p className="text-base sm:text-xl font-black text-emerald-400 truncate">
-                ₹{currentAvailable.toLocaleString('en-IN')}
+              <p className={`text-base sm:text-xl font-black truncate ${
+                dealerProfile.status === 'Suspended' ? 'text-rose-400' : 'text-emerald-400'
+              }`}>
+                {dealerProfile.status === 'Suspended' ? '₹0 (Frozen)' : `₹${currentAvailable.toLocaleString('en-IN')}`}
               </p>
               <div className="w-full bg-slate-700 h-1 sm:h-1.5 rounded-full mt-1 sm:mt-1.5 overflow-hidden">
                 <div 
-                  className="bg-emerald-400 h-full rounded-full transition-all duration-500" 
-                  style={{ width: `${creditPercentage}%` }}
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    dealerProfile.status === 'Suspended' ? 'bg-rose-500' : 'bg-emerald-400'
+                  }`} 
+                  style={{ width: `${dealerProfile.status === 'Suspended' ? 0 : creditPercentage}%` }}
                 ></div>
               </div>
             </div>
@@ -1557,6 +1647,20 @@ export default function DealerDashboard({ currentUser, onLogout }) {
         )}
 
       </div>
+
+      {/* Beautiful Dealer Account Suspended Modal */}
+      <DealerSuspendedModal
+        isOpen={isSuspendedModalOpen}
+        onClose={() => setIsSuspendedModalOpen(false)}
+        dealerName={dealerProfile.name || 'Sri Venkateswara Distributors'}
+      />
+
+      {/* Corporate Support & Account Suspension Appeal Modal */}
+      <DealerSupportModal
+        isOpen={isSupportModalOpen}
+        onClose={() => setIsSupportModalOpen(false)}
+        dealerProfile={dealerProfile}
+      />
     </DealerLayout>
   );
 }

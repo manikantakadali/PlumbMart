@@ -258,9 +258,9 @@ export default function CustomerOrdersPage({ currentUser, onLogout }) {
                 <CheckCircle2 className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h3 className="text-base font-black tracking-tight">Order #{placedOrderId} Confirmed!</h3>
-                <p className="text-xs text-white/90">
-                  Payment cleared online. Your order is being packed and prepared for express shipment.
+                <h3 className="text-base font-black tracking-tight">🎉 Order #{placedOrderId} Confirmed!</h3>
+                <p className="text-xs text-white/95 mt-0.5">
+                  Payment cleared. Bill receipt &amp; congratulations have been dispatched to your registered email!
                 </p>
               </div>
             </div>

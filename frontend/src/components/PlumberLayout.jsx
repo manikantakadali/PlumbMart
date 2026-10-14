@@ -18,6 +18,7 @@ import {
   CalendarCheck,
   AlertCircle
 } from 'lucide-react';
+import InAppNotificationToast from './InAppNotificationToast';
 
 export default function PlumberLayout({ 
   children, 
@@ -150,6 +151,8 @@ export default function PlumberLayout({
 
   return (
     <div className="h-screen bg-slate-50 flex flex-col font-sans text-slate-800 overflow-hidden">
+      {/* Real-Time In-App Notification Toast */}
+      <InAppNotificationToast role="Plumber" />
       
       {/* Top Header */}
       <header className="shrink-0 z-40 bg-white border-b border-slate-200 shadow-xs">

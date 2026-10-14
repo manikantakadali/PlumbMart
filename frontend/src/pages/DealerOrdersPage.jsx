@@ -211,10 +211,10 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
                   Order Successfully Registered
                 </span>
                 <h2 className="text-lg sm:text-xl font-black">
-                  Order #{placedOrderId} Confirmed!
+                  🎉 Order #{placedOrderId} Confirmed!
                 </h2>
                 <p className="text-xs text-emerald-100 mt-0.5">
-                  Your order has been recorded in Zoho CRM &amp; Workbook. Live fulfillment and dispatch pipeline is active below.
+                  Your order has been recorded in Zoho CRM. Tax invoice &amp; congratulations receipt have been sent to your registered dealer email.
                 </p>
               </div>
             </div>
@@ -537,16 +537,22 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
                       {/* Download Invoice Action */}
                       <div className="flex items-center justify-end gap-3 pt-2">
                         <button
-                          onClick={() => alert(`Simulated GST Tax Invoice PDF for ${order.id} downloaded.`)}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold"
+                          onClick={() => {
+                            setSettledNotice(`Simulated GST Tax Invoice PDF for ${order.id} generated.`);
+                            setTimeout(() => setSettledNotice(null), 3500);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer transition"
                         >
                           <Download className="w-3.5 h-3.5" />
                           <span>Tax Invoice (PDF)</span>
                         </button>
 
                         <button
-                          onClick={() => alert(`Simulated Zoho Delivery Challan for ${order.zohoSalesOrder || order.id} opened.`)}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold"
+                          onClick={() => {
+                            setSettledNotice(`Simulated Zoho Delivery Challan for ${order.zohoSalesOrder || order.id} opened.`);
+                            setTimeout(() => setSettledNotice(null), 3500);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold cursor-pointer transition"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
                           <span>Zoho Delivery Challan</span>

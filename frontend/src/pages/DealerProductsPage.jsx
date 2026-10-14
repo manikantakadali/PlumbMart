@@ -18,6 +18,7 @@ import {
   Check 
 } from 'lucide-react';
 import { addToDealerCart, getDealerCartTotals } from '../utils/dealerCart';
+import DealerSuspendedModal from '../components/DealerSuspendedModal';
 
 const CATEGORIES = [
   'All Categories',
@@ -36,6 +37,7 @@ export default function DealerProductsPage({ currentUser, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState(urlCategory || 'All Categories');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSuspendedModalOpen, setIsSuspendedModalOpen] = useState(false);
 
   useEffect(() => {
     if (urlCategory) {
@@ -117,6 +119,16 @@ export default function DealerProductsPage({ currentUser, onLogout }) {
   };
 
   const handleAddToCart = (product) => {
+    let saved = null;
+    try {
+      saved = JSON.parse(localStorage.getItem('plumbmart_user') || 'null');
+    } catch (e) {}
+    const isSuspended = currentUser?.status === 'Suspended' || saved?.status === 'Suspended';
+    if (isSuspended) {
+      setIsSuspendedModalOpen(true);
+      return;
+    }
+
     const qty = quantities[product.id] || product.moq || 1;
     addToDealerCart(product, qty);
     setAddedNotice({
@@ -442,6 +454,13 @@ export default function DealerProductsPage({ currentUser, onLogout }) {
         )}
 
       </main>
+
+      {/* Beautiful Dealer Account Suspended Modal */}
+      <DealerSuspendedModal
+        isOpen={isSuspendedModalOpen}
+        onClose={() => setIsSuspendedModalOpen(false)}
+        dealerName={currentUser?.name || 'Sri Venkateswara Distributors'}
+      />
     </DealerLayout>
   );
 }

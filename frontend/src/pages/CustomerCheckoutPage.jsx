@@ -87,6 +87,7 @@ export default function CustomerCheckoutPage({ currentUser, onLogout }) {
       clientId: customer.id || 'CUST-01',
       clientName: deliveryAddress.recipientName || customer.name || 'Rahul Sharma',
       clientMobile: deliveryAddress.phone || customer.mobile || '9876543210',
+      clientEmail: customer.email || currentUser?.email || 'rahul.sharma@example.com',
       clientType: 'Customer',
       deliveryAddress: formattedAddress,
       notes,
