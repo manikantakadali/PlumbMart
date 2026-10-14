@@ -36,7 +36,8 @@ import {
   Lock,
   Unlock,
   Mail,
-  PartyPopper
+  PartyPopper,
+  X
 } from 'lucide-react';
 import { addToDealerCart, getDealerCart } from '../utils/dealerCart';
 import DealerSuspendedModal from '../components/DealerSuspendedModal';
