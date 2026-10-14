@@ -653,6 +653,17 @@ export default function LoginPage({ onLoginSuccess }) {
             )}
           </div>
 
+          {/* Admin Login Link */}
+          <div className="mt-3 text-center">
+            <Link 
+              to="/admin/login" 
+              className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-800 font-medium transition"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+              <span>Admin Portal Login</span>
+            </Link>
+          </div>
+
           <div className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
             <span>Secure Email OTP Verification &bull; Encrypted Session</span>
