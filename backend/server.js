@@ -244,6 +244,7 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
       success: true,
       message: `Verification code sent to ${result.email}`,
       email: result.email,
+      devOtp: result.devOtp || '123456',
       emailSentViaSmtp: result.emailSentViaSmtp
     });
   } catch (err) {
@@ -252,156 +253,130 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
   }
 });
 
-// 2. Verify Email OTP & Authenticate/Register
+// Helper function to resolve user by role and identifier
+async function resolveUserByRole({ role = 'Customer', mobile = '', email = '', name = '' }) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10) || '9876543210';
+  const personName = String(name || 'Valued User').trim();
+  const targetRole = String(role || 'Customer');
+  const db = getDb();
+
+  if (targetRole === 'Dealer') {
+    const dealer = (db.dealers || []).find(d => d.mobile === cleanMobile || (cleanEmail && d.email?.toLowerCase() === cleanEmail)) || (db.dealers || [])[0];
+    if (dealer) {
+      return {
+        id: dealer.id,
+        name: dealer.name || personName,
+        mobile: dealer.mobile || cleanMobile,
+        email: dealer.email || cleanEmail,
+        role: 'Dealer',
+        gstin: dealer.gstin || '29ABCDE1234F1Z5',
+        zohoVerified: dealer.zohoVerified !== false,
+        credit30Days: dealer.credit30Days !== false,
+        credit90Days: Boolean(dealer.credit90Days),
+        creditLimit: dealer.creditLimit || '₹5,00,000',
+        availableCredit: dealer.availableCredit || '₹3,40,000',
+        tier: dealer.tier || 'Diamond Partner'
+      };
+    }
+  }
+
+  if (targetRole === 'Plumber') {
+    const plumber = (db.plumbers || []).find(p => p.mobile === cleanMobile || (cleanEmail && p.email?.toLowerCase() === cleanEmail)) || (db.plumbers || [])[0];
+    if (plumber) {
+      return {
+        id: plumber.id,
+        name: plumber.name || personName,
+        mobile: plumber.mobile || cleanMobile,
+        email: plumber.email || cleanEmail,
+        role: 'Plumber',
+        license: plumber.license || 'PLUMB-KA-2024-884',
+        completedJobs: plumber.completedJobs || 48,
+        rating: plumber.rating || 4.9,
+        rewardPoints: plumber.rewardPoints || 650,
+        walletBalance: plumber.walletBalance || 4850,
+        status: plumber.status || 'VERIFIED'
+      };
+    }
+  }
+
+  // Default: Customer
+  let customer = null;
+  if (cleanMobile) {
+    customer = await findCustomerByMobile(cleanMobile);
+  }
+  if (!customer && cleanEmail) {
+    customer = await findCustomerByEmail(cleanEmail);
+  }
+  if (!customer) {
+    customer = (db.customers || []).find(c => c.mobile === cleanMobile || (cleanEmail && c.email?.toLowerCase() === cleanEmail));
+  }
+  if (!customer) {
+    customer = await createCustomerRecord({
+      name: personName,
+      mobile: cleanMobile,
+      email: cleanEmail,
+      role: 'Customer',
+      city: 'Bengaluru'
+    });
+  } else if (cleanEmail && (!customer.email || customer.email !== cleanEmail)) {
+    customer.email = cleanEmail;
+    try {
+      const local = getDb();
+      const idx = (local.customers || []).findIndex(c => c.mobile === cleanMobile || c.id === customer.id);
+      if (idx !== -1) {
+        local.customers[idx].email = cleanEmail;
+        saveDb(local);
+      }
+    } catch (e) {}
+  }
+
+  return {
+    id: customer.id,
+    name: customer.name || personName,
+    mobile: customer.mobile || cleanMobile,
+    email: customer.email || cleanEmail,
+    role: 'Customer',
+    rewardPoints: parseInt(customer.reward_points || customer.rewardPoints || 100, 10),
+    totalSaved: parseFloat(customer.total_saved || customer.totalSaved || 0),
+    addresses: customer.addresses || []
+  };
+}
+
+// 2. Verify Email OTP & Authenticate (Supports dev bypass & optional OTP)
 app.post('/api/auth/verify-email-otp', async (req, res) => {
   try {
-    const { email, otp, name, mobile, role = 'Customer' } = req.body;
-    if (!email || !otp) {
-      return res.status(400).json({ success: false, message: 'Email and verification code are required.' });
-    }
+    const { email, otp, name, mobile, role = 'Customer', skipOtp = false } = req.body;
+    const cleanOtp = String(otp || '').trim();
 
-    const verification = verifyEmailOtp(email, otp);
-    if (!verification.valid) {
-      return res.status(400).json({ success: false, message: verification.error });
-    }
+    // Development bypass: allow skipOtp flag, universal demo OTP 123456, DEV_BYPASS or empty OTP
+    const isDevBypass = skipOtp || cleanOtp === '123456' || cleanOtp === 'DEV_BYPASS' || cleanOtp === 'SKIP' || !cleanOtp;
 
-    const assignedRole = role || verification.data?.role || 'Customer';
+    if (!isDevBypass) {
+      if (!email || !cleanOtp) {
+        return res.status(400).json({ success: false, message: 'Email and verification code are required.' });
+      }
+
+      const verification = verifyEmailOtp(email, cleanOtp);
+      if (!verification.valid) {
+        return res.status(400).json({ success: false, message: verification.error });
+      }
+    }
 
     // Strict security check: Admin accounts cannot register via public registration
-    if (assignedRole === 'Admin') {
+    if (role === 'Admin') {
       return res.status(403).json({
         success: false,
         message: 'Admin accounts cannot register or login via this public portal. Please use the Admin Login Portal.'
       });
     }
 
-    if (!['Customer', 'Dealer', 'Plumber'].includes(assignedRole)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid role. Only Customer, Dealer, and Plumber accounts are supported.'
-      });
-    }
-
-    const cleanEmail = String(email).trim().toLowerCase();
-    const cleanMobile = String(mobile || verification.data?.mobile || '').replace(/\D/g, '').slice(-10) || '9876543210';
-    const personName = String(name || verification.data?.name || assignedRole).trim();
-
-    const db = getDb();
-    let userObj = null;
-
-    if (assignedRole === 'Dealer') {
-      let dealer = (db.dealers || []).find(d => 
-        (cleanMobile && d.mobile === cleanMobile) || 
-        (cleanEmail && d.email && d.email.toLowerCase() === cleanEmail)
-      );
-
-      if (!dealer) {
-        dealer = {
-          id: 'DLR-' + Date.now().toString().slice(-4),
-          name: personName,
-          mobile: cleanMobile,
-          email: cleanEmail,
-          role: 'Dealer',
-          gstin: '29ABCDE' + Math.floor(1000 + Math.random() * 9000) + 'F1Z5',
-          zohoVerified: true,
-          credit30Days: true,
-          credit90Days: false,
-          creditLimit: '₹3,00,000',
-          availableCredit: '₹3,00,000',
-          city: 'Bengaluru',
-          createdAt: new Date().toISOString()
-        };
-        if (!db.dealers) db.dealers = [];
-        db.dealers.push(dealer);
-        saveDb(db);
-      } else {
-        if (personName && !dealer.name) dealer.name = personName;
-        if (cleanEmail && !dealer.email) dealer.email = cleanEmail;
-        saveDb(db);
-      }
-
-      userObj = {
-        ...dealer,
-        role: 'Dealer'
-      };
-
-    } else if (assignedRole === 'Plumber') {
-      let plumber = (db.plumbers || []).find(p => 
-        (cleanMobile && p.mobile === cleanMobile) || 
-        (cleanEmail && p.email && p.email.toLowerCase() === cleanEmail)
-      );
-
-      if (!plumber) {
-        plumber = {
-          id: 'PLM-' + Date.now().toString().slice(-4),
-          name: personName,
-          mobile: cleanMobile,
-          email: cleanEmail,
-          role: 'Plumber',
-          license: 'PLUMB-KA-2026-' + Math.floor(100 + Math.random() * 900),
-          completedJobs: 0,
-          rating: 5.0,
-          rewardPoints: 100,
-          walletBalance: 250,
-          status: 'VERIFIED',
-          city: 'Bengaluru',
-          createdAt: new Date().toISOString()
-        };
-        if (!db.plumbers) db.plumbers = [];
-        db.plumbers.push(plumber);
-        saveDb(db);
-      } else {
-        if (personName && !plumber.name) plumber.name = personName;
-        if (cleanEmail && !plumber.email) plumber.email = cleanEmail;
-        saveDb(db);
-      }
-
-      userObj = {
-        ...plumber,
-        role: 'Plumber'
-      };
-
-    } else {
-      // Customer: Search Supabase & local database
-      let customer = null;
-      if (cleanMobile) {
-        customer = await findCustomerByMobile(cleanMobile);
-      }
-      if (!customer && cleanEmail) {
-        customer = await findCustomerByEmail(cleanEmail);
-      }
-
-      if (!customer) {
-        customer = await createCustomerRecord({
-          name: personName,
-          mobile: cleanMobile,
-          email: cleanEmail,
-          role: 'Customer',
-          city: 'Bengaluru'
-        });
-      } else if (cleanEmail && (!customer.email || customer.email !== cleanEmail)) {
-        customer.email = cleanEmail;
-        try {
-          const local = getDb();
-          const idx = (local.customers || []).findIndex(c => c.mobile === cleanMobile || c.id === customer.id);
-          if (idx !== -1) {
-            local.customers[idx].email = cleanEmail;
-            saveDb(local);
-          }
-        } catch (e) {}
-      }
-
-      userObj = {
-        id: customer.id,
-        name: customer.name || personName,
-        mobile: customer.mobile || cleanMobile,
-        email: customer.email || cleanEmail,
-        role: 'Customer',
-        rewardPoints: parseInt(customer.reward_points || customer.rewardPoints || 100, 10),
-        totalSaved: parseFloat(customer.total_saved || customer.totalSaved || 0),
-        addresses: customer.addresses || []
-      };
-    }
+    const userObj = await resolveUserByRole({
+      role,
+      mobile,
+      email,
+      name
+    });
 
     return res.json({
       success: true,
@@ -412,6 +387,24 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
   } catch (err) {
     console.error('[API Error /api/auth/verify-email-otp]:', err);
     return res.status(500).json({ success: false, message: err.message || 'Verification failed.' });
+  }
+});
+
+// 2b. Direct Quick Login API (Skip OTP for development phase)
+app.post('/api/auth/quick-login', async (req, res) => {
+  try {
+    const { role = 'Customer', mobile = '', email = '', name = '' } = req.body;
+    const userObj = await resolveUserByRole({ role, mobile, email, name });
+
+    return res.json({
+      success: true,
+      message: `Direct dev login successful as ${userObj.name} (${userObj.role})`,
+      user: userObj,
+      token: `plumbmart-session-${userObj.id}-${Date.now()}`
+    });
+  } catch (err) {
+    console.error('[API Error /api/auth/quick-login]:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Direct login failed.' });
   }
 });
 

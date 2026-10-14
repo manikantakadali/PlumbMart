@@ -130,22 +130,6 @@ export default function PlumberLayout({
       description: 'Specs & Installation Guides',
       badge: '9 Manuals',
       badgeColor: 'bg-slate-100 text-slate-600'
-    },
-    {
-      id: 'updates',
-      name: 'Updates & Alerts',
-      icon: Bell,
-      description: 'Jobs & Company Announcements',
-      badge: unreadCount > 0 ? `${unreadCount} New` : null,
-      badgeColor: 'bg-rose-100 text-rose-700'
-    },
-    {
-      id: 'profile',
-      name: 'My Profile',
-      icon: UserCheck,
-      description: 'Verification & Registered Info',
-      badge: 'Verified',
-      badgeColor: 'bg-emerald-100 text-emerald-800'
     }
   ];
 
@@ -313,24 +297,6 @@ export default function PlumberLayout({
             </div>
           </div>
 
-          {/* Sidebar Footer Support info */}
-          {!isCollapsed ? (
-            <div className="pt-4 border-t border-slate-100 mt-4">
-              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-600 text-center">
-                <span className="text-[11px] font-bold text-slate-800 block mb-0.5">Plumber Helpline</span>
-                <span className="text-[10px] text-slate-500 block">Dispatch: 1800-2026-PLUM</span>
-                <span className="inline-block mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                  Certified Technician
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="pt-3 border-t border-slate-100 flex justify-center">
-              <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400" title="Certified Technician">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              </div>
-            </div>
-          )}
         </aside>
 
         {/* Content Page Area */}

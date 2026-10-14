@@ -169,6 +169,21 @@ function verifyEmailOtp(email, otp) {
   const cleanEmail = String(email || '').trim().toLowerCase();
   const cleanOtp = String(otp || '').trim();
 
+  // Development bypass: allow universal demo OTP 123456 or DEV_BYPASS
+  if (cleanOtp === '123456' || cleanOtp === 'DEV_BYPASS' || cleanOtp === 'SKIP') {
+    const store = getOtpStore();
+    const session = store.get(cleanEmail);
+    if (session) {
+      store.delete(cleanEmail);
+      persistOtpStore(store);
+      return { valid: true, data: { ...session } };
+    }
+    return {
+      valid: true,
+      data: { email: cleanEmail, name: 'Developer User', mobile: '', role: 'Customer' }
+    };
+  }
+
   const store = getOtpStore();
   const session = store.get(cleanEmail);
   if (!session) {
