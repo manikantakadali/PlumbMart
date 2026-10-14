@@ -608,32 +608,35 @@ app.post('/api/auth/admin-login', (req, res) => {
 // ROLE SPECIFIC DATA & GOVERNANCE APIS
 // ==========================================
 
-// Get Dealers list (Admin & B2B) with dynamic outstanding due calculation
+// Get Dealers list (Admin & B2B) with dynamic order calculation
 app.get('/api/dealers', (req, res) => {
   const db = getDb();
   if (!db.dealers) db.dealers = [];
   
-  // Dynamically synchronize each dealer's outstandingDue from unsettled orders
+  // Dynamically synchronize each dealer's metrics from real orders
   const updatedDealers = db.dealers.map(dealer => {
     const dealerOrders = (db.orders || []).filter(o => 
       (o.clientId === dealer.id || o.clientMobile === dealer.mobile || o.clientName === dealer.name) &&
-      o.clientType === 'Dealer' &&
-      o.creditStatus && o.creditStatus.includes('Outstanding')
+      o.clientType === 'Dealer'
     );
-    const dynamicDue = dealerOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+    const dueOrders = dealerOrders.filter(o => o.creditStatus && o.creditStatus.toLowerCase().includes('outstanding'));
+    const dynamicDue = dueOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
     const limit = typeof dealer.creditLimit === 'number' 
       ? dealer.creditLimit 
       : (parseInt((dealer.creditLimit || '500000').toString().replace(/[^0-9]/g, ''), 10) || 500000);
     
-    // If dealer has due orders, use dynamicDue; otherwise keep dealer.outstandingDue or 160000 demo default
-    const finalDue = dynamicDue > 0 ? dynamicDue : (dealer.outstandingDue !== undefined ? dealer.outstandingDue : 160000);
+    const finalDue = dynamicDue;
     const available = Math.max(0, limit - finalDue);
+    const totalVolume = dealerOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
 
     return {
       ...dealer,
       creditLimit: limit,
       outstandingDue: finalDue,
-      availableCredit: available
+      availableCredit: available,
+      totalOrders: dealerOrders.length,
+      totalVolume: totalVolume,
+      nextDueDate: dueOrders.length > 0 ? (dueOrders[0].creditDueDate || 'Within 30 Days') : 'None'
     };
   });
 
@@ -1359,10 +1362,29 @@ app.post('/api/customer/support-ticket', async (req, res) => {
 // ADMIN DASHBOARD REST APIS
 // ==========================================
 
-// 1. Get Customers List
+// 1. Get Customers List with dynamic order totals & spent calculations
 app.get('/api/customers', (req, res) => {
   const db = getDb();
-  res.json({ success: true, data: db.customers || [] });
+  const orders = db.orders || [];
+  const customers = (db.customers || []).map(c => {
+    const custOrders = orders.filter(o => 
+      o.clientId === c.id || 
+      o.clientMobile === c.mobile || 
+      (c.mobile && o.clientMobile && o.clientMobile.slice(-10) === c.mobile.slice(-10))
+    );
+    const totalSpent = custOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+    const defaultAddress = (c.addresses && c.addresses.find(a => a.isDefault))?.address || c.address || (c.addresses && c.addresses[0]?.address) || 'Bengaluru';
+    return {
+      ...c,
+      status: c.status || 'Active',
+      totalOrders: custOrders.length,
+      totalSpent: totalSpent,
+      rewardPoints: c.rewardPoints || (Math.floor(totalSpent / 50)) || 100,
+      registeredDate: c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '14 Oct 2026',
+      address: defaultAddress
+    };
+  });
+  res.json({ success: true, data: customers });
 });
 
 // 2. Update Customer Status (Active / Suspended / Restricted)
