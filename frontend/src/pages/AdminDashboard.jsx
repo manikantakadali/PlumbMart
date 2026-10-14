@@ -47,7 +47,8 @@ import {
   RotateCcw,
   Truck,
   Printer,
-  Trash2
+  Trash2,
+  Edit3
 } from 'lucide-react';
 import { dispatchInAppNotification } from '../utils/inAppNotificationDispatcher';
 import { 
@@ -65,18 +66,46 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  // Admin User details
-  const admin = currentUser && currentUser.role === 'Admin' ? currentUser : {
-    id: 'ADM-01',
-    name: 'System Administrator',
-    email: 'admin@plumbmart.com',
-    role: 'Admin',
-    accessLevel: 'SuperAdmin'
-  };
+  // Admin User details - state with localStorage persistence
+  const [admin, setAdmin] = useState(() => {
+    try {
+      const stored = localStorage.getItem('plumbmart_user');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && (parsed.role === 'Admin' || parsed.accessLevel)) {
+          return {
+            id: parsed.id || 'ADM-01',
+            name: parsed.name || 'System Administrator',
+            email: parsed.email || 'admin@plumbmart.com',
+            mobile: parsed.mobile || '+91 98765 43210',
+            role: parsed.role || 'Admin',
+            accessLevel: parsed.accessLevel || 'SuperAdmin'
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return {
+      id: currentUser?.id || 'ADM-01',
+      name: currentUser?.name || 'System Administrator',
+      email: currentUser?.email || 'admin@plumbmart.com',
+      mobile: currentUser?.mobile || '+91 98765 43210',
+      role: currentUser?.role || 'Admin',
+      accessLevel: currentUser?.accessLevel || 'SuperAdmin'
+    };
+  });
 
   // Admin Account Menu Dropdown & Profile Modal State
   const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(false);
   const [isAdminProfileModalOpen, setIsAdminProfileModalOpen] = useState(false);
+  const [isEditingAdminProfile, setIsEditingAdminProfile] = useState(false);
+  const [adminProfileForm, setAdminProfileForm] = useState({
+    name: '',
+    email: '',
+    mobile: '',
+    accessLevel: ''
+  });
   const adminMenuRef = useRef(null);
 
   useEffect(() => {
@@ -88,6 +117,45 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const handleStartEditAdminProfile = () => {
+    playClickSound();
+    setAdminProfileForm({
+      name: admin.name || '',
+      email: admin.email || '',
+      mobile: admin.mobile || '+91 98765 43210',
+      accessLevel: admin.accessLevel || 'SuperAdmin'
+    });
+    setIsEditingAdminProfile(true);
+  };
+
+  const handleSaveAdminProfile = (e) => {
+    if (e) e.preventDefault();
+    if (!adminProfileForm.name.trim() || !adminProfileForm.email.trim()) {
+      playWarningSound();
+      return;
+    }
+
+    const updatedAdmin = {
+      ...admin,
+      name: adminProfileForm.name.trim(),
+      email: adminProfileForm.email.trim(),
+      mobile: adminProfileForm.mobile.trim(),
+      accessLevel: adminProfileForm.accessLevel.trim() || 'SuperAdmin'
+    };
+
+    setAdmin(updatedAdmin);
+    try {
+      localStorage.setItem('plumbmart_user', JSON.stringify(updatedAdmin));
+    } catch (err) {
+      console.error('Failed to update localStorage', err);
+    }
+
+    setIsEditingAdminProfile(false);
+    playSuccessSound();
+    setSyncToast('Admin profile updated successfully!');
+    setTimeout(() => setSyncToast(null), 3500);
+  };
 
   // ==========================================
   // DATA STATES
@@ -1158,40 +1226,20 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                   </span>
                 </div>
 
-                {/* Actions */}
-                <div className="py-1">
+                {/* Actions: Quick Profile Info */}
+                <div className="p-1">
                   <button
                     onClick={() => {
                       playClickSound();
                       setIsAdminMenuOpen(false);
+                      setIsEditingAdminProfile(false);
                       setIsAdminProfileModalOpen(true);
                     }}
-                    className="w-full px-4 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2.5 transition cursor-pointer"
-                  >
-                    <UserCheck className="w-4 h-4 text-slate-400" />
-                    <span>My Profile &amp; KYC</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      playClickSound();
-                      setIsAdminMenuOpen(false);
-                      setIsAdminProfileModalOpen(true);
-                    }}
-                    className="w-full px-4 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2.5 transition cursor-pointer"
+                    className="w-full px-3.5 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 rounded-xl flex items-center gap-2.5 transition cursor-pointer"
                   >
                     <User className="w-4 h-4 text-slate-400" />
                     <span>Quick Profile Info</span>
                   </button>
-
-                  <Link
-                    to="/"
-                    onClick={() => setIsAdminMenuOpen(false)}
-                    className="w-full px-4 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2.5 transition"
-                  >
-                    <ArrowLeft className="w-4 h-4 text-slate-400" />
-                    <span>Return to Store</span>
-                  </Link>
                 </div>
 
                 {/* Logout Button */}
@@ -3679,7 +3727,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
         </div>
       </nav>
 
-      {/* Admin Profile Details Modal */}
+      {/* Admin Quick Profile Info Modal with Edit Capability */}
       {isAdminProfileModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 space-y-5 text-white relative">
@@ -3690,61 +3738,159 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                   <ShieldCheck className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white leading-tight">Admin Profile &amp; KYC</h3>
+                  <h3 className="text-base font-bold text-white leading-tight">Quick Profile Info</h3>
                   <p className="text-xs text-slate-400">Security Clearance &bull; Level 5 Master</p>
                 </div>
               </div>
               <button
-                onClick={() => setIsAdminProfileModalOpen(false)}
-                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition"
+                onClick={() => {
+                  setIsAdminProfileModalOpen(false);
+                  setIsEditingAdminProfile(false);
+                }}
+                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Profile Info Cards */}
-            <div className="space-y-3 text-xs">
-              <div className="p-3.5 bg-slate-950/70 rounded-2xl border border-slate-800/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Administrator Name</span>
-                  <span className="font-bold text-white">{admin.name}</span>
+            {/* Profile Info or Edit Mode Form */}
+            {!isEditingAdminProfile ? (
+              <div className="space-y-3.5 text-xs">
+                <div className="p-4 bg-slate-950/70 rounded-2xl border border-slate-800/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Administrator Name</span>
+                    <span className="font-bold text-white">{admin.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Admin Email</span>
+                    <span className="font-mono text-blue-400">{admin.email}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Contact Mobile</span>
+                    <span className="font-mono text-slate-300">{admin.mobile || '+91 98765 43210'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Admin ID</span>
+                    <span className="font-mono text-slate-300">{admin.id || 'ADM-01'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Role &amp; Privilege</span>
+                    <span className="font-bold text-emerald-400">{admin.accessLevel || 'SuperAdmin'}</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Admin Email</span>
-                  <span className="font-mono text-blue-400">{admin.email}</span>
+
+                <div className="p-3.5 bg-slate-950/70 rounded-2xl border border-slate-800/80 space-y-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    System Permissions &amp; Capabilities
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-medium">Zoho Live Sync</span>
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-medium">Dealer Approval</span>
+                    <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-medium">Payment Reconcile</span>
+                    <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-medium">Broadcast Engine</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Admin ID</span>
-                  <span className="font-mono text-slate-300">{admin.id || 'ADM-01'}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Role &amp; Privilege</span>
-                  <span className="font-bold text-emerald-400">{admin.accessLevel || 'SuperAdmin'}</span>
+
+                {/* Modal Actions */}
+                <div className="pt-2 border-t border-slate-800 flex items-center gap-2.5">
+                  <button
+                    onClick={handleStartEditAdminProfile}
+                    className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-md shadow-blue-600/25 cursor-pointer"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    <span>Edit Profile</span>
+                  </button>
+                  <button
+                    onClick={() => setIsAdminProfileModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition cursor-pointer"
+                  >
+                    Close
+                  </button>
                 </div>
               </div>
+            ) : (
+              <form onSubmit={handleSaveAdminProfile} className="space-y-4 text-xs">
+                <div className="p-4 bg-slate-950/70 rounded-2xl border border-slate-800/80 space-y-3">
+                  <div>
+                    <label className="block text-slate-400 text-[11px] font-semibold mb-1">
+                      Administrator Name <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={adminProfileForm.name}
+                      onChange={(e) => setAdminProfileForm({ ...adminProfileForm, name: e.target.value })}
+                      placeholder="e.g. System Administrator"
+                      required
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-blue-500 transition"
+                    />
+                  </div>
 
-              <div className="p-3.5 bg-slate-950/70 rounded-2xl border border-slate-800/80 space-y-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                  System Permissions &amp; Capabilities
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-medium">Zoho Live Sync</span>
-                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-medium">Dealer Approval</span>
-                  <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-medium">Payment Reconcile</span>
-                  <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-medium">Broadcast Engine</span>
+                  <div>
+                    <label className="block text-slate-400 text-[11px] font-semibold mb-1">
+                      Email Address <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={adminProfileForm.email}
+                      onChange={(e) => setAdminProfileForm({ ...adminProfileForm, email: e.target.value })}
+                      placeholder="e.g. admin@plumbmart.com"
+                      required
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-mono focus:outline-none focus:border-blue-500 transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 text-[11px] font-semibold mb-1">
+                      Contact Mobile
+                    </label>
+                    <input
+                      type="text"
+                      value={adminProfileForm.mobile}
+                      onChange={(e) => setAdminProfileForm({ ...adminProfileForm, mobile: e.target.value })}
+                      placeholder="e.g. +91 98765 43210"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-mono focus:outline-none focus:border-blue-500 transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 text-[11px] font-semibold mb-1">
+                      Access Level / Role
+                    </label>
+                    <select
+                      value={adminProfileForm.accessLevel}
+                      onChange={(e) => setAdminProfileForm({ ...adminProfileForm, accessLevel: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-blue-500 transition"
+                    >
+                      <option value="SuperAdmin">SuperAdmin (Master Access)</option>
+                      <option value="Senior Manager">Senior Operations Manager</option>
+                      <option value="Inventory Lead">Inventory Lead</option>
+                      <option value="Auditor">Security Auditor</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Modal Footer */}
-            <div className="pt-2 border-t border-slate-800">
-              <button
-                onClick={() => setIsAdminProfileModalOpen(false)}
-                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition text-center shadow-md shadow-blue-600/25"
-              >
-                Close Profile
-              </button>
-            </div>
+                {/* Edit Action Buttons */}
+                <div className="pt-2 border-t border-slate-800 flex items-center gap-2.5">
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-md shadow-emerald-600/25 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Save Changes</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playClickSound();
+                      setIsEditingAdminProfile(false);
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
