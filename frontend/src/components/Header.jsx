@@ -90,16 +90,6 @@ export default function Header({
               </button>
             )}
 
-            {/* Quick Role Dashboard Link when signed in */}
-            {currentUser && (
-              <Link
-                to={currentUser.role === 'Dealer' ? '/dealer' : currentUser.role === 'Plumber' ? '/plumber' : '/customer'}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20 transition active:scale-95"
-              >
-                <span>Dashboard</span>
-              </Link>
-            )}
-
             {/* Login Link Button to /login URL - ALWAYS VISIBLE */}
             <Link
               to="/login"
@@ -149,15 +139,6 @@ export default function Header({
         {/* Mobile Dropdown Menu for Auth & Quick Actions */}
         {mobileMenuOpen && (
           <div className="md:hidden mt-3 pt-3 border-t border-slate-200 flex flex-col gap-2 pb-2">
-            {currentUser && (
-              <Link
-                to={currentUser.role === 'Dealer' ? '/dealer' : currentUser.role === 'Plumber' ? '/plumber' : '/customer'}
-                onClick={() => setMobileMenuOpen(false)}
-                className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700"
-              >
-                <span>Go to Dashboard</span>
-              </Link>
-            )}
             <Link
               to="/login"
               onClick={() => setMobileMenuOpen(false)}
