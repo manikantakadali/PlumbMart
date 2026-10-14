@@ -290,9 +290,9 @@ export default function CustomerDashboard({ currentUser, onLogout }) {
       {/* Main Container with Sidebar + Content */}
       <div className="flex-1 flex w-full relative overflow-hidden min-h-0">
         
-        {/* Collapsible Sidebar */}
+        {/* Collapsible Sidebar - Desktop Only */}
         {isSidebarOpen && (
-          <aside className="w-64 sm:w-72 shrink-0 bg-white border-r border-slate-200 p-5 flex flex-col justify-between transition-all duration-300 h-full overflow-y-auto">
+          <aside className="w-64 sm:w-72 hidden md:flex shrink-0 bg-white border-r border-slate-200 p-5 flex-col justify-between transition-all duration-300 h-full overflow-y-auto">
             <div>
               {/* Sidebar Header */}
               <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
@@ -425,7 +425,7 @@ export default function CustomerDashboard({ currentUser, onLogout }) {
         )}
 
         {/* Main Content Area */}
-        <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-8 py-8 h-full overflow-y-auto">
+        <main className="flex-1 min-w-0 px-3.5 sm:px-6 lg:px-8 py-6 pb-24 md:pb-8 h-full overflow-y-auto">
           
           {/* Quick Toggle pill when sidebar is closed */}
           {!isSidebarOpen && (
@@ -888,6 +888,77 @@ export default function CustomerDashboard({ currentUser, onLogout }) {
           </div>
         </div>
       )}
+
+      {/* Mobile Bottom Navigation Bar (md:hidden) */}
+      <nav 
+        aria-label="Customer Mobile Navigation"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] px-2 py-1.5"
+      >
+        <div className="flex items-center justify-around gap-1 py-0.5">
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-center transition active:scale-95 ${
+              activeTab === 'orders'
+                ? 'text-blue-600 font-bold bg-blue-50/80 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <div className="relative">
+              <Package className="w-5 h-5" />
+              {orders.length > 0 && (
+                <span className="absolute -top-1 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full text-[9px] font-black bg-blue-600 text-white flex items-center justify-center font-mono">
+                  {orders.length}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] mt-1 leading-none font-medium">Orders</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('addresses')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-center transition active:scale-95 ${
+              activeTab === 'addresses'
+                ? 'text-blue-600 font-bold bg-blue-50/80 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <MapPin className="w-5 h-5" />
+            <span className="text-[10px] mt-1 leading-none font-medium">Addresses</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('saved')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-center transition active:scale-95 ${
+              activeTab === 'saved'
+                ? 'text-blue-600 font-bold bg-blue-50/80 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <Heart className="w-5 h-5" />
+            <span className="text-[10px] mt-1 leading-none font-medium">Saved</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('support')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-center transition active:scale-95 ${
+              activeTab === 'support'
+                ? 'text-blue-600 font-bold bg-blue-50/80 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <Phone className="w-5 h-5" />
+            <span className="text-[10px] mt-1 leading-none font-medium">Support</span>
+          </button>
+
+          <Link
+            to="/"
+            className="flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-center text-slate-500 hover:text-slate-900 transition active:scale-95"
+          >
+            <ArrowLeft className="w-5 h-5 text-blue-600" />
+            <span className="text-[10px] mt-1 leading-none font-medium">Store</span>
+          </Link>
+        </div>
+      </nav>
 
     </div>
   );

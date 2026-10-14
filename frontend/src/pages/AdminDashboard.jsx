@@ -1069,25 +1069,25 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       )}
 
       {/* Top Header */}
-      <header className="shrink-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-md shadow-blue-600/30">
+      <header className="shrink-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-3.5 sm:px-6 py-2.5 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-md shadow-blue-600/30 shrink-0">
             <ShieldCheck className="w-5 h-5" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-base font-black tracking-tight text-white">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="text-sm sm:text-base font-black tracking-tight text-white shrink-0">
                 Plumb<span className="text-blue-500">Mart</span>
               </span>
-              <span className="text-[10px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-md">
-                Admin Panel &bull; Overview
+              <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 sm:px-2 py-0.5 rounded-md truncate max-w-[140px] sm:max-w-none">
+                Admin &bull; {mainNavItems.find(i => i.id === activeTab)?.label || secondaryNavItems.find(i => i.id === activeTab)?.label || 'Overview'}
               </span>
             </div>
           </div>
         </div>
 
         {/* Header Right Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Zoho Sync Live Badge */}
           <div 
             onClick={handleTriggerZohoSync}
@@ -1098,6 +1098,15 @@ export default function AdminDashboard({ currentUser, onLogout }) {
             <span className="text-[11px] font-mono text-slate-300">Zoho Live: {zohoSyncMeta.state}</span>
             <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${isSyncingZoho ? 'animate-spin text-blue-400' : ''}`} />
           </div>
+
+          {/* Return to store button on mobile */}
+          <Link
+            to="/"
+            className="md:hidden p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition"
+            title="Return to Store"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
 
           {/* Admin Profile Details */}
           <div className="flex items-center gap-2.5 pl-2 border-l border-slate-800">
@@ -1119,8 +1128,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       {/* Main Body with Sidebar + Workspace */}
       <div className="flex-1 flex w-full relative overflow-hidden min-h-0">
         
-        {/* Left Admin Navigation Sidebar */}
-        <aside className={`${isSidebarCollapsed ? 'w-16 p-2' : 'w-64 p-3.5'} shrink-0 bg-slate-950 border-r border-slate-800 flex flex-col justify-between transition-all duration-200 h-full overflow-y-auto overflow-x-hidden z-20`}>
+        {/* Left Admin Navigation Sidebar - Desktop / Tablet Only */}
+        <aside className={`${isSidebarCollapsed ? 'w-16 p-2' : 'w-64 p-3.5'} hidden md:flex shrink-0 bg-slate-950 border-r border-slate-800 flex-col justify-between transition-all duration-200 h-full overflow-y-auto overflow-x-hidden z-20`}>
           <div className="space-y-5">
             {/* Sidebar Toggle Corner */}
             <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} pb-2 border-b border-slate-800/80`}>
@@ -1237,7 +1246,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
         </aside>
 
         {/* Content Workspace Area */}
-        <main className="flex-1 min-w-0 h-full overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 space-y-6">
+        <main className="flex-1 min-w-0 h-full overflow-y-auto overflow-x-hidden p-3.5 sm:p-6 lg:p-8 pb-24 md:pb-8 space-y-6">
 
           {/* ======================================================== */}
           {/* 1. DASHBOARD OVERVIEW                                    */}
@@ -3530,6 +3539,57 @@ export default function AdminDashboard({ currentUser, onLogout }) {
           </div>
         </div>
       )}
+
+      {/* Mobile Bottom Navigation Bar (md:hidden) */}
+      <nav 
+        aria-label="Admin Mobile Navigation"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/90 shadow-[0_-8px_30px_rgba(0,0,0,0.8)] px-2 py-1.5"
+      >
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth py-0.5 px-1">
+          {[...mainNavItems, ...secondaryNavItems].map(item => {
+            const Icon = item.icon;
+            const isSelected = activeTab === item.id;
+            const shortLabel = item.id === 'overview' ? 'Overview' :
+                               item.id === 'customers' ? 'Customers' :
+                               item.id === 'dealers' ? 'Dealers' :
+                               item.id === 'plumbers' ? 'Plumbers' :
+                               item.id === 'orders' ? 'Orders' :
+                               item.id === 'products' ? 'Products' :
+                               item.id === 'payments' ? 'Payments' :
+                               item.id === 'reports' ? 'Reports' :
+                               item.id === 'notifications' ? 'Alerts' : item.label;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  playClickSound();
+                  setActiveTab(item.id);
+                }}
+                className={`flex flex-col items-center justify-center shrink-0 min-w-[62px] py-1.5 px-2 rounded-xl text-center transition active:scale-95 relative ${
+                  isSelected 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/35 font-bold' 
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                }`}
+                title={item.label}
+              >
+                <div className="relative">
+                  <Icon className={`w-5 h-5 ${isSelected ? 'text-white' : 'text-slate-400'}`} />
+                  {item.count !== undefined && item.count > 0 && (
+                    <span className={`absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-black flex items-center justify-center font-mono ${
+                      isSelected ? 'bg-white text-blue-700 shadow-xs' : 'bg-blue-600 text-white'
+                    }`}>
+                      {item.count > 99 ? '99+' : item.count}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] mt-1 leading-none tracking-tight whitespace-nowrap">
+                  {shortLabel}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
     </div>
   );
