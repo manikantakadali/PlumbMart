@@ -497,7 +497,10 @@ export default function RegisterPage({ onRegisterSuccess }) {
           {/* Switch to Login link */}
           <div className="mt-6 pt-5 border-t border-slate-200 text-center text-xs text-slate-500">
             Already have an account?{' '}
-            <Link to="/login" className="text-emerald-700 font-bold hover:underline">
+            <Link 
+              to={redirectTarget ? `/login?redirect=${redirectTarget}` : '/login'} 
+              className="text-emerald-700 font-bold hover:underline"
+            >
               Sign in to your account
             </Link>
           </div>

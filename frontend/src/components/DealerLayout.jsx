@@ -15,7 +15,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  LayoutDashboard
+  LayoutDashboard,
+  Bell
 } from 'lucide-react';
 import { getDealerCart } from '../utils/dealerCart';
 
@@ -170,10 +171,10 @@ export default function DealerLayout({ children, currentUser, onLogout, products
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 w-full max-w-full overflow-x-hidden min-w-0">
+    <div className="h-screen bg-slate-50 flex flex-col font-sans text-slate-800 w-full max-w-full overflow-hidden min-w-0">
       
       {/* Main Top Header */}
-      <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs">
+      <header className="shrink-0 z-40 bg-white border-b border-slate-200 shadow-xs">
         <div className="px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
           
           <div className="flex items-center gap-6">
@@ -330,10 +331,10 @@ export default function DealerLayout({ children, currentUser, onLogout, products
       </header>
 
       {/* Body with Category Sidebar + Main Content */}
-      <div className="flex-1 flex w-full relative">
+      <div className="flex-1 flex w-full relative overflow-hidden min-h-0">
         
         {/* Category Sidebar - Desktop */}
-        <aside className={`${isCollapsed ? 'w-16 sm:w-18 p-2' : 'w-56 sm:w-60 p-3.5'} hidden md:flex shrink-0 bg-white border-r border-slate-200 flex-col justify-between transition-all duration-200 sticky top-[53px] h-[calc(100vh-53px)] self-start overflow-y-auto overflow-x-hidden z-20`}>
+        <aside className={`${isCollapsed ? 'w-16 sm:w-18 p-2' : 'w-56 sm:w-60 p-3.5'} hidden md:flex shrink-0 bg-white border-r border-slate-200 flex-col justify-between transition-all duration-200 h-full overflow-y-auto overflow-x-hidden z-20`}>
           <div>
             {/* Sidebar Corner Toggle Button */}
             <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-end'} pb-2 mb-2 border-b border-slate-100`}>
@@ -402,7 +403,7 @@ export default function DealerLayout({ children, currentUser, onLogout, products
         </aside>
 
         {/* Main Content Area */}
-        <div className="flex-1 min-w-0 w-full flex flex-col pb-20 md:pb-0 overflow-x-hidden">
+        <div className="flex-1 min-w-0 w-full flex flex-col h-full overflow-y-auto pb-20 md:pb-0">
           {/* Render Page Content */}
           <div className="flex-1 w-full min-w-0">
             {children}
