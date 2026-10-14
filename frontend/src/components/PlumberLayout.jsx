@@ -199,17 +199,17 @@ export default function PlumberLayout({
   ];
 
   return (
-    <div className="h-screen bg-slate-50 flex flex-col font-sans text-slate-800 overflow-hidden">
+    <div className="min-h-screen md:h-screen h-[100dvh] bg-slate-50 flex flex-col font-sans text-slate-800 overflow-hidden">
       {/* Real-Time In-App Notification Toast */}
       <InAppNotificationToast role="Plumber" />
 
       {/* Account Suspended Alert Banner */}
       {isSuspended && (
-        <div className="bg-rose-600 text-white px-4 py-2 text-xs font-semibold flex flex-wrap items-center justify-between gap-3 shadow-md border-b border-rose-700 z-30">
+        <div className="bg-rose-600 text-white px-3 sm:px-4 py-2 text-xs font-semibold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 shadow-md border-b border-rose-700 z-30">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-white shrink-0 animate-bounce" />
-            <span>
-              <strong>ACCOUNT SUSPENDED:</strong> Your Plumber verification has been suspended by Administration. Job execution and payouts are currently restricted.
+            <span className="leading-snug">
+              <strong>ACCOUNT SUSPENDED:</strong> Job execution and payouts are currently restricted by Administration.
             </span>
           </div>
           <button
@@ -217,7 +217,7 @@ export default function PlumberLayout({
               if (onSelectTab) onSelectTab('profile');
               window.dispatchEvent(new CustomEvent('open_plumber_suspended_modal'));
             }}
-            className="px-2.5 py-1 rounded-lg bg-white text-rose-700 hover:bg-rose-50 text-[11px] font-black transition shadow-xs cursor-pointer shrink-0"
+            className="w-full sm:w-auto text-center px-2.5 py-1 rounded-lg bg-white text-rose-700 hover:bg-rose-50 text-[11px] font-black transition shadow-xs cursor-pointer shrink-0"
           >
             Suspension Notice &amp; Help
           </button>
@@ -226,26 +226,26 @@ export default function PlumberLayout({
       
       {/* Top Header */}
       <header className="shrink-0 z-40 bg-white border-b border-slate-200 shadow-xs">
-        <div className="px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
+        <div className="px-3 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-2 sm:gap-4">
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Brand Logo */}
-            <Link to="/plumber" className="flex items-center gap-2 group">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-amber-600/20 group-hover:bg-amber-700 transition">
+            <Link to="/plumber" className="flex items-center gap-2 group min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-amber-600/20 group-hover:bg-amber-700 transition shrink-0">
                 <Wrench className="w-4.5 h-4.5" />
               </div>
-              <div>
-                <div className="flex items-center gap-1.5 leading-none">
-                  <span className="text-base font-black tracking-tight text-slate-900">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 leading-none flex-wrap">
+                  <span className="text-sm sm:text-base font-black tracking-tight text-slate-900 truncate">
                     Plumb<span className="text-amber-600">Mart</span>
                   </span>
                   {isSuspended ? (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-600 text-white shadow-xs flex items-center gap-1 animate-pulse">
-                      <AlertCircle className="w-3 h-3 text-white" />
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-rose-600 text-white shadow-xs flex items-center gap-1 animate-pulse shrink-0">
+                      <AlertCircle className="w-2.5 h-2.5 text-white" />
                       SUSPENDED
                     </span>
                   ) : (
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
                       Plumber Pro
                     </span>
                   )}
@@ -393,7 +393,7 @@ export default function PlumberLayout({
         </aside>
 
         {/* Content Page Area */}
-        <div className="flex-1 min-w-0 w-full h-full overflow-y-auto pb-20 md:pb-0">
+        <div className="flex-1 min-w-0 w-full h-full overflow-y-auto pb-28 md:pb-0">
           {children}
         </div>
 
@@ -402,7 +402,7 @@ export default function PlumberLayout({
       {/* Mobile Bottom Navigation Bar with Sidebar Navigation Icons */}
       <nav 
         aria-label="Plumber Navigation"
-        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-1 py-1.5 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] flex items-center justify-around"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-1 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(0,0,0,0.06)] flex items-center justify-around min-h-[58px]"
       >
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -413,7 +413,7 @@ export default function PlumberLayout({
               key={item.id}
               onClick={() => onSelectTab && onSelectTab(item.id)}
               title={item.name}
-              className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition active:scale-95 ${
+              className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition active:scale-95 touch-manipulation min-h-[46px] ${
                 isSelected
                   ? 'text-amber-700 font-bold bg-amber-50/80 shadow-2xs'
                   : 'text-slate-500 hover:text-slate-900'
@@ -427,7 +427,7 @@ export default function PlumberLayout({
                   </span>
                 )}
               </div>
-              <span className="text-[10px] mt-0.5 truncate max-w-[64px] text-center leading-tight">
+              <span className="text-[10px] mt-0.5 truncate max-w-[62px] text-center leading-tight">
                 {item.name.replace('My ', '').replace('Product ', '')}
               </span>
             </button>
@@ -437,82 +437,82 @@ export default function PlumberLayout({
 
       {/* Quick Profile Modal */}
       {isProfileModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 border border-slate-200 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 border border-slate-200 shadow-2xl relative max-h-[88vh] overflow-y-auto">
             <button
               onClick={() => setIsProfileModalOpen(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition"
+              className="absolute top-3.5 right-3.5 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-amber-500/25">
-                <Wrench className="w-6 h-6" />
+            <div className="flex items-center gap-3 pb-3 sm:pb-4 border-b border-slate-100 pr-8">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-amber-500/25 shrink-0">
+                <Wrench className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">{plumber.name}</h3>
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  Verified Plumber &bull; {plumber.status || 'Active'}
+              <div className="min-w-0">
+                <h3 className="text-base font-bold text-slate-900 truncate">{plumber.name}</h3>
+                <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600 shrink-0" />
+                  <span className="truncate">Verified Plumber &bull; {plumber.status || 'Active'}</span>
                 </span>
               </div>
             </div>
 
-            <div className="py-4 space-y-3 text-xs">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="py-3 sm:py-4 space-y-2.5 sm:space-y-3 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-100">
                 <div className="flex items-center gap-2 text-slate-600">
-                  <Phone className="w-4 h-4 text-slate-400" />
+                  <Phone className="w-4 h-4 text-slate-400 shrink-0" />
                   <span>Registered Mobile:</span>
                 </div>
                 <strong className="text-slate-900 font-mono">+91 {plumber.mobile}</strong>
               </div>
 
               {plumber.email && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-100">
                   <div className="flex items-center gap-2 text-slate-600">
-                    <User className="w-4 h-4 text-slate-400" />
+                    <User className="w-4 h-4 text-slate-400 shrink-0" />
                     <span>Registered Email:</span>
                   </div>
-                  <strong className="text-slate-900 font-mono text-[11px] truncate max-w-[190px]">{plumber.email}</strong>
+                  <strong className="text-slate-900 font-mono text-[11px] break-all">{plumber.email}</strong>
                 </div>
               )}
 
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-100">
                 <div className="flex items-center gap-2 text-slate-600">
-                  <ShieldCheck className="w-4 h-4 text-slate-400" />
+                  <ShieldCheck className="w-4 h-4 text-slate-400 shrink-0" />
                   <span>License Number:</span>
                 </div>
                 <strong className="text-slate-900 font-mono">{plumber.license || 'PLUMB-KA-2024-884'}</strong>
               </div>
 
               {plumber.city && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-100">
                   <span className="text-slate-600">Operating City:</span>
-                  <strong className="text-slate-900 text-right">{plumber.city}</strong>
+                  <strong className="text-slate-900 sm:text-right">{plumber.city}</strong>
                 </div>
               )}
 
-              <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50/70 border border-amber-200 text-amber-900">
+              <div className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl bg-amber-50/70 border border-amber-200 text-amber-900">
                 <span>Verification Status:</span>
                 <span className="font-black text-emerald-700 uppercase">{plumber.status || 'VERIFIED'}</span>
               </div>
             </div>
 
-            <div className="pt-2 flex justify-between items-center">
+            <div className="pt-2 flex flex-col-reverse sm:flex-row justify-between items-stretch sm:items-center gap-2">
               <button
                 onClick={() => {
                   setIsProfileModalOpen(false);
                   if (onSelectTab) onSelectTab('profile');
                 }}
-                className="text-xs font-bold text-amber-600 hover:text-amber-700 underline"
+                className="text-xs font-bold text-amber-600 hover:text-amber-700 underline text-center sm:text-left py-1"
               >
                 Go to Full Profile &rarr;
               </button>
 
               <button
                 onClick={() => setIsProfileModalOpen(false)}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition"
+                className="w-full sm:w-auto px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition text-center"
               >
                 Close
               </button>

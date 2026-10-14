@@ -833,14 +833,16 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
       activeJobsCount={activeJobsCount}
       dealerOrdersCount={dealerOrders.length}
     >
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 relative">
+      <main className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-6 relative">
 
         {/* Toast Notification */}
         {toastMessage && (
-          <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-slate-900 text-white rounded-2xl shadow-xl text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-300">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{toastMessage}</span>
-            <button onClick={() => setToastMessage(null)} className="ml-2 text-slate-400 hover:text-white">
+          <div className="fixed top-4 right-3 sm:right-4 left-3 sm:left-auto z-50 flex items-center justify-between gap-2 px-3.5 sm:px-4 py-2.5 sm:py-3 bg-slate-900 text-white rounded-2xl shadow-xl text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-300 max-w-sm sm:max-w-md">
+            <div className="flex items-center gap-2 min-w-0">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="truncate">{toastMessage}</span>
+            </div>
+            <button onClick={() => setToastMessage(null)} className="ml-2 text-slate-400 hover:text-white shrink-0">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -850,16 +852,16 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         {/* TAB 1: MY ACTIVITIES (Simple, Clean, Modern UI)         */}
         {/* ======================================================== */}
         {activeTab === 'activities' && (
-          <div className="space-y-5">
+          <div className="space-y-4 sm:space-y-5">
             
             {/* Header & Search */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                  <Wrench className="w-5 h-5 text-amber-600" />
+                <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <Wrench className="w-5 h-5 text-amber-600 shrink-0" />
                   <span>My Activities</span>
                 </h1>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 mt-0.5">
                   Installation and repair jobs assigned by PlumbMart &bull; Update status as you perform work
                 </p>
               </div>
@@ -872,7 +874,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   value={activitySearchQuery}
                   onChange={e => setActivitySearchQuery(e.target.value)}
                   placeholder="Search activities, customer, or site..."
-                  className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 shadow-2xs"
+                  className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 shadow-2xs"
                 />
                 {activitySearchQuery && (
                   <button 
@@ -887,21 +889,21 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
 
             {/* Account Suspended Alert Banner in Activities */}
             {isSuspended && (
-              <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in duration-300">
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-rose-600/30">
-                    <AlertCircle className="w-6 h-6 animate-pulse" />
+              <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-3.5 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 shadow-sm animate-in fade-in duration-300">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-rose-600/30">
+                    <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-black text-rose-950 text-sm sm:text-base">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-black text-rose-950 text-xs sm:text-base">
                         Account Suspended &bull; Job Execution Locked
                       </h3>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-xs">
+                      <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black bg-rose-600 text-white shadow-xs">
                         SUSPENDED
                       </span>
                     </div>
-                    <p className="text-xs text-rose-700 mt-1 max-w-2xl leading-relaxed">
+                    <p className="text-[11px] sm:text-xs text-rose-700 mt-1 max-w-2xl leading-relaxed">
                       Your plumber account has been suspended by system administration. All job status changes, task completions, and new dispatches are temporarily locked.
                     </p>
                   </div>
@@ -909,7 +911,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 <button
                   type="button"
                   onClick={() => setIsSuspendedModalOpen(true)}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm transition shrink-0 active:scale-95"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm transition shrink-0 active:scale-95"
                 >
                   <span>View Suspension Notice</span>
                   <ChevronRight className="w-4 h-4" />
@@ -918,7 +920,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
             )}
 
             {/* Filter Tabs Pills with Item Counts */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1.5 -mx-3 px-3 sm:mx-0 sm:px-0 scrollbar-none">
               {[
                 { id: 'All', label: 'All Jobs', count: jobs.length },
                 { id: 'Assigned', label: 'Assigned', count: jobs.filter(j => j.status === 'Assigned').length },
@@ -928,7 +930,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 <button
                   key={tab.id}
                   onClick={() => setActivityStatusFilter(tab.id)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer ${
                     activityStatusFilter === tab.id
                       ? 'bg-amber-600 text-white shadow-xs'
                       : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200'
@@ -948,13 +950,13 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
 
             {/* Activities Job Cards List */}
             {filteredJobs.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-slate-500 max-w-md mx-auto my-6">
+              <div className="bg-white border border-slate-200 rounded-2xl p-8 sm:p-10 text-center text-slate-500 max-w-md mx-auto my-6">
                 <Briefcase className="w-9 h-9 text-slate-300 mx-auto mb-2" />
                 <p className="font-bold text-sm text-slate-700">No matching jobs found</p>
                 <p className="text-xs text-slate-400 mt-1">Try switching filter tabs or clear your search query.</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3.5 sm:space-y-4">
                 {filteredJobs.map(job => {
                   const isAssigned = job.status === 'Assigned';
                   const isInProgress = job.status === 'In Progress';
@@ -963,11 +965,11 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   return (
                     <div 
                       key={job.id}
-                      className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-2xs hover:border-slate-300 transition-all space-y-3.5"
+                      className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 p-3.5 sm:p-5 shadow-2xs hover:border-slate-300 transition-all space-y-3 sm:space-y-3.5"
                     >
                       {/* Top Bar: Job Tag, Scheduled Date, and Instant Status Switcher */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
-                        <div className="flex items-center gap-2 flex-wrap text-xs">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap text-xs">
                           <span className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
                             #{job.id}
                           </span>
@@ -975,20 +977,20 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                             {job.jobType}
                           </span>
                           <span className="text-slate-400 font-medium flex items-center gap-1 text-[11px]">
-                            <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                            <Calendar className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                             {job.scheduledDate}
                           </span>
                         </div>
 
                         {/* Instant 3-Stage Status Switcher (Assigned -> In Progress -> Completed) */}
-                        <div className={`flex items-center p-0.5 rounded-xl text-xs self-start sm:self-auto ${
+                        <div className={`grid grid-cols-3 sm:flex items-center p-0.5 rounded-xl text-xs w-full sm:w-auto ${
                           isSuspended ? 'bg-slate-200/70 opacity-60' : 'bg-slate-100'
                         }`}>
                           <button
                             type="button"
                             disabled={isSuspended}
                             onClick={() => handleUpdateJobStatus(job.id, 'Assigned')}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                            className={`px-2 sm:px-2.5 py-1.5 sm:py-1 rounded-lg text-[10px] sm:text-[11px] font-semibold text-center transition ${
                               isSuspended
                                 ? 'cursor-not-allowed text-slate-400'
                                 : isAssigned
@@ -1003,7 +1005,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                             type="button"
                             disabled={isSuspended}
                             onClick={() => handleUpdateJobStatus(job.id, 'In Progress')}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                            className={`px-2 sm:px-2.5 py-1.5 sm:py-1 rounded-lg text-[10px] sm:text-[11px] font-semibold text-center transition ${
                               isSuspended
                                 ? 'cursor-not-allowed text-slate-400'
                                 : isInProgress
@@ -1018,7 +1020,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                             type="button"
                             disabled={isSuspended}
                             onClick={() => handleUpdateJobStatus(job.id, 'Completed')}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                            className={`px-2 sm:px-2.5 py-1.5 sm:py-1 rounded-lg text-[10px] sm:text-[11px] font-semibold text-center transition ${
                               isSuspended
                                 ? 'cursor-not-allowed text-slate-400'
                                 : isCompleted
@@ -1034,7 +1036,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
 
                       {/* Job Title & Summary */}
                       <div>
-                        <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                        <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
                           {job.title}
                         </h3>
                         <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
@@ -1043,10 +1045,10 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                       </div>
 
                       {/* Customer Details & Work Location Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3 text-xs">
                         
                         {/* Customer Row */}
-                        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <div className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-100">
                           <div className="min-w-0 pr-2">
                             <span className="text-[10px] text-slate-400 font-semibold block uppercase tracking-wider">Customer</span>
                             <span className="font-bold text-slate-900 truncate block text-xs">{job.customerName}</span>
@@ -1063,7 +1065,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                         </div>
 
                         {/* Location Row */}
-                        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-100">
                           <div className="flex items-center justify-between mb-0.5">
                             <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Location</span>
                             <span className="text-[10px] text-blue-600 font-medium flex items-center gap-0.5">
@@ -1088,11 +1090,11 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                         <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">
                           Products Involved:
                         </span>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
                           {job.productsInvolved.map((prod, idx) => (
                             <div 
                               key={idx}
-                              className="inline-flex items-center gap-2 bg-slate-50 hover:bg-slate-100/80 p-1.5 pr-2.5 rounded-xl border border-slate-200 transition"
+                              className="inline-flex items-center gap-2 bg-slate-50 hover:bg-slate-100/80 p-1.5 pr-2.5 rounded-xl border border-slate-200 transition max-w-full"
                             >
                               <img
                                 src={prod.image || '/products/PLB-PIPE-051.jpg'}
@@ -1103,8 +1105,8 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                                 }}
                                 className="w-7 h-7 rounded-lg object-contain p-0.5 bg-white border border-slate-200 shrink-0"
                               />
-                              <div className="text-left">
-                                <span className="font-semibold text-xs text-slate-800 truncate block max-w-[200px] sm:max-w-xs">{prod.name}</span>
+                              <div className="text-left min-w-0">
+                                <span className="font-semibold text-xs text-slate-800 truncate block max-w-[130px] sm:max-w-xs">{prod.name}</span>
                                 <span className="text-[10px] text-slate-500 font-mono">Qty: {prod.qty} units</span>
                               </div>
                               <button
@@ -1112,7 +1114,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                                   const fullProd = products.find(p => p.id === prod.id) || prod;
                                   setSelectedProductManual(fullProd);
                                 }}
-                                className="ml-1 text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-200 transition"
+                                className="ml-1 text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-200 transition shrink-0 cursor-pointer"
                                 title="Open specs and installation guide"
                               >
                                 Manual
@@ -1135,15 +1137,15 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                             {job.checklist.map(item => (
                               <label
                                 key={item.id}
-                                className="flex items-center gap-2 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 cursor-pointer hover:border-blue-300 transition text-[11px]"
+                                className="flex items-start sm:items-center gap-2 bg-white px-2.5 py-2 rounded-lg border border-slate-200 cursor-pointer hover:border-blue-300 transition text-[11px]"
                               >
                                 <input
                                   type="checkbox"
                                   checked={item.done}
                                   onChange={() => handleToggleChecklist(job.id, item.id)}
-                                  className="w-3.5 h-3.5 text-blue-600 rounded focus:ring-blue-500"
+                                  className="w-3.5 h-3.5 mt-0.5 sm:mt-0 text-blue-600 rounded focus:ring-blue-500 shrink-0"
                                 />
-                                <span className={item.done ? 'line-through text-slate-400' : 'text-slate-700 font-medium'}>
+                                <span className={`leading-tight ${item.done ? 'line-through text-slate-400' : 'text-slate-700 font-medium'}`}>
                                   {item.label}
                                 </span>
                               </label>
@@ -1155,11 +1157,11 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                       {/* Bottom Action Footer */}
                       <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 border-t border-slate-100">
                         <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5" />
+                          <Clock className="w-3.5 h-3.5 shrink-0" />
                           {job.completedAt ? (
-                            <span className="text-emerald-700 font-semibold">Completed: {job.completedAt}</span>
+                            <span className="text-emerald-700 font-semibold truncate">Completed: {job.completedAt}</span>
                           ) : job.startedAt ? (
-                            <span className="text-blue-700 font-medium">In Progress since: {job.startedAt}</span>
+                            <span className="text-blue-700 font-medium truncate">In Progress since: {job.startedAt}</span>
                           ) : (
                             <span>Assigned &bull; Ready to start</span>
                           )}
@@ -1171,10 +1173,10 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                             <button
                               disabled={isSuspended}
                               onClick={() => handleUpdateJobStatus(job.id, 'In Progress')}
-                              className={`w-full sm:w-auto px-4 py-2 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition ${
+                              className={`w-full sm:w-auto px-4 py-2 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer ${
                                 isSuspended 
                                   ? 'bg-slate-300 text-slate-500 cursor-not-allowed' 
-                                  : 'bg-amber-600 hover:bg-amber-700'
+                                  : 'bg-amber-600 hover:bg-amber-700 active:scale-95'
                               }`}
                               title={isSuspended ? 'Action locked: Account Suspended' : 'Start work on site'}
                             >
@@ -1187,10 +1189,10 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                             <button
                               disabled={isSuspended}
                               onClick={() => handleUpdateJobStatus(job.id, 'Completed')}
-                              className={`w-full sm:w-auto px-4 py-2 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition ${
+                              className={`w-full sm:w-auto px-4 py-2 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer ${
                                 isSuspended 
                                   ? 'bg-slate-300 text-slate-500 cursor-not-allowed' 
-                                  : 'bg-emerald-600 hover:bg-emerald-700'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 active:scale-95'
                               }`}
                               title={isSuspended ? 'Action locked: Account Suspended' : 'Mark job completed'}
                             >
@@ -1200,7 +1202,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                           )}
 
                           {isCompleted && (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
                               <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200">
                                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                                 <span>Completed</span>
@@ -1209,7 +1211,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                                 disabled={isSuspended}
                                 onClick={() => handleUpdateJobStatus(job.id, 'In Progress')}
                                 className={`text-[10px] px-1 ${
-                                  isSuspended ? 'text-slate-300 cursor-not-allowed' : 'text-slate-400 hover:text-slate-700 underline'
+                                  isSuspended ? 'text-slate-300 cursor-not-allowed' : 'text-slate-400 hover:text-slate-700 underline cursor-pointer'
                                 }`}
                                 title={isSuspended ? 'Action locked: Account Suspended' : 'Reopen job'}
                               >
@@ -1233,23 +1235,23 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         {/* TAB: DISTRIBUTOR ORDERS (Sri Venkateswara Distributors)  */}
         {/* ======================================================== */}
         {activeTab === 'dealer-orders' && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             
             {/* Header & Distributor Details Card */}
-            <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm relative overflow-hidden">
+            <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-7 border border-slate-200 shadow-sm relative overflow-hidden">
               <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-amber-100/40 via-blue-50/30 to-transparent rounded-full -mr-20 -mt-20 pointer-events-none"></div>
 
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 relative z-10">
-                <div className="flex items-start gap-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-600 to-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-amber-600/25 shrink-0">
-                    <Building2 className="w-6 h-6" />
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-5 relative z-10">
+                <div className="flex items-start gap-3 sm:gap-3.5">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-amber-600 to-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-amber-600/25 shrink-0">
+                    <Building2 className="w-5 h-5 sm:w-6 sm:h-6" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                      <h1 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight">
                         Distributor Material Orders
                       </h1>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                      <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                         Live B2B Feed
                       </span>
@@ -1257,28 +1259,28 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                     <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
                       Showing real-time supply orders placed by your regional partner <strong className="text-slate-800">Sri Venkateswara Distributors</strong>.
                     </p>
-                    <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500 flex-wrap">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1.5 sm:gap-3 mt-2 text-[11px] text-slate-500 flex-wrap">
                       <span className="flex items-center gap-1 font-medium text-slate-700">
-                        <MapPin className="w-3.5 h-3.5 text-amber-600" />
-                        Plot 42, Peenya Industrial Area Phase 1, Bengaluru
+                        <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>Plot 42, Peenya Ind. Area, Bengaluru</span>
                       </span>
                       <span className="flex items-center gap-1 font-medium text-slate-700">
-                        <Phone className="w-3.5 h-3.5 text-amber-600" />
-                        +91 90000 11111
+                        <Phone className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>+91 90000 11111</span>
                       </span>
                       <span className="flex items-center gap-1 text-slate-500">
-                        <Mail className="w-3.5 h-3.5 text-slate-400" />
-                        dealer@plumbmart-demo.com
+                        <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>dealer@plumbmart-demo.com</span>
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 self-start lg:self-center shrink-0">
+                <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 pt-1 sm:pt-0">
                   <button
                     onClick={fetchDealerOrders}
                     disabled={loadingDealerOrders}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-xs"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-xs"
                     title="Refresh orders from server"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${loadingDealerOrders ? 'animate-spin text-amber-600' : ''}`} />
@@ -1288,26 +1290,26 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Metric Summary Counters */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 mt-5 border-t border-slate-100">
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                  <p className="text-[11px] font-semibold text-slate-500">Total Orders Placed</p>
-                  <p className="text-lg font-black text-slate-900 mt-0.5">{dealerOrders.length}</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 pt-4 sm:pt-5 mt-4 sm:mt-5 border-t border-slate-100">
+                <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-100">
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-slate-500">Total Orders Placed</p>
+                  <p className="text-base sm:text-lg font-black text-slate-900 mt-0.5">{dealerOrders.length}</p>
                 </div>
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                  <p className="text-[11px] font-semibold text-slate-500">Total Materials Sourced</p>
-                  <p className="text-lg font-black text-amber-700 mt-0.5">
+                <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-100">
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-slate-500">Materials Sourced</p>
+                  <p className="text-base sm:text-lg font-black text-amber-700 mt-0.5">
                     {dealerOrders.reduce((sum, o) => sum + (o.itemsCount || (Array.isArray(o.items) ? o.items.reduce((s, it) => s + (it.qty || it.quantity || 1), 0) : 0)), 0)} Units
                   </p>
                 </div>
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                  <p className="text-[11px] font-semibold text-slate-500">In Transit / Ready</p>
-                  <p className="text-lg font-black text-blue-600 mt-0.5">
+                <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-100">
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-slate-500">In Transit / Ready</p>
+                  <p className="text-base sm:text-lg font-black text-blue-600 mt-0.5">
                     {dealerOrders.filter(o => o.status === 'Out for Delivery' || o.status === 'Dispatched').length}
                   </p>
                 </div>
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                  <p className="text-[11px] font-semibold text-slate-500">Total Order Volume</p>
-                  <p className="text-lg font-black text-emerald-700 mt-0.5">
+                <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-100">
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-slate-500">Total Order Volume</p>
+                  <p className="text-base sm:text-lg font-black text-emerald-700 mt-0.5">
                     ₹{dealerOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0).toLocaleString('en-IN')}
                   </p>
                 </div>
@@ -1317,7 +1319,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
             {/* Filter and Search Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               {/* Status Filter Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 -mx-3 px-3 sm:mx-0 sm:px-0 scrollbar-none">
                 {[
                   { id: 'All', label: 'All Orders', count: dealerOrders.length },
                   { id: 'Out for Delivery', label: 'Out for Delivery', count: dealerOrders.filter(o => o.status === 'Out for Delivery').length },
@@ -1354,7 +1356,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   value={dealerOrdersSearch}
                   onChange={e => setDealerOrdersSearch(e.target.value)}
                   placeholder="Search order ID, product, SKU, PO..."
-                  className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 shadow-2xs"
+                  className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 shadow-2xs"
                 />
                 {dealerOrdersSearch && (
                   <button 
@@ -1369,15 +1371,15 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
 
             {/* Orders Feed List */}
             {filteredDealerOrders.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-500 max-w-md mx-auto my-6 shadow-sm">
-                <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-8 sm:p-12 text-center text-slate-500 max-w-md mx-auto my-6 shadow-sm">
+                <Package className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300 mx-auto mb-3" />
                 <p className="font-bold text-sm text-slate-800">No distributor orders found</p>
                 <p className="text-xs text-slate-400 mt-1">
                   {dealerOrdersSearch ? 'No orders match your search criteria.' : 'No orders have been recorded for this status filter yet.'}
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3.5 sm:space-y-4">
                 {filteredDealerOrders.map((order) => {
                   const statusColors = {
                     'Order Confirmed': 'bg-blue-50 text-blue-700 border-blue-200',
@@ -1400,16 +1402,16 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   return (
                     <div 
                       key={order.id} 
-                      className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 hover:border-amber-300 hover:shadow-md transition duration-200 space-y-4"
+                      className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200 hover:border-amber-300 hover:shadow-md transition duration-200 space-y-3.5 sm:space-y-4"
                     >
                       {/* Order Header Row */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 sm:pb-4 border-b border-slate-100">
                         <div>
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                             <span className="font-mono font-black text-slate-900 text-base">
                               #{order.id}
                             </span>
-                            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badgeClass}`}>
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold border ${badgeClass}`}>
                               {order.status || 'Order Confirmed'}
                             </span>
                             {order.zohoSalesOrder && (
@@ -1430,11 +1432,11 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                           </p>
                         </div>
 
-                        <div className="text-left sm:text-right">
-                          <p className="text-lg font-black text-slate-900">
+                        <div className="text-left sm:text-right flex sm:block items-center justify-between pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                          <p className="text-base sm:text-lg font-black text-slate-900">
                             ₹{(Number(order.total) || 0).toLocaleString('en-IN')}
                           </p>
-                          <span className="inline-block text-[11px] font-semibold text-slate-500">
+                          <span className="inline-block text-[10px] sm:text-[11px] font-semibold text-slate-500">
                             {order.paymentMethod || 'Paid Upfront'}
                           </span>
                         </div>
@@ -1444,7 +1446,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                       {order.deliveryAddress && (
                         <div className="flex items-start gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-600">
                           <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                          <span className="line-clamp-1">{order.deliveryAddress}</span>
+                          <span className="line-clamp-2 sm:line-clamp-1">{order.deliveryAddress}</span>
                         </div>
                       )}
 
@@ -1453,9 +1455,9 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                           Materials in this Order ({Array.isArray(order.items) ? order.items.length : 1} Line Items):
                         </p>
-                        <div className="bg-slate-50/70 rounded-2xl border border-slate-100 divide-y divide-slate-100 overflow-hidden">
+                        <div className="bg-slate-50/70 rounded-xl sm:rounded-2xl border border-slate-100 divide-y divide-slate-100 overflow-hidden">
                           {(Array.isArray(order.items) ? order.items : []).map((it, idx) => (
-                            <div key={idx} className="p-3 flex items-center justify-between text-xs gap-3">
+                            <div key={idx} className="p-2.5 sm:p-3 flex items-center justify-between text-xs gap-2 sm:gap-3">
                               <div className="min-w-0">
                                 <p className="font-semibold text-slate-800 truncate">{it.name || 'Plumbing Supply Item'}</p>
                                 {it.sku && <p className="text-[10px] text-slate-400 font-mono mt-0.5">{it.sku}</p>}
@@ -1465,7 +1467,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                                   Qty: {it.qty || it.quantity || 1}
                                 </span>
                                 {it.price && (
-                                  <p className="text-[10px] text-slate-500 mt-0.5">
+                                  <p className="text-[10px] text-slate-500 mt-0.5 font-mono">
                                     ₹{(it.price * (it.qty || it.quantity || 1)).toLocaleString('en-IN')}
                                   </p>
                                 )}
@@ -1476,17 +1478,17 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                       </div>
 
                       {/* 5-Stage Live Dispatch Tracking Progression Bar */}
-                      <div className="pt-2">
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
+                      <div className="pt-1 sm:pt-2">
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                           Supply Dispatch Pipeline:
                         </p>
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2 text-xs">
                           {trackingSteps.map((step, sIdx) => {
                             const isDone = step.completed;
                             return (
                               <div 
                                 key={sIdx} 
-                                className={`p-2.5 rounded-xl border text-center transition flex flex-col justify-between ${
+                                className={`p-2 sm:p-2.5 rounded-xl border text-center transition flex flex-col justify-between ${
                                   isDone 
                                     ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900' 
                                     : 'bg-slate-50 border-slate-100 text-slate-400'
@@ -1494,13 +1496,13 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                               >
                                 <div className="flex items-center justify-center mb-1">
                                   {isDone ? (
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                    <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600" />
                                   ) : (
                                     <span className="w-2 h-2 rounded-full bg-slate-300"></span>
                                   )}
                                 </div>
-                                <p className="text-[11px] font-bold leading-tight">{step.title}</p>
-                                {step.time && <p className="text-[9px] text-slate-500 mt-1">{step.time}</p>}
+                                <p className="text-[10px] sm:text-[11px] font-bold leading-tight">{step.title}</p>
+                                {step.time && <p className="text-[9px] text-slate-500 mt-0.5">{step.time}</p>}
                               </div>
                             );
                           })}
@@ -1508,17 +1510,17 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                       </div>
 
                       {/* Plumber Field Response & Stage Confirmation Box */}
-                      <div className="p-3.5 rounded-2xl border bg-gradient-to-r from-slate-50 to-amber-50/40 border-slate-200 space-y-2.5">
+                      <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl border bg-gradient-to-r from-slate-50 to-amber-50/40 border-slate-200 space-y-2 sm:space-y-2.5">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 flex items-center justify-center font-bold">
+                            <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 flex items-center justify-center font-bold shrink-0">
                               <Wrench className="w-3.5 h-3.5" />
                             </div>
-                            <div>
-                              <p className="text-xs font-bold text-slate-900">
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-900 truncate">
                                 Plumber Field Response &amp; Stage Sign-Off
                               </p>
-                              <p className="text-[10px] text-slate-500">
+                              <p className="text-[10px] text-slate-500 leading-tight">
                                 Send real-time updates directly to Operations Admin &amp; Sri Venkateswara Distributors
                               </p>
                             </div>
@@ -1526,17 +1528,17 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
 
                           {/* Current stage badge */}
                           {order.plumberStage === 'TASK_DONE' || order.status === 'Delivered' ? (
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 self-start sm:self-auto">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 self-start sm:self-auto shrink-0">
                               <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                               <span>Task Signed Off &bull; 100% Done</span>
                             </span>
                           ) : order.plumberStage === 'MATERIALS_RECEIVED' ? (
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 self-start sm:self-auto">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 self-start sm:self-auto shrink-0">
                               <Check className="w-3 h-3 text-amber-700" />
                               <span>Materials Acknowledged on Site</span>
                             </span>
                           ) : (
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 self-start sm:self-auto">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 self-start sm:self-auto shrink-0">
                               Pending Plumber Acknowledgment
                             </span>
                           )}
@@ -1545,8 +1547,8 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                         {/* If plumber previously responded, show details */}
                         {order.plumberResponse && (
                           <div className="p-2.5 rounded-xl bg-white border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
-                            <div className="flex items-center justify-between text-[10px] text-slate-500 font-medium">
-                              <span>Verified by: <strong className="text-slate-800">{order.plumberResponse.plumberName}</strong> ({order.plumberResponse.plumberLicense})</span>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[10px] text-slate-500 font-medium gap-0.5">
+                              <span className="truncate">Verified by: <strong className="text-slate-800">{order.plumberResponse.plumberName}</strong> ({order.plumberResponse.plumberLicense})</span>
                               <span className="font-mono text-slate-400">{order.plumberResponse.timestampStr || 'Recent'}</span>
                             </div>
                             {order.plumberResponse.notes && (
@@ -1558,7 +1560,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                         )}
 
                         {/* Interactive Action Buttons for Plumber */}
-                        <div className="flex items-center gap-2 pt-1 flex-wrap">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1 flex-wrap">
                           {(!order.plumberStage || order.plumberStage === 'NONE') && order.status !== 'Delivered' && (
                             <button
                               type="button"
@@ -1573,7 +1575,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                                 });
                               }}
                               disabled={submittingResponseOrderId === order.id}
-                              className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                              className="w-full sm:w-auto px-3.5 py-2 sm:py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer text-center"
                             >
                               <Check className="w-3.5 h-3.5" />
                               <span>1. Acknowledge Materials Received</span>
@@ -1594,7 +1596,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                                 });
                               }}
                               disabled={submittingResponseOrderId === order.id}
-                              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                              className="w-full sm:w-auto px-3.5 py-2 sm:py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer text-center"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               <span>2. Mark Work Done &amp; Send Sign-Off to Admin</span>
@@ -1602,7 +1604,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                           )}
 
                           {order.status === 'Delivered' && (
-                            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200">
+                            <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 w-full sm:w-auto">
                               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                               <span>Admin Operations Verified &amp; Closed Task</span>
                             </div>
@@ -1611,15 +1613,15 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                       </div>
 
                       {/* Card Action Button */}
-                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                      <div className="pt-2.5 sm:pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
                         <span className="text-[11px] text-slate-500 flex items-center gap-1 font-medium">
-                          <Clock className="w-3.5 h-3.5 text-slate-400" />
-                          Expected Delivery: <strong className="text-slate-700">{order.expectedDate || 'Tomorrow Morning'}</strong>
+                          <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>Expected: <strong className="text-slate-700">{order.expectedDate || 'Tomorrow Morning'}</strong></span>
                         </span>
 
                         <button
                           onClick={() => setSelectedDealerOrder(order)}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition active:scale-95 cursor-pointer"
+                          className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition active:scale-95 cursor-pointer text-center"
                         >
                           <FileText className="w-3.5 h-3.5 text-amber-400" />
                           <span>View Material Packing Slip</span>
@@ -1639,21 +1641,21 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         {/* TAB 2: CHECK PRODUCT INFORMATION & INSTALLATION MANUALS */}
         {/* ======================================================== */}
         {activeTab === 'products' && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-amber-600" />
+                <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <BookOpen className="w-5 h-5 text-amber-600 shrink-0" />
                   <span>Product Information &amp; Manuals</span>
                 </h1>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 mt-0.5">
                   Read technical specifications and step-by-step installation instructions for plumbing supplies
                 </p>
               </div>
 
-              <span className="text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200 self-start sm:self-auto">
+              <span className="text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200 self-start sm:self-auto shrink-0">
                 Official Installation Guides
               </span>
             </div>
@@ -1671,12 +1673,12 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 />
               </div>
 
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+              <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1.5 -mx-3 px-3 sm:mx-0 sm:px-0 scrollbar-none">
                 {['All', 'Pipes & Tubes', 'Fittings & Valves', 'Bath & Faucets', 'Pumps & Motors', 'Tools & Sealants', 'Water Tanks & Storage', 'Drainage & Sanitary'].map(cat => (
                   <button
                     key={cat}
                     onClick={() => setProductCategoryFilter(cat)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                       productCategoryFilter === cat
                         ? 'bg-amber-600 text-white shadow-xs'
                         : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
@@ -1690,7 +1692,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
 
             {/* Products Grid */}
             {productsLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4">
                 {[1, 2, 3, 4, 5, 6].map(i => (
                   <div key={i} className="bg-white rounded-2xl border border-slate-200 p-4 animate-pulse space-y-3">
                     <div className="h-36 bg-slate-200 rounded-xl" />
@@ -1700,17 +1702,17 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 ))}
               </div>
             ) : filteredProducts.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-500 max-w-md mx-auto my-6">
+              <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-8 sm:p-12 text-center text-slate-500 max-w-md mx-auto my-6">
                 <Box className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                 <p className="font-bold text-sm text-slate-700">No products found</p>
                 <p className="text-xs text-slate-400 mt-1">Try another search term or select All Categories.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
                 {filteredProducts.map(product => (
                   <div 
                     key={product.id}
-                    className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs hover:shadow-md hover:border-amber-300 transition flex flex-col justify-between"
+                    className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 p-3.5 sm:p-4 shadow-2xs hover:shadow-md hover:border-amber-300 transition flex flex-col justify-between"
                   >
                     <div>
                       {/* Thumbnail & SKU */}
@@ -1758,7 +1760,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                     {/* Open Manual Button */}
                     <button
                       onClick={() => setSelectedProductManual(product)}
-                      className="w-full py-2.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-98 shadow-xs"
+                      className="w-full py-2.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-98 shadow-xs cursor-pointer"
                     >
                       <BookOpen className="w-3.5 h-3.5 text-amber-600" />
                       <span>Check Installation Manual</span>
@@ -1775,16 +1777,16 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         {/* TAB 3: RECEIVE UPDATES & ANNOUNCEMENTS                  */}
         {/* ======================================================== */}
         {activeTab === 'updates' && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                  <Bell className="w-5 h-5 text-amber-600" />
+                <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-amber-600 shrink-0" />
                   <span>Updates &amp; Announcements</span>
                 </h1>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 mt-0.5">
                   New job assignments, schedule changes, and technical company announcements
                 </p>
               </div>
@@ -1792,7 +1794,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               {unreadUpdatesCount > 0 && (
                 <button
                   onClick={handleMarkAllUpdatesRead}
-                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs self-start sm:self-auto transition"
+                  className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs transition text-center cursor-pointer"
                 >
                   Mark All as Read
                 </button>
@@ -1804,13 +1806,13 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               {updates.map(item => (
                 <div 
                   key={item.id}
-                  className={`p-4 sm:p-5 rounded-2xl border transition flex flex-col sm:flex-row sm:items-start justify-between gap-4 ${
+                  className={`p-3.5 sm:p-5 rounded-2xl border transition flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4 ${
                     item.unread 
                       ? 'bg-amber-50/40 border-amber-200 shadow-xs' 
                       : 'bg-white border-slate-200'
                   }`}
                 >
-                  <div className="flex items-start gap-3.5">
+                  <div className="flex items-start gap-3">
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0 mt-0.5 ${
                       item.type === 'assignment'
                         ? 'bg-blue-100 text-blue-700'
@@ -1821,7 +1823,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                       {item.type === 'assignment' ? <Briefcase className="w-4 h-4" /> : item.type === 'schedule' ? <CalendarClock className="w-4 h-4" /> : <Megaphone className="w-4 h-4" />}
                     </div>
 
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-xs text-slate-900">{item.title}</span>
                         {item.unread && (
@@ -1842,7 +1844,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   {item.actionTab && (
                     <button
                       onClick={() => handleSelectTab(item.actionTab)}
-                      className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 hover:text-amber-800 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl transition self-start sm:self-center shrink-0"
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-1 text-xs font-bold text-amber-700 hover:text-amber-800 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl transition self-start sm:self-center shrink-0 cursor-pointer"
                     >
                       <span>View in {item.actionTab === 'activities' ? 'Activities' : item.actionTab === 'products' ? 'Manuals' : 'Profile'}</span>
                       <ChevronRight className="w-3.5 h-3.5" />
@@ -1858,30 +1860,27 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         {/* ======================================================== */}
         {/* TAB 4: MANAGE PROFILE & VERIFICATION STATUS             */}
         {/* ======================================================== */}
-        {/* ======================================================== */}
-        {/* TAB 4: MANAGE PROFILE & VERIFICATION STATUS             */}
-        {/* ======================================================== */}
         {activeTab === 'profile' && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
               <div>
-                <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                  <UserCheck className="w-5 h-5 text-amber-600" />
+                <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-amber-600 shrink-0" />
                   <span>Plumber Profile &amp; Verification</span>
                   {isProfileLoading && (
                     <Loader2 className="w-4 h-4 animate-spin text-amber-600 ml-1" />
                   )}
                 </h1>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 mt-0.5">
                   Registered mobile number, verified credentials, and field performance
                 </p>
               </div>
 
               <button
                 onClick={handleOpenEditProfile}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-sm shadow-amber-600/20 active:scale-95"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-sm shadow-amber-600/20 active:scale-95 cursor-pointer text-center"
               >
                 <Edit3 className="w-4 h-4" />
                 <span>Edit Profile &amp; KYC</span>
@@ -1889,122 +1888,122 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
             </div>
 
             {/* Top Identity Hero Card */}
-            <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-bold text-2xl shadow-lg shadow-amber-500/30">
-                  <Wrench className="w-8 h-8" />
+            <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
+              <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
+                <div className="w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-bold text-xl sm:text-2xl shadow-lg shadow-amber-500/30 shrink-0">
+                  <Wrench className="w-7 h-7 sm:w-8 sm:h-8" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-black tracking-tight">{plumber.name}</h2>
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1 border ${
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base sm:text-lg font-black tracking-tight truncate">{plumber.name}</h2>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black flex items-center gap-1 border shrink-0 ${
                       isSuspended
                         ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
                         : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                     }`}>
-                      {isSuspended ? <AlertCircle className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                      {isSuspended ? <AlertCircle className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
                       {isSuspended ? 'SUSPENDED' : (plumber.status || 'VERIFIED')}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-300 font-mono mt-0.5">License ID: {plumber.license}</p>
-                  <p className="text-xs text-slate-400 mt-1">{plumber.specialization}</p>
+                  <p className="text-[11px] sm:text-xs text-slate-300 font-mono mt-0.5 truncate">License ID: {plumber.license}</p>
+                  <p className="text-[11px] sm:text-xs text-slate-400 mt-1 line-clamp-1">{plumber.specialization}</p>
                 </div>
               </div>
 
               {/* Status Metric Pills */}
-              <div className="flex items-center gap-4 border-t md:border-t-0 md:border-l border-slate-700 pt-4 md:pt-0 md:pl-6">
+              <div className="grid grid-cols-2 md:flex items-center gap-4 border-t md:border-t-0 md:border-l border-slate-700 pt-3 md:pt-0 md:pl-6">
                 <div>
                   <span className="text-[10px] text-slate-400 block font-semibold uppercase">Rating</span>
-                  <span className="text-lg font-black text-amber-400">★ {plumber.rating} / 5.0</span>
+                  <span className="text-base sm:text-lg font-black text-amber-400">★ {plumber.rating} / 5.0</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 block font-semibold uppercase">Jobs Done</span>
-                  <span className="text-lg font-black text-white">{plumber.completedJobs}+</span>
+                  <span className="text-base sm:text-lg font-black text-white">{plumber.completedJobs}+</span>
                 </div>
               </div>
             </div>
 
             {/* Profile Field Details Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
               
               {/* Registered Contact & Verification */}
-              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs space-y-4">
+              <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200 shadow-2xs space-y-3.5 sm:space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <h3 className="font-bold text-xs sm:text-sm text-slate-900 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>Registered Contact &amp; Verification</span>
                   </h3>
                   <button
                     onClick={handleOpenEditProfile}
-                    className="text-[11px] font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1"
+                    className="text-[11px] font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1 cursor-pointer"
                   >
                     <Edit3 className="w-3 h-3" />
                     <span>Edit</span>
                   </button>
                 </div>
 
-                <div className="space-y-3 text-xs">
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                <div className="space-y-2.5 sm:space-y-3 text-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-100">
                     <div className="flex items-center gap-2 text-slate-600">
-                      <Phone className="w-4 h-4 text-slate-400" />
-                      <span>Registered Mobile Number:</span>
+                      <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                      <span>Registered Mobile:</span>
                     </div>
                     <strong className="text-slate-900 font-mono font-bold text-xs">+91 {plumber.mobile}</strong>
                   </div>
 
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-100">
                     <div className="flex items-center gap-2 text-slate-600">
-                      <Mail className="w-4 h-4 text-slate-400" />
+                      <Mail className="w-4 h-4 text-slate-400 shrink-0" />
                       <span>Registered Email:</span>
                     </div>
-                    <strong className="text-slate-900 font-mono text-xs">{plumber.email}</strong>
+                    <strong className="text-slate-900 font-mono text-xs break-all">{plumber.email}</strong>
                   </div>
 
                   {isSuspended ? (
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 p-2.5 sm:p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900">
                       <div className="flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-rose-600" />
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                         <span className="font-bold">Verification Status:</span>
                       </div>
                       <span className="font-black text-rose-700 uppercase">SUSPENDED (Action Required)</span>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/60 border border-emerald-200 text-emerald-900">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 p-2.5 sm:p-3 rounded-xl bg-emerald-50/60 border border-emerald-200 text-emerald-900">
                       <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                         <span className="font-bold">Verification Status:</span>
                       </div>
                       <span className="font-black text-emerald-700 uppercase">{plumber.status || 'VERIFIED'} (Active)</span>
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-100">
                     <div className="flex items-center gap-2 text-slate-600">
-                      <MapPin className="w-4 h-4 text-slate-400" />
+                      <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
                       <span>Operating City &amp; Zones:</span>
                     </div>
-                    <strong className="text-slate-800 text-xs">{plumber.city}</strong>
+                    <strong className="text-slate-800 text-xs sm:text-right">{plumber.city}</strong>
                   </div>
 
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-100">
                     <div className="flex items-center gap-2 text-slate-600 shrink-0">
-                      <MapPin className="w-4 h-4 text-slate-400" />
+                      <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
                       <span>Registered Address:</span>
                     </div>
-                    <strong className="text-slate-800 text-xs text-right max-w-xs truncate">{plumber.address}</strong>
+                    <strong className="text-slate-800 text-xs text-left sm:text-right max-w-full sm:max-w-xs break-words">{plumber.address}</strong>
                   </div>
                 </div>
               </div>
 
               {/* Working Hours & Plumber Preferences */}
-              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs space-y-4">
-                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2 pb-3 border-b border-slate-100">
-                  <Award className="w-4 h-4 text-amber-600" />
+              <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200 shadow-2xs space-y-3.5 sm:space-y-4">
+                <h3 className="font-bold text-xs sm:text-sm text-slate-900 flex items-center gap-2 pb-3 border-b border-slate-100">
+                  <Award className="w-4 h-4 text-amber-600 shrink-0" />
                   <span>Work Availability &amp; Dispatch</span>
                 </h3>
 
-                <div className="space-y-3 text-xs">
-                  <div className={`p-3 rounded-xl border flex items-center justify-between ${
+                <div className="space-y-2.5 sm:space-y-3 text-xs">
+                  <div className={`p-2.5 sm:p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
                     isSuspended
                       ? 'bg-rose-50/70 border-rose-200 text-rose-900'
                       : 'bg-amber-50/70 border-amber-200 text-amber-900'
@@ -2017,14 +2016,14 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                           : 'Receive instant push & SMS alerts for nearby jobs'}
                       </p>
                     </div>
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-black shadow-xs ${
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-black shadow-xs self-start sm:self-auto ${
                       isSuspended ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'
                     }`}>
                       {isSuspended ? 'SUSPENDED' : 'ACTIVE'}
                     </span>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                  <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500 font-semibold block">Certified Skills:</span>
                       <span className="text-[10px] text-slate-400">{Array.isArray(plumber.skills) ? plumber.skills.length : 0} Verified</span>
@@ -2044,7 +2043,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-slate-600">
+                  <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-slate-600">
                     <span>Field Equipment Safety Kit:</span>
                     <strong className="text-emerald-700 font-semibold">Verified Compliant</strong>
                   </div>
@@ -2060,17 +2059,17 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         {/* PRODUCT INSTALLATION MANUAL & SPECS MODAL               */}
         {/* ======================================================== */}
         {selectedProductManual && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl max-w-2xl w-full p-6 border border-slate-200 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl sm:rounded-3xl max-w-2xl w-full p-4 sm:p-6 border border-slate-200 shadow-2xl relative max-h-[88vh] overflow-y-auto">
               <button
                 onClick={() => setSelectedProductManual(null)}
-                className="absolute top-5 right-5 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition"
+                className="absolute top-3.5 right-3.5 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
 
               {/* Modal Header */}
-              <div className="flex items-start gap-4 pb-4 border-b border-slate-100 pr-8">
+              <div className="flex items-start gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-slate-100 pr-8">
                 <img
                   src={selectedProductManual.image || '/products/PLB-PIPE-051.jpg'}
                   alt={selectedProductManual.name}
@@ -2078,13 +2077,13 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                     e.currentTarget.onerror = null;
                     e.currentTarget.src = '/products/PLB-PIPE-051.jpg';
                   }}
-                  className="w-16 h-16 rounded-2xl object-contain p-1 bg-white border border-slate-200 shrink-0"
+                  className="w-13 h-13 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl object-contain p-1 bg-white border border-slate-200 shrink-0"
                 />
-                <div>
+                <div className="min-w-0">
                   <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider block">
                     {selectedProductManual.brand} &bull; {selectedProductManual.category}
                   </span>
-                  <h3 className="text-base font-bold text-slate-900 mt-0.5 leading-snug">
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 mt-0.5 leading-snug">
                     {selectedProductManual.name}
                   </h3>
                   <span className="text-[10px] font-mono text-slate-400">
@@ -2094,10 +2093,10 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Modal Body */}
-              <div className="py-4 space-y-4 text-xs text-slate-700">
+              <div className="py-3 sm:py-4 space-y-3.5 sm:space-y-4 text-xs text-slate-700">
                 
                 {/* Product Description */}
-                <p className="text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <p className="text-slate-600 leading-relaxed bg-slate-50 p-2.5 sm:p-3 rounded-xl border border-slate-100 text-xs">
                   {selectedProductManual.description}
                 </p>
 
@@ -2105,12 +2104,12 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 {selectedProductManual.specs && (
                   <div className="space-y-2">
                     <h4 className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-amber-600" />
+                      <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       <span>Technical Specifications</span>
                     </h4>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {Object.entries(selectedProductManual.specs).map(([k, v]) => (
-                        <div key={k} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <div key={k} className="p-2 sm:p-2.5 rounded-xl bg-slate-50 border border-slate-100">
                           <span className="text-[10px] text-slate-400 font-semibold block uppercase">
                             {k.replace(/([A-Z])/g, ' $1')}
                           </span>
@@ -2122,9 +2121,9 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 )}
 
                 {/* Step-by-Step Installation Instructions */}
-                <div className="space-y-2.5 bg-amber-50/50 p-4 rounded-2xl border border-amber-200/80">
+                <div className="space-y-2.5 bg-amber-50/50 p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-amber-200/80">
                   <h4 className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
-                    <Wrench className="w-3.5 h-3.5 text-amber-600" />
+                    <Wrench className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                     <span>Plumber Installation Instructions:</span>
                   </h4>
 
@@ -2150,7 +2149,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 {/* Required Tools Checklist for Plumber */}
                 <div className="space-y-2">
                   <h4 className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-                    <Box className="w-3.5 h-3.5 text-amber-600" />
+                    <Box className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                     <span>Required Tools for This Job:</span>
                   </h4>
                   <div className="flex flex-wrap gap-1.5">
@@ -2165,10 +2164,10 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Modal Footer */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <div className="pt-3 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2">
                 <button
                   onClick={() => alert(`Downloading technical manual PDF for ${selectedProductManual.name}...`)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer text-center"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download Manual (PDF)</span>
@@ -2176,7 +2175,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
 
                 <button
                   onClick={() => setSelectedProductManual(null)}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition"
+                  className="w-full sm:w-auto px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer text-center"
                 >
                   Close Guide
                 </button>
@@ -2190,26 +2189,26 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         {/* EDIT PLUMBER PROFILE MODAL (SUPABASE DB SYNC)            */}
         {/* ======================================================== */}
         {isEditProfileModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-slate-200 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full p-4 sm:p-6 border border-slate-200 shadow-2xl relative max-h-[88vh] overflow-y-auto">
               <button
                 onClick={() => setIsEditProfileModalOpen(false)}
-                className="absolute top-5 right-5 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition"
+                className="absolute top-3.5 right-3.5 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
 
-              <div className="flex items-center gap-3 pb-4 border-b border-slate-100 pr-8">
-                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+              <div className="flex items-center gap-3 pb-3 sm:pb-4 border-b border-slate-100 pr-8">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold shrink-0">
                   <Edit3 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">Edit Plumber Profile &amp; KYC</h3>
-                  <p className="text-xs text-slate-500">Save changes directly to Supabase database</p>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900">Edit Plumber Profile &amp; KYC</h3>
+                  <p className="text-[11px] sm:text-xs text-slate-500">Save changes directly to Supabase database</p>
                 </div>
               </div>
 
-              <form onSubmit={handleSaveProfile} className="py-4 space-y-4 text-xs">
+              <form onSubmit={handleSaveProfile} className="py-3 sm:py-4 space-y-3.5 sm:space-y-4 text-xs">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
                   <input
@@ -2222,7 +2221,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Registered Email *</label>
                     <input
@@ -2259,7 +2258,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
                   <div className="sm:col-span-2">
                     <label className="block font-bold text-slate-700 mb-1">Specialization</label>
                     <input
@@ -2296,18 +2295,18 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   />
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                <div className="pt-3 sm:pt-4 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:gap-3">
                   <button
                     type="button"
                     onClick={() => setIsEditProfileModalOpen(false)}
-                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition"
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition text-center cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSavingProfile}
-                    className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition flex items-center gap-2 shadow-sm shadow-amber-600/25 disabled:opacity-50"
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition flex items-center justify-center gap-2 shadow-sm shadow-amber-600/25 disabled:opacity-50 cursor-pointer text-center"
                   >
                     {isSavingProfile ? (
                       <>
@@ -2328,35 +2327,35 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         {/* ACCOUNT SUSPENDED POPUP MODAL                            */}
         {/* ======================================================== */}
         {isSuspended && isSuspendedModalOpen && (
-          <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-rose-200 animate-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-rose-200 animate-in zoom-in-95 duration-200 max-h-[88vh] overflow-y-auto">
               
               {/* Red Warning Header */}
-              <div className="bg-gradient-to-r from-rose-700 via-rose-600 to-rose-700 p-6 text-white text-center relative">
+              <div className="bg-gradient-to-r from-rose-700 via-rose-600 to-rose-700 p-4 sm:p-6 text-white text-center relative">
                 <button
                   type="button"
                   onClick={() => setIsSuspendedModalOpen(false)}
-                  className="absolute right-4 top-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-full transition"
+                  className="absolute right-3.5 top-3.5 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-full transition cursor-pointer"
                   title="Close modal"
                 >
                   <X className="w-4 h-4" />
                 </button>
-                <div className="w-16 h-16 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center mx-auto mb-3 shadow-inner">
-                  <AlertCircle className="w-9 h-9 text-white animate-pulse" />
+                <div className="w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center mx-auto mb-2.5 sm:mb-3 shadow-inner">
+                  <AlertCircle className="w-8 h-8 sm:w-9 sm:h-9 text-white animate-pulse" />
                 </div>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/25 text-rose-100 text-[11px] font-black uppercase tracking-wider mb-2 border border-white/20">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/25 text-rose-100 text-[10px] sm:text-[11px] font-black uppercase tracking-wider mb-2 border border-white/20">
                   <span>Official Compliance Notice</span> &bull; <span>Status: SUSPENDED</span>
                 </div>
-                <h2 className="text-xl font-black tracking-tight">Plumber Account Suspended</h2>
+                <h2 className="text-lg sm:text-xl font-black tracking-tight">Plumber Account Suspended</h2>
                 <p className="text-xs text-rose-100 mt-1 max-w-sm mx-auto">
                   Your PlumbMart professional license &amp; job execution rights have been temporarily suspended.
                 </p>
               </div>
 
               {/* Body Details */}
-              <div className="p-6 space-y-4">
+              <div className="p-4 sm:p-6 space-y-3.5 sm:space-y-4">
                 {/* Plumber Credentials Box */}
-                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+                <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
                   <div className="flex justify-between items-center text-slate-500">
                     <span>Plumber Name:</span>
                     <strong className="text-slate-900 font-bold">{plumber.name}</strong>
@@ -2399,24 +2398,24 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 </div>
 
                 {/* Helpline Card */}
-                <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs space-y-2">
+                <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-amber-50/80 border border-amber-200 text-xs space-y-2">
                   <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
-                    <Phone className="w-4 h-4 text-amber-700" />
+                    <Phone className="w-4 h-4 text-amber-700 shrink-0" />
                     <span>Need Help or Want to Appeal?</span>
                   </div>
                   <p className="text-[11px] text-amber-800 leading-relaxed">
                     Please contact PlumbMart Verification &amp; Compliance Desk to submit updated trade license, KYC documents, or resolve queries.
                   </p>
-                  <div className="flex items-center gap-2 pt-1">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
                     <a
                       href="tel:180020267586"
-                      className="flex-1 text-center py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition shadow-2xs"
+                      className="w-full sm:flex-1 text-center py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition shadow-2xs"
                     >
                       📞 Call: 1800-2026-PLUM
                     </a>
                     <a
                       href="mailto:compliance@plumbmart.com"
-                      className="flex-1 text-center py-2 px-3 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs transition shadow-2xs"
+                      className="w-full sm:flex-1 text-center py-2 px-3 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs transition shadow-2xs"
                     >
                       ✉️ Email Desk
                     </a>
@@ -2424,11 +2423,11 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="pt-2 flex items-center justify-end gap-3">
+                <div className="pt-2 flex items-center justify-end">
                   <button
                     type="button"
                     onClick={() => setIsSuspendedModalOpen(false)}
-                    className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition shadow-xs text-center"
+                    className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition shadow-xs text-center cursor-pointer"
                   >
                     I Understand &bull; Continue in Read-Only Mode
                   </button>
@@ -2442,23 +2441,23 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         {/* DISTRIBUTOR ORDER / MATERIAL PACKING SLIP MODAL         */}
         {/* ======================================================== */}
         {selectedDealerOrder && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-7 border border-slate-200 shadow-2xl relative max-h-[92vh] overflow-y-auto">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl sm:rounded-3xl max-w-2xl w-full p-4 sm:p-7 border border-slate-200 shadow-2xl relative max-h-[90vh] overflow-y-auto">
               <button
                 onClick={() => setSelectedDealerOrder(null)}
-                className="absolute top-5 right-5 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition"
+                className="absolute top-3.5 right-3.5 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
 
               {/* Modal Header */}
-              <div className="flex items-start gap-4 pb-4 border-b border-slate-100 pr-8">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-600 to-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-amber-600/20 shrink-0">
-                  <Package className="w-6 h-6" />
+              <div className="flex items-start gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-slate-100 pr-8">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-amber-600 to-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-amber-600/20 shrink-0">
+                  <Package className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-black text-lg text-slate-900 tracking-tight">
+                    <h3 className="font-black text-base sm:text-lg text-slate-900 tracking-tight">
                       Material Dispatch &amp; Packing Slip
                     </h3>
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
@@ -2472,18 +2471,18 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Order Meta Bar */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 py-4 border-b border-slate-100 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 py-3 sm:py-4 border-b border-slate-100 text-xs">
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Distributor</span>
-                  <span className="font-bold text-slate-900">{selectedDealerOrder.clientName || 'Sri Venkateswara Distributors'}</span>
+                  <span className="font-bold text-slate-900 truncate block">{selectedDealerOrder.clientName || 'Sri Venkateswara Distributors'}</span>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Zoho CRM Ref</span>
-                  <span className="font-mono font-semibold text-slate-700">{selectedDealerOrder.zohoSalesOrder || 'SO-ZH-PENDING'}</span>
+                  <span className="font-mono font-semibold text-slate-700 truncate block">{selectedDealerOrder.zohoSalesOrder || 'SO-ZH-PENDING'}</span>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">PO Number</span>
-                  <span className="font-mono font-semibold text-amber-700">{selectedDealerOrder.poNumber || 'N/A'}</span>
+                  <span className="font-mono font-semibold text-amber-700 truncate block">{selectedDealerOrder.poNumber || 'N/A'}</span>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Status</span>
@@ -2494,10 +2493,10 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Distributor & Delivery Point Details */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-4 text-xs">
-                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 py-3 sm:py-4 text-xs">
+                <div className="p-3 sm:p-3.5 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-100 space-y-1">
                   <p className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
-                    <Building2 className="w-3 h-3 text-amber-600" />
+                    <Building2 className="w-3 h-3 text-amber-600 shrink-0" />
                     <span>Sourcing Depot &amp; Vendor</span>
                   </p>
                   <p className="font-bold text-slate-900">{selectedDealerOrder.clientName || 'Sri Venkateswara Distributors'}</p>
@@ -2505,9 +2504,9 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   <p className="text-slate-600 text-[11px] font-mono">GSTIN: 29AAACS1234F1Z5 • +91 90000 11111</p>
                 </div>
 
-                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                <div className="p-3 sm:p-3.5 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-100 space-y-1">
                   <p className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
-                    <MapPin className="w-3 h-3 text-amber-600" />
+                    <MapPin className="w-3 h-3 text-amber-600 shrink-0" />
                     <span>Delivery / Installation Site</span>
                   </p>
                   <p className="font-bold text-slate-900">{selectedDealerOrder.deliveryAddress || 'Site Delivery, Bengaluru'}</p>
@@ -2516,23 +2515,26 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 </div>
               </div>
 
-              {/* Itemized Materials Table */}
+              {/* Itemized Materials Table - Horizontal Scroll on Small Mobile */}
               <div className="py-2">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center justify-between">
-                  <span>Itemized Materials Checklist ({Array.isArray(selectedDealerOrder.items) ? selectedDealerOrder.items.length : 1} Line Items)</span>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Materials Checklist ({Array.isArray(selectedDealerOrder.items) ? selectedDealerOrder.items.length : 1} Items)
+                  </h4>
                   <span className="text-[11px] font-normal text-slate-400 lowercase">
                     total units: {selectedDealerOrder.itemsCount || (Array.isArray(selectedDealerOrder.items) ? selectedDealerOrder.items.reduce((s, it) => s + (it.qty || it.quantity || 1), 0) : 1)}
                   </span>
-                </h4>
-                <div className="border border-slate-200 rounded-2xl overflow-hidden text-xs">
-                  <table className="w-full text-left divide-y divide-slate-100">
+                </div>
+
+                <div className="border border-slate-200 rounded-xl sm:rounded-2xl overflow-x-auto text-xs">
+                  <table className="w-full text-left divide-y divide-slate-100 min-w-[420px]">
                     <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                       <tr>
-                        <th className="p-3">#</th>
-                        <th className="p-3">Description &amp; SKU</th>
-                        <th className="p-3 text-center">Qty</th>
-                        <th className="p-3 text-right">Unit Price</th>
-                        <th className="p-3 text-right">Total</th>
+                        <th className="p-2.5 sm:p-3">#</th>
+                        <th className="p-2.5 sm:p-3">Description &amp; SKU</th>
+                        <th className="p-2.5 sm:p-3 text-center">Qty</th>
+                        <th className="p-2.5 sm:p-3 text-right">Unit Price</th>
+                        <th className="p-2.5 sm:p-3 text-right">Total</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
@@ -2541,20 +2543,20 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                         const price = item.price || 0;
                         return (
                           <tr key={idx} className="hover:bg-slate-50/50">
-                            <td className="p-3 font-mono text-slate-400">{idx + 1}</td>
-                            <td className="p-3">
+                            <td className="p-2.5 sm:p-3 font-mono text-slate-400">{idx + 1}</td>
+                            <td className="p-2.5 sm:p-3">
                               <p className="font-bold text-slate-900">{item.name || 'Plumbing Material'}</p>
                               {item.sku && <p className="text-[10px] text-slate-400 font-mono">{item.sku}</p>}
                             </td>
-                            <td className="p-3 text-center">
+                            <td className="p-2.5 sm:p-3 text-center">
                               <span className="font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 text-[11px]">
                                 {qty}
                               </span>
                             </td>
-                            <td className="p-3 text-right text-slate-600 font-mono">
+                            <td className="p-2.5 sm:p-3 text-right text-slate-600 font-mono">
                               ₹{price.toLocaleString('en-IN')}
                             </td>
-                            <td className="p-3 text-right font-bold text-slate-900 font-mono">
+                            <td className="p-2.5 sm:p-3 text-right font-bold text-slate-900 font-mono">
                               ₹{(price * qty).toLocaleString('en-IN')}
                             </td>
                           </tr>
@@ -2566,7 +2568,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Slip Totals & Calculations */}
-              <div className="mt-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1.5 text-xs">
+              <div className="mt-2.5 sm:mt-3 p-3 sm:p-3.5 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-100 space-y-1 text-xs">
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal:</span>
                   <span className="font-mono">₹{Math.round((Number(selectedDealerOrder.total) || 0) / 1.18).toLocaleString('en-IN')}</span>
@@ -2575,18 +2577,18 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   <span>GST (18% Integrated B2B GST):</span>
                   <span className="font-mono">₹{Math.round((Number(selectedDealerOrder.total) || 0) - ((Number(selectedDealerOrder.total) || 0) / 1.18)).toLocaleString('en-IN')}</span>
                 </div>
-                <div className="flex justify-between text-slate-900 font-black text-sm pt-2 border-t border-slate-200">
+                <div className="flex justify-between text-slate-900 font-black text-sm pt-1.5 border-t border-slate-200">
                   <span>Total Order Value:</span>
                   <span className="text-emerald-700 font-mono">₹{(Number(selectedDealerOrder.total) || 0).toLocaleString('en-IN')}</span>
                 </div>
               </div>
 
               {/* Tracking Pipeline Tracker */}
-              <div className="mt-4 pt-4 border-t border-slate-100">
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
+              <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-100">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                   Real-time Dispatch Pipeline:
                 </p>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2 text-xs">
                   {(selectedDealerOrder.tracking || [
                     { step: 1, title: 'Order Confirmed', completed: true, time: 'Done' },
                     { step: 2, title: 'Warehouse Reserved', completed: true, time: 'Done' },
@@ -2595,8 +2597,8 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                     { step: 5, title: 'Delivered', completed: selectedDealerOrder.status === 'Delivered', time: 'Tomorrow' }
                   ]).map((st, idx) => (
                     <div 
-                      key={idx}
-                      className={`p-2.5 rounded-xl border text-center flex flex-col justify-between ${
+                      key={idx} 
+                      className={`p-2 sm:p-2.5 rounded-xl border text-center flex flex-col justify-between ${
                         st.completed 
                           ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
                           : 'bg-slate-50 border-slate-100 text-slate-400'
@@ -2604,49 +2606,49 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                     >
                       <div className="flex items-center justify-center mb-1">
                         {st.completed ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600" />
                         ) : (
                           <span className="w-2 h-2 rounded-full bg-slate-300"></span>
                         )}
                       </div>
-                      <span className="text-[11px] font-bold leading-tight">{st.title}</span>
-                      {st.time && <span className="text-[9px] text-slate-500 mt-1">{st.time}</span>}
+                      <span className="text-[10px] sm:text-[11px] font-bold leading-tight">{st.title}</span>
+                      {st.time && <span className="text-[9px] text-slate-500 mt-0.5">{st.time}</span>}
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* Plumber Response Block inside Packing Slip */}
-              <div className="mt-4 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2 text-xs">
-                <div className="flex items-center justify-between">
+              <div className="mt-3 sm:mt-4 p-3 sm:p-3.5 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-200/80 space-y-2 text-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2">
                   <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                    <Wrench className="w-3.5 h-3.5 text-amber-600" />
+                    <Wrench className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                     <span>Plumber Field Sign-Off Status:</span>
                   </span>
                   {selectedDealerOrder.plumberStage === 'TASK_DONE' || selectedDealerOrder.status === 'Delivered' ? (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 self-start sm:self-auto">
                       ✓ Task Completed &amp; Verified
                     </span>
                   ) : selectedDealerOrder.plumberStage === 'MATERIALS_RECEIVED' ? (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 self-start sm:self-auto">
                       ✓ Materials Acknowledged on Site
                     </span>
                   ) : (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700 self-start sm:self-auto">
                       Pending Plumber Receipt
                     </span>
                   )}
                 </div>
 
                 {selectedDealerOrder.plumberResponse && (
-                  <p className="text-[11px] text-slate-600">
+                  <p className="text-[11px] text-slate-600 leading-snug">
                     Signed by: <strong>{selectedDealerOrder.plumberResponse.plumberName}</strong> ({selectedDealerOrder.plumberResponse.timestampStr}) &bull; Notes: <em>&ldquo;{selectedDealerOrder.plumberResponse.notes || 'Verified'}&rdquo;</em>
                   </p>
                 )}
 
                 {/* Quick actions inside modal */}
                 {selectedDealerOrder.status !== 'Delivered' && (
-                  <div className="pt-2 flex items-center gap-2">
+                  <div className="pt-1.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                     {(!selectedDealerOrder.plumberStage || selectedDealerOrder.plumberStage === 'NONE') && (
                       <button
                         type="button"
@@ -2660,7 +2662,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                             defaultNotes: 'All items received on site in good condition according to packing slip.'
                           });
                         }}
-                        className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
+                        className="w-full sm:w-auto px-3 py-2 sm:py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1 cursor-pointer text-center"
                       >
                         <Check className="w-3.5 h-3.5" />
                         <span>Acknowledge Materials Received</span>
@@ -2680,7 +2682,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                             defaultNotes: 'Work completed successfully. All pipes and valves installed, zero leakage verified under pressure test.'
                           });
                         }}
-                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
+                        className="w-full sm:w-auto px-3 py-2 sm:py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1 cursor-pointer text-center"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         <span>Confirm Work Done &amp; Send Sign-Off to Admin</span>
@@ -2691,11 +2693,11 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Modal Action Buttons */}
-              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+              <div className="mt-4 pt-3.5 sm:pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer text-center"
                 >
                   <Printer className="w-3.5 h-3.5" />
                   <span>Print Slip</span>
@@ -2704,7 +2706,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 <button
                   type="button"
                   onClick={() => setSelectedDealerOrder(null)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer text-center"
                 >
                   Close Slip
                 </button>
@@ -2718,17 +2720,17 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         {/* PLUMBER STAGE CONFIRMATION & NOTES MODAL                */}
         {/* ======================================================== */}
         {stageNoteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-slate-200 shadow-2xl relative space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full p-4 sm:p-6 border border-slate-200 shadow-2xl relative space-y-3.5 sm:space-y-4 max-h-[88vh] overflow-y-auto">
               <button
                 onClick={() => setStageNoteModal(null)}
-                className="absolute top-5 right-5 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                className="absolute top-3.5 right-3.5 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
 
               <div className="flex items-center gap-3 pb-3 border-b border-slate-100 pr-8">
-                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold shrink-0 ${
+                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center font-bold shrink-0 ${
                   stageNoteModal.targetStage === 'TASK_DONE' 
                     ? 'bg-emerald-50 text-emerald-600' 
                     : 'bg-amber-50 text-amber-600'
@@ -2739,11 +2741,11 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                     <Package className="w-5 h-5" />
                   )}
                 </div>
-                <div>
-                  <h3 className="font-bold text-sm sm:text-base text-slate-900">
+                <div className="min-w-0">
+                  <h3 className="font-bold text-sm sm:text-base text-slate-900 leading-snug">
                     {stageNoteModal.title}
                   </h3>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-[11px] sm:text-xs text-slate-500 truncate">
                     Order <strong className="font-mono text-slate-700">#{stageNoteModal.order.id}</strong> &bull; Sourced from Sri Venkateswara Distributors
                   </p>
                 </div>
@@ -2754,7 +2756,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   {stageNoteModal.description}
                 </p>
 
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-[11px] text-slate-600 space-y-1">
+                <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-100 text-[11px] text-slate-600 space-y-1">
                   <p className="font-bold text-slate-800">Signing Plumber Identity:</p>
                   <p>👤 {plumber.name} &bull; License: <span className="font-mono">{plumber.license}</span></p>
                   <p>📱 Registered Mobile: +91 {plumber.mobile}</p>
@@ -2769,12 +2771,12 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                     value={stageNoteInput}
                     onChange={(e) => setStageNoteInput(e.target.value)}
                     placeholder="Enter inspection or test details..."
-                    className="w-full p-3 rounded-xl border border-slate-200 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none resize-none"
+                    className="w-full p-2.5 sm:p-3 rounded-xl border border-slate-200 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none resize-none"
                   />
                 </div>
 
                 {/* Quick remark pills */}
-                <div className="flex flex-wrap gap-1.5 pt-1">
+                <div className="flex flex-wrap gap-1 sm:gap-1.5 pt-1">
                   {(stageNoteModal.targetStage === 'TASK_DONE' ? [
                     'Pressure tested at 6 bar - zero leaks',
                     'All fittings welded & certified',
@@ -2788,7 +2790,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                       key={idx}
                       type="button"
                       onClick={() => setStageNoteInput(remark)}
-                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[10px] font-semibold text-slate-600 transition cursor-pointer"
+                      className="px-2 sm:px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[10px] font-semibold text-slate-600 transition cursor-pointer text-left"
                     >
                       + {remark}
                     </button>
@@ -2797,11 +2799,11 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <div className="pt-3 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-2.5">
                 <button
                   type="button"
                   onClick={() => setStageNoteModal(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer text-center"
                 >
                   Cancel
                 </button>
@@ -2809,7 +2811,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   type="button"
                   disabled={submittingResponseOrderId === stageNoteModal.order.id}
                   onClick={() => handleSendPlumberResponse(stageNoteModal.order.id, stageNoteModal.targetStage, stageNoteInput)}
-                  className={`px-5 py-2 rounded-xl text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer ${
+                  className={`w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-xl text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer text-center ${
                     stageNoteModal.targetStage === 'TASK_DONE'
                       ? 'bg-emerald-600 hover:bg-emerald-700'
                       : 'bg-amber-600 hover:bg-amber-700'
