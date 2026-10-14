@@ -78,13 +78,9 @@ export default function Header({
               >
                 <BucketIcon className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:scale-110" />
                 <span className="hidden lg:inline text-xs font-semibold text-slate-700 group-hover:text-blue-700">Bucket</span>
-                {cartCount > 0 ? (
-                  <span className="absolute -top-1.5 -right-1.5 bg-gradient-to-r from-red-500 to-rose-600 text-white font-bold text-[10px] w-4.5 h-4.5 rounded-full flex items-center justify-center shadow-md animate-pulse">
-                    {cartCount}
-                  </span>
-                ) : (
-                  <span className="hidden sm:flex text-[10px] text-slate-500 bg-white px-1.5 py-0.2 rounded-full border border-slate-200">
-                    0
+                {cartCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 rounded-full bg-red-600 text-white font-bold text-[11px] leading-none flex items-center justify-center shadow-sm ring-2 ring-white tabular-nums">
+                    {cartCount > 99 ? '99+' : cartCount}
                   </span>
                 )}
               </button>
