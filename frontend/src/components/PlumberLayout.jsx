@@ -16,7 +16,8 @@ import {
   CheckCircle2, 
   X,
   CalendarCheck,
-  AlertCircle
+  AlertCircle,
+  Package
 } from 'lucide-react';
 import InAppNotificationToast from './InAppNotificationToast';
 
@@ -27,7 +28,8 @@ export default function PlumberLayout({
   activeTab = 'activities',
   onSelectTab,
   unreadCount = 2,
-  activeJobsCount = 2
+  activeJobsCount = 2,
+  dealerOrdersCount = 0
 }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -159,6 +161,14 @@ export default function PlumberLayout({
       description: 'Check & Perform Assigned Work',
       badge: activeJobsCount > 0 ? `${activeJobsCount} Active` : null,
       badgeColor: 'bg-amber-100 text-amber-800'
+    },
+    {
+      id: 'dealer-orders',
+      name: 'Distributor Orders',
+      icon: Package,
+      description: 'Sri Venkateswara Orders',
+      badge: dealerOrdersCount > 0 ? `${dealerOrdersCount} Orders` : null,
+      badgeColor: 'bg-blue-100 text-blue-800'
     },
     {
       id: 'products',
@@ -380,24 +390,6 @@ export default function PlumberLayout({
             </div>
           </div>
 
-          {/* Sidebar Footer Support info */}
-          {!isCollapsed ? (
-            <div className="pt-4 border-t border-slate-100 mt-4">
-              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-600 text-center">
-                <span className="text-[11px] font-bold text-slate-800 block mb-0.5">Plumber Helpline</span>
-                <span className="text-[10px] text-slate-500 block">Dispatch: 1800-2026-PLUM</span>
-                <span className="inline-block mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                  Certified Technician
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="pt-3 border-t border-slate-100 flex justify-center">
-              <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400" title="Certified Technician">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              </div>
-            </div>
-          )}
         </aside>
 
         {/* Content Page Area */}

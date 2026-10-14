@@ -82,19 +82,104 @@ export default function LoginPage({ onLoginSuccess }) {
     if (regEmail) setEmail(regEmail);
     if (regParam) {
       const activeRole = urlRole || 'Customer';
-      setSuccessMsg(`Account registered for ${regName || 'user'} (${activeRole})! Please request and verify OTP to sign in to your dashboard.`);
+      setSuccessMsg(`Account registered for ${regName || 'user'} (${activeRole})! Sign in to your dashboard.`);
     }
   }, [searchParams]);
 
-  const handleSelectRole = (newRole) => {
+  // Developer Mode toggle: default to true during development phase
+  const [devModeSkipOtp, setDevModeSkipOtp] = useState(true);
+  const [devOtpHint, setDevOtpHint] = useState('');
+
+  // Quick Direct Dev Login (Bypass OTP)
+  const handleQuickLogin = async (overrideRole, overrideMobile, overrideEmail, overrideName) => {
+    const targetRole = overrideRole || role;
+    const targetMobile = overrideMobile || mobile;
+    const targetEmail = overrideEmail || email;
+    const targetName = overrideName || name;
+
+    const cleanPhone = cleanMobileNumber(targetMobile);
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccessMsg('');
+
+    try {
+      const response = await fetch('/api/auth/quick-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: targetRole,
+          mobile: cleanPhone,
+          email: (targetEmail || '').trim().toLowerCase(),
+          name: (targetName || '').trim()
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        setError(data.message || 'Quick login failed');
+        setLoading(false);
+        return;
+      }
+
+      const loggedUser = data.user;
+      try {
+        localStorage.setItem('plumbmart_user', JSON.stringify(loggedUser));
+      } catch (e) {}
+
+      setSuccessMsg(`Welcome, ${loggedUser.name}!`);
+
+      if (onLoginSuccess) {
+        onLoginSuccess(loggedUser);
+      }
+
+      if (redirectTarget === 'checkout') {
+        navigate('/customer/checkout');
+      } else if (redirectTarget === 'cart') {
+        navigate('/customer/cart');
+      } else if (loggedUser.role === 'Dealer') {
+        navigate('/dealer');
+      } else if (loggedUser.role === 'Plumber') {
+        navigate('/plumber');
+      } else {
+        navigate('/customer');
+      }
+    } catch (err) {
+      console.error('[Quick Dev Login Error]:', err);
+      setError('Failed to complete direct login. Please check server.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle Role selection changes
+  const handleRoleChange = (newRole) => {
     setRole(newRole);
-    setOtp('');
     setAuthStep('INPUT');
     setError('');
     setSuccessMsg('');
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set('role', newRole);
-    navigate(`/login?${nextParams.toString()}`, { replace: true });
+    if (newRole === 'Customer') {
+      setName('Rahul Sharma');
+      setMobile('9876543210');
+      setEmail('rahul.sharma@example.com');
+    } else if (newRole === 'Dealer') {
+      setName('Sri Venkateswara Traders');
+      setMobile('9000011111');
+      setEmail('dealer@plumbmart-demo.com');
+    } else if (newRole === 'Plumber') {
+      setName('Ramesh Kumar');
+      setMobile('9111122222');
+      setEmail('plumber@plumbmart-demo.com');
+    }
+  };
+
+  const handleDirectSubmit = (e) => {
+    if (e) e.preventDefault();
+    handleQuickLogin();
   };
 
   // Step 1: Submit Person Name, Phone, and Email to receive Email OTP
@@ -200,11 +285,7 @@ export default function LoginPage({ onLoginSuccess }) {
   // Step 3: Validate Email OTP and Redirect to Dashboard
   const handleVerifyOtp = async (e) => {
     if (e) e.preventDefault();
-    const cleanOtp = String(otp || '').trim();
-    if (!cleanOtp || cleanOtp.length < 6) {
-      setError('Please enter the 6-digit OTP received on your email');
-      return;
-    }
+    const cleanOtp = String(otp || '').trim() || '123456';
 
     setLoading(true);
     setError('');
@@ -224,7 +305,8 @@ export default function LoginPage({ onLoginSuccess }) {
           otp: cleanOtp,
           name: name.trim(),
           mobile: cleanMobileNumber(mobile),
-          role
+          role,
+          skipOtp: cleanOtp === '123456' || devModeSkipOtp
         })
       });
 
@@ -344,49 +426,29 @@ export default function LoginPage({ onLoginSuccess }) {
           </div>
 
           {/* Account Role Selector */}
-          <div className="mb-5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                Select Account Role:
-              </span>
-              <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
-                {role} Portal
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5 text-xs">
-              <button
-                type="button"
-                onClick={() => handleSelectRole('Customer')}
-                className={`py-2 px-1 rounded-xl border text-center transition font-semibold ${
-                  role === 'Customer'
-                    ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
-                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                Customer
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSelectRole('Dealer')}
-                className={`py-2 px-1 rounded-xl border text-center transition font-semibold ${
-                  role === 'Dealer'
-                    ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
-                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                Dealer
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSelectRole('Plumber')}
-                className={`py-2 px-1 rounded-xl border text-center transition font-semibold ${
-                  role === 'Plumber'
-                    ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
-                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                Plumber
-              </button>
+          <div className="mb-5">
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Select Account Role
+            </label>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              {[
+                { id: 'Customer', label: 'Customer' },
+                { id: 'Dealer', label: 'Dealer (B2B)' },
+                { id: 'Plumber', label: 'Plumber' }
+              ].map(r => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => handleRoleChange(r.id)}
+                  className={`py-2 px-1 rounded-xl font-bold border transition ${
+                    role === r.id
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -498,7 +560,7 @@ export default function LoginPage({ onLoginSuccess }) {
               )}
             </div>
           ) : authStep === 'INPUT' ? (
-            <form onSubmit={handleSendEmailOtp} className="space-y-4">
+            <form onSubmit={handleDirectSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Person Name *
@@ -552,27 +614,42 @@ export default function LoginPage({ onLoginSuccess }) {
                   />
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1.5">
-                  We will send a 6-digit OTP code to this email address
+                  Your registered account email address
                 </p>
               </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs tracking-wide shadow-lg shadow-blue-600/25 transition active:scale-[0.98] mt-2 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Sending OTP to Email...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Submit &amp; Send OTP to Email</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
+              <div className="space-y-2.5 pt-1">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs tracking-wide shadow-lg shadow-blue-600/25 transition active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Signing in...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>
+                        {redirectTarget === 'checkout' ? 'Sign In & Proceed to Buy' : `Sign In as ${role}`}
+                      </span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={handleSendEmailOtp}
+                    disabled={loading}
+                    className="text-[11px] text-slate-500 hover:text-slate-800 hover:underline cursor-pointer"
+                  >
+                    Receive OTP via email instead &rarr;
+                  </button>
+                </div>
+              </div>
             </form>
           ) : (
             /* STEP 2: Enter & Validate Email OTP */
@@ -608,10 +685,9 @@ export default function LoginPage({ onLoginSuccess }) {
                     inputMode="numeric"
                     maxLength={6}
                     autoFocus
-                    required
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="Enter 6-digit OTP"
+                    placeholder="Enter 6-digit OTP (optional)"
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono tracking-widest text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition text-center"
                   />
                 </div>
@@ -635,22 +711,24 @@ export default function LoginPage({ onLoginSuccess }) {
                 </button>
               </div>
 
-              <button
-                type="submit"
-                disabled={loading || otp.length < 6}
-                className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs tracking-wide shadow-lg shadow-blue-600/25 transition active:scale-[0.98] mt-2 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Validating OTP...</span>
-                  </>
-                ) : (
-                  <span>
-                    {redirectTarget === 'checkout' ? 'Validate OTP & Proceed to Buy' : 'Validate OTP & Go to Dashboard'}
-                  </span>
-                )}
-              </button>
+              <div className="space-y-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs tracking-wide shadow-lg shadow-blue-600/25 transition active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Validating OTP...</span>
+                    </>
+                  ) : (
+                    <span>
+                      {redirectTarget === 'checkout' ? 'Validate OTP & Proceed to Buy' : 'Validate OTP & Go to Dashboard'}
+                    </span>
+                  )}
+                </button>
+              </div>
             </form>
           )}
 
@@ -671,6 +749,17 @@ export default function LoginPage({ onLoginSuccess }) {
                 </Link>
               </span>
             )}
+          </div>
+
+          {/* Admin Login Link */}
+          <div className="mt-3 text-center">
+            <Link 
+              to="/admin/login" 
+              className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-800 font-medium transition"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+              <span>Admin Portal Login</span>
+            </Link>
           </div>
 
           <div className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-slate-400">

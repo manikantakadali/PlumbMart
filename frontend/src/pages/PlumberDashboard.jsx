@@ -31,7 +31,14 @@ import {
   ArrowRight,
   Edit3,
   Loader2,
-  Mail
+  Mail,
+  Package,
+  Truck,
+  Building2,
+  RefreshCw,
+  Eye,
+  ShoppingBag,
+  Printer
 } from 'lucide-react';
 
 const INITIAL_JOBS = [
@@ -189,13 +196,71 @@ const INITIAL_UPDATES = [
 export default function PlumberDashboard({ currentUser, onLogout }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = searchParams.get('tab') || 'activities';
-  const [activeTab, setActiveTab] = useState(urlTab); // 'activities' | 'products' | 'updates' | 'profile'
+  const [activeTab, setActiveTab] = useState(urlTab); // 'activities' | 'dealer-orders' | 'products' | 'updates' | 'profile'
 
   useEffect(() => {
-    if (urlTab && ['activities', 'products', 'updates', 'profile'].includes(urlTab)) {
+    if (urlTab && ['activities', 'dealer-orders', 'products', 'updates', 'profile'].includes(urlTab)) {
       setActiveTab(urlTab);
     }
   }, [urlTab]);
+
+  // Live Distributor Orders (Sri Venkateswara Distributors)
+  const [dealerOrders, setDealerOrders] = useState([]);
+  const [loadingDealerOrders, setLoadingDealerOrders] = useState(false);
+  const [dealerOrdersSearch, setDealerOrdersSearch] = useState('');
+  const [dealerOrderStatusFilter, setDealerOrderStatusFilter] = useState('All');
+  const [selectedDealerOrder, setSelectedDealerOrder] = useState(null);
+
+  const fetchDealerOrders = async () => {
+    setLoadingDealerOrders(true);
+    try {
+      let res;
+      try {
+        res = await fetch('/api/orders?clientType=Dealer');
+        if (!res.ok) throw new Error('Status: ' + res.status);
+      } catch (e1) {
+        try {
+          res = await fetch('http://localhost:5000/api/orders?clientType=Dealer');
+        } catch (e2) {
+          res = await fetch('http://localhost:4000/api/orders?clientType=Dealer');
+        }
+      }
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.data)) {
+        setDealerOrders(data.data);
+      }
+    } catch (err) {
+      console.warn('Could not fetch distributor orders:', err);
+    } finally {
+      setLoadingDealerOrders(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDealerOrders();
+
+    const handleOrderCreated = (e) => {
+      if (e?.detail) {
+        setDealerOrders(prev => [e.detail, ...prev.filter(o => o.id !== e.detail.id)]);
+      }
+    };
+    window.addEventListener('plumbmart_order_created', handleOrderCreated);
+
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('plumbmart_orders');
+      bc.onmessage = (msg) => {
+        if (msg.data?.type === 'NEW_ORDER' && msg.data?.order) {
+          setDealerOrders(prev => [msg.data.order, ...prev.filter(o => o.id !== msg.data.order.id)]);
+        }
+      };
+    } catch (e) {}
+
+    return () => {
+      window.removeEventListener('plumbmart_order_created', handleOrderCreated);
+      if (bc) bc.close();
+    };
+  }, []);
 
   const handleSelectTab = (tabId) => {
     setActiveTab(tabId);
@@ -639,6 +704,23 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
     return matchCat && matchSearch;
   });
 
+  // Filtered Dealer Orders for Distributor Orders Tab
+  const filteredDealerOrders = dealerOrders.filter(o => {
+    const status = o.status || 'Order Confirmed';
+    const matchStatus = dealerOrderStatusFilter === 'All' || status === dealerOrderStatusFilter;
+    const q = dealerOrdersSearch.toLowerCase().trim();
+    if (!q) return matchStatus;
+    const matchId = (o.id || '').toLowerCase().includes(q);
+    const matchPo = (o.poNumber || '').toLowerCase().includes(q);
+    const matchZoho = (o.zohoSalesOrder || '').toLowerCase().includes(q);
+    const matchClient = (o.clientName || '').toLowerCase().includes(q);
+    const matchItems = Array.isArray(o.items) && o.items.some(it => 
+      (it.name || '').toLowerCase().includes(q) || 
+      (it.sku || '').toLowerCase().includes(q)
+    );
+    return matchStatus && (matchId || matchPo || matchZoho || matchClient || matchItems);
+  });
+
   const unreadUpdatesCount = updates.filter(u => u.unread).length;
   const activeJobsCount = jobs.filter(j => j.status === 'Assigned' || j.status === 'In Progress').length;
 
@@ -650,6 +732,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
       onSelectTab={handleSelectTab}
       unreadCount={unreadUpdatesCount}
       activeJobsCount={activeJobsCount}
+      dealerOrdersCount={dealerOrders.length}
     >
       <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 relative">
 
@@ -1036,6 +1119,309 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                             </div>
                           )}
                         </div>
+                      </div>
+
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB: DISTRIBUTOR ORDERS (Sri Venkateswara Distributors)  */}
+        {/* ======================================================== */}
+        {activeTab === 'dealer-orders' && (
+          <div className="space-y-6">
+            
+            {/* Header & Distributor Details Card */}
+            <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-amber-100/40 via-blue-50/30 to-transparent rounded-full -mr-20 -mt-20 pointer-events-none"></div>
+
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 relative z-10">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-600 to-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-amber-600/25 shrink-0">
+                    <Building2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                        Distributor Material Orders
+                      </h1>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Live B2B Feed
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                      Showing real-time supply orders placed by your regional partner <strong className="text-slate-800">Sri Venkateswara Distributors</strong>.
+                    </p>
+                    <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500 flex-wrap">
+                      <span className="flex items-center gap-1 font-medium text-slate-700">
+                        <MapPin className="w-3.5 h-3.5 text-amber-600" />
+                        Plot 42, Peenya Industrial Area Phase 1, Bengaluru
+                      </span>
+                      <span className="flex items-center gap-1 font-medium text-slate-700">
+                        <Phone className="w-3.5 h-3.5 text-amber-600" />
+                        +91 90000 11111
+                      </span>
+                      <span className="flex items-center gap-1 text-slate-500">
+                        <Mail className="w-3.5 h-3.5 text-slate-400" />
+                        dealer@plumbmart-demo.com
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start lg:self-center shrink-0">
+                  <button
+                    onClick={fetchDealerOrders}
+                    disabled={loadingDealerOrders}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-xs"
+                    title="Refresh orders from server"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingDealerOrders ? 'animate-spin text-amber-600' : ''}`} />
+                    <span>{loadingDealerOrders ? 'Syncing...' : 'Refresh Orders'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Metric Summary Counters */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 mt-5 border-t border-slate-100">
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <p className="text-[11px] font-semibold text-slate-500">Total Orders Placed</p>
+                  <p className="text-lg font-black text-slate-900 mt-0.5">{dealerOrders.length}</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <p className="text-[11px] font-semibold text-slate-500">Total Materials Sourced</p>
+                  <p className="text-lg font-black text-amber-700 mt-0.5">
+                    {dealerOrders.reduce((sum, o) => sum + (o.itemsCount || (Array.isArray(o.items) ? o.items.reduce((s, it) => s + (it.qty || it.quantity || 1), 0) : 0)), 0)} Units
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <p className="text-[11px] font-semibold text-slate-500">In Transit / Ready</p>
+                  <p className="text-lg font-black text-blue-600 mt-0.5">
+                    {dealerOrders.filter(o => o.status === 'Out for Delivery' || o.status === 'Dispatched').length}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <p className="text-[11px] font-semibold text-slate-500">Total Order Volume</p>
+                  <p className="text-lg font-black text-emerald-700 mt-0.5">
+                    ₹{dealerOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0).toLocaleString('en-IN')}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter and Search Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* Status Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                {[
+                  { id: 'All', label: 'All Orders', count: dealerOrders.length },
+                  { id: 'Out for Delivery', label: 'Out for Delivery', count: dealerOrders.filter(o => o.status === 'Out for Delivery').length },
+                  { id: 'Dispatched', label: 'Dispatched', count: dealerOrders.filter(o => o.status === 'Dispatched').length },
+                  { id: 'Order Confirmed', label: 'Confirmed', count: dealerOrders.filter(o => o.status === 'Order Confirmed').length },
+                  { id: 'Delivered', label: 'Delivered', count: dealerOrders.filter(o => o.status === 'Delivered').length }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setDealerOrderStatusFilter(tab.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer ${
+                      dealerOrderStatusFilter === tab.id
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                      dealerOrderStatusFilter === tab.id
+                        ? 'bg-amber-700/60 text-white'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Search Box */}
+              <div className="relative w-full sm:w-72">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={dealerOrdersSearch}
+                  onChange={e => setDealerOrdersSearch(e.target.value)}
+                  placeholder="Search order ID, product, SKU, PO..."
+                  className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 shadow-2xs"
+                />
+                {dealerOrdersSearch && (
+                  <button 
+                    onClick={() => setDealerOrdersSearch('')}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Orders Feed List */}
+            {filteredDealerOrders.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-500 max-w-md mx-auto my-6 shadow-sm">
+                <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="font-bold text-sm text-slate-800">No distributor orders found</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {dealerOrdersSearch ? 'No orders match your search criteria.' : 'No orders have been recorded for this status filter yet.'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredDealerOrders.map((order) => {
+                  const statusColors = {
+                    'Order Confirmed': 'bg-blue-50 text-blue-700 border-blue-200',
+                    'Warehouse Allocation': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+                    'Packed & Verified': 'bg-amber-50 text-amber-800 border-amber-200',
+                    'Dispatched': 'bg-purple-50 text-purple-700 border-purple-200',
+                    'Out for Delivery': 'bg-amber-500/10 text-amber-800 border-amber-300',
+                    'Delivered': 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  };
+                  const badgeClass = statusColors[order.status] || 'bg-slate-100 text-slate-700 border-slate-200';
+
+                  const trackingSteps = order.tracking || [
+                    { step: 1, title: 'Order Confirmed', completed: true },
+                    { step: 2, title: 'Warehouse Reserved', completed: true },
+                    { step: 3, title: 'Packed & Verified', completed: order.status !== 'Order Confirmed' },
+                    { step: 4, title: 'Dispatched / In Transit', completed: order.status === 'Dispatched' || order.status === 'Out for Delivery' || order.status === 'Delivered' },
+                    { step: 5, title: 'Delivered', completed: order.status === 'Delivered' }
+                  ];
+
+                  return (
+                    <div 
+                      key={order.id} 
+                      className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 hover:border-amber-300 hover:shadow-md transition duration-200 space-y-4"
+                    >
+                      {/* Order Header Row */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono font-black text-slate-900 text-base">
+                              #{order.id}
+                            </span>
+                            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badgeClass}`}>
+                              {order.status || 'Order Confirmed'}
+                            </span>
+                            {order.zohoSalesOrder && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                {order.zohoSalesOrder}
+                              </span>
+                            )}
+                            {order.poNumber && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                PO: {order.poNumber}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5 flex-wrap">
+                            <span>Placed by <strong className="text-slate-700 font-semibold">{order.clientName || 'Sri Venkateswara Distributors'}</strong></span>
+                            <span>&bull;</span>
+                            <span>{order.date || (order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recent Order')}</span>
+                          </p>
+                        </div>
+
+                        <div className="text-left sm:text-right">
+                          <p className="text-lg font-black text-slate-900">
+                            ₹{(Number(order.total) || 0).toLocaleString('en-IN')}
+                          </p>
+                          <span className="inline-block text-[11px] font-semibold text-slate-500">
+                            {order.paymentMethod || 'Paid Upfront'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Delivery Site Destination */}
+                      {order.deliveryAddress && (
+                        <div className="flex items-start gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-600">
+                          <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                          <span className="line-clamp-1">{order.deliveryAddress}</span>
+                        </div>
+                      )}
+
+                      {/* Materials List Table */}
+                      <div>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                          Materials in this Order ({Array.isArray(order.items) ? order.items.length : 1} Line Items):
+                        </p>
+                        <div className="bg-slate-50/70 rounded-2xl border border-slate-100 divide-y divide-slate-100 overflow-hidden">
+                          {(Array.isArray(order.items) ? order.items : []).map((it, idx) => (
+                            <div key={idx} className="p-3 flex items-center justify-between text-xs gap-3">
+                              <div className="min-w-0">
+                                <p className="font-semibold text-slate-800 truncate">{it.name || 'Plumbing Supply Item'}</p>
+                                {it.sku && <p className="text-[10px] text-slate-400 font-mono mt-0.5">{it.sku}</p>}
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="font-bold text-amber-900 bg-amber-100/70 px-2 py-0.5 rounded-md text-[11px]">
+                                  Qty: {it.qty || it.quantity || 1}
+                                </span>
+                                {it.price && (
+                                  <p className="text-[10px] text-slate-500 mt-0.5">
+                                    ₹{(it.price * (it.qty || it.quantity || 1)).toLocaleString('en-IN')}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 5-Stage Live Dispatch Tracking Progression Bar */}
+                      <div className="pt-2">
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
+                          Supply Dispatch Pipeline:
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                          {trackingSteps.map((step, sIdx) => {
+                            const isDone = step.completed;
+                            return (
+                              <div 
+                                key={sIdx} 
+                                className={`p-2.5 rounded-xl border text-center transition flex flex-col justify-between ${
+                                  isDone 
+                                    ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900' 
+                                    : 'bg-slate-50 border-slate-100 text-slate-400'
+                                }`}
+                              >
+                                <div className="flex items-center justify-center mb-1">
+                                  {isDone ? (
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                  ) : (
+                                    <span className="w-2 h-2 rounded-full bg-slate-300"></span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] font-bold leading-tight">{step.title}</p>
+                                {step.time && <p className="text-[9px] text-slate-500 mt-1">{step.time}</p>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Card Action Button */}
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-500 flex items-center gap-1 font-medium">
+                          <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          Expected Delivery: <strong className="text-slate-700">{order.expectedDate || 'Tomorrow Morning'}</strong>
+                        </span>
+
+                        <button
+                          onClick={() => setSelectedDealerOrder(order)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition active:scale-95 cursor-pointer"
+                        >
+                          <FileText className="w-3.5 h-3.5 text-amber-400" />
+                          <span>View Material Packing Slip</span>
+                        </button>
                       </div>
 
                     </div>
@@ -1846,6 +2232,206 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   </button>
                 </div>
 
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* DISTRIBUTOR ORDER / MATERIAL PACKING SLIP MODAL         */}
+        {/* ======================================================== */}
+        {selectedDealerOrder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-7 border border-slate-200 shadow-2xl relative max-h-[92vh] overflow-y-auto">
+              <button
+                onClick={() => setSelectedDealerOrder(null)}
+                className="absolute top-5 right-5 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* Modal Header */}
+              <div className="flex items-start gap-4 pb-4 border-b border-slate-100 pr-8">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-600 to-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-amber-600/20 shrink-0">
+                  <Package className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-black text-lg text-slate-900 tracking-tight">
+                      Material Dispatch &amp; Packing Slip
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                      #{selectedDealerOrder.id}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Official B2B Material Dispatch Record • PlumbMart Hub
+                  </p>
+                </div>
+              </div>
+
+              {/* Order Meta Bar */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 py-4 border-b border-slate-100 text-xs">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Distributor</span>
+                  <span className="font-bold text-slate-900">{selectedDealerOrder.clientName || 'Sri Venkateswara Distributors'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Zoho CRM Ref</span>
+                  <span className="font-mono font-semibold text-slate-700">{selectedDealerOrder.zohoSalesOrder || 'SO-ZH-PENDING'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">PO Number</span>
+                  <span className="font-mono font-semibold text-amber-700">{selectedDealerOrder.poNumber || 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Status</span>
+                  <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    {selectedDealerOrder.status || 'Confirmed'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Distributor & Delivery Point Details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-4 text-xs">
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                  <p className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                    <Building2 className="w-3 h-3 text-amber-600" />
+                    <span>Sourcing Depot &amp; Vendor</span>
+                  </p>
+                  <p className="font-bold text-slate-900">{selectedDealerOrder.clientName || 'Sri Venkateswara Distributors'}</p>
+                  <p className="text-slate-500 text-[11px]">Peenya Industrial Area Phase 1, Central Depot 02, Bengaluru</p>
+                  <p className="text-slate-600 text-[11px] font-mono">GSTIN: 29AAACS1234F1Z5 • +91 90000 11111</p>
+                </div>
+
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                  <p className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-amber-600" />
+                    <span>Delivery / Installation Site</span>
+                  </p>
+                  <p className="font-bold text-slate-900">{selectedDealerOrder.deliveryAddress || 'Site Delivery, Bengaluru'}</p>
+                  <p className="text-slate-500 text-[11px]">Expected: {selectedDealerOrder.expectedDate || 'Tomorrow Morning'}</p>
+                  <p className="text-slate-600 text-[11px]">Payment Terms: {selectedDealerOrder.paymentMethod || 'Paid Upfront'}</p>
+                </div>
+              </div>
+
+              {/* Itemized Materials Table */}
+              <div className="py-2">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center justify-between">
+                  <span>Itemized Materials Checklist ({Array.isArray(selectedDealerOrder.items) ? selectedDealerOrder.items.length : 1} Line Items)</span>
+                  <span className="text-[11px] font-normal text-slate-400 lowercase">
+                    total units: {selectedDealerOrder.itemsCount || (Array.isArray(selectedDealerOrder.items) ? selectedDealerOrder.items.reduce((s, it) => s + (it.qty || it.quantity || 1), 0) : 1)}
+                  </span>
+                </h4>
+                <div className="border border-slate-200 rounded-2xl overflow-hidden text-xs">
+                  <table className="w-full text-left divide-y divide-slate-100">
+                    <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      <tr>
+                        <th className="p-3">#</th>
+                        <th className="p-3">Description &amp; SKU</th>
+                        <th className="p-3 text-center">Qty</th>
+                        <th className="p-3 text-right">Unit Price</th>
+                        <th className="p-3 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {(Array.isArray(selectedDealerOrder.items) ? selectedDealerOrder.items : []).map((item, idx) => {
+                        const qty = item.qty || item.quantity || 1;
+                        const price = item.price || 0;
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="p-3 font-mono text-slate-400">{idx + 1}</td>
+                            <td className="p-3">
+                              <p className="font-bold text-slate-900">{item.name || 'Plumbing Material'}</p>
+                              {item.sku && <p className="text-[10px] text-slate-400 font-mono">{item.sku}</p>}
+                            </td>
+                            <td className="p-3 text-center">
+                              <span className="font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 text-[11px]">
+                                {qty}
+                              </span>
+                            </td>
+                            <td className="p-3 text-right text-slate-600 font-mono">
+                              ₹{price.toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-3 text-right font-bold text-slate-900 font-mono">
+                              ₹{(price * qty).toLocaleString('en-IN')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Slip Totals & Calculations */}
+              <div className="mt-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1.5 text-xs">
+                <div className="flex justify-between text-slate-600">
+                  <span>Subtotal:</span>
+                  <span className="font-mono">₹{Math.round((Number(selectedDealerOrder.total) || 0) / 1.18).toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>GST (18% Integrated B2B GST):</span>
+                  <span className="font-mono">₹{Math.round((Number(selectedDealerOrder.total) || 0) - ((Number(selectedDealerOrder.total) || 0) / 1.18)).toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between text-slate-900 font-black text-sm pt-2 border-t border-slate-200">
+                  <span>Total Order Value:</span>
+                  <span className="text-emerald-700 font-mono">₹{(Number(selectedDealerOrder.total) || 0).toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              {/* Tracking Pipeline Tracker */}
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
+                  Real-time Dispatch Pipeline:
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                  {(selectedDealerOrder.tracking || [
+                    { step: 1, title: 'Order Confirmed', completed: true, time: 'Done' },
+                    { step: 2, title: 'Warehouse Reserved', completed: true, time: 'Done' },
+                    { step: 3, title: 'Packed & Verified', completed: selectedDealerOrder.status !== 'Order Confirmed', time: 'Expected' },
+                    { step: 4, title: 'Dispatched', completed: selectedDealerOrder.status === 'Dispatched' || selectedDealerOrder.status === 'Out for Delivery' || selectedDealerOrder.status === 'Delivered', time: 'Expected' },
+                    { step: 5, title: 'Delivered', completed: selectedDealerOrder.status === 'Delivered', time: 'Tomorrow' }
+                  ]).map((st, idx) => (
+                    <div 
+                      key={idx}
+                      className={`p-2.5 rounded-xl border text-center flex flex-col justify-between ${
+                        st.completed 
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
+                          : 'bg-slate-50 border-slate-100 text-slate-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-center mb-1">
+                        {st.completed ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        ) : (
+                          <span className="w-2 h-2 rounded-full bg-slate-300"></span>
+                        )}
+                      </div>
+                      <span className="text-[11px] font-bold leading-tight">{st.title}</span>
+                      {st.time && <span className="text-[9px] text-slate-500 mt-1">{st.time}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Modal Action Buttons */}
+              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print Slip</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedDealerOrder(null)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer"
+                >
+                  Close Slip
+                </button>
               </div>
 
             </div>

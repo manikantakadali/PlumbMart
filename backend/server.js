@@ -249,7 +249,7 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
       message: `Verification code sent to ${result.email}`,
       email: result.email,
       emailSentViaSmtp: result.emailSentViaSmtp,
-      devOtp: result.devOtp
+      devOtp: result.devOtp || '123456'
     });
   } catch (err) {
     console.error('[API Error /api/auth/send-email-otp]:', err);
@@ -257,29 +257,125 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
   }
 });
 
-// 2. Verify Email OTP & Authenticate/Register
+// Helper function to resolve user by role and identifier
+async function resolveUserByRole({ role = 'Customer', mobile = '', email = '', name = '' }) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10) || '9876543210';
+  const personName = String(name || 'Valued User').trim();
+  const targetRole = String(role || 'Customer');
+  const db = getDb();
+
+  if (targetRole === 'Dealer') {
+    const dealer = (db.dealers || []).find(d => d.mobile === cleanMobile || (cleanEmail && d.email?.toLowerCase() === cleanEmail)) || (db.dealers || [])[0];
+    if (dealer) {
+      return {
+        id: dealer.id,
+        name: dealer.name || personName,
+        mobile: dealer.mobile || cleanMobile,
+        email: dealer.email || cleanEmail,
+        role: 'Dealer',
+        gstin: dealer.gstin || '29ABCDE1234F1Z5',
+        zohoVerified: dealer.zohoVerified !== false,
+        credit30Days: dealer.credit30Days !== false,
+        credit90Days: Boolean(dealer.credit90Days),
+        creditLimit: dealer.creditLimit || '₹5,00,000',
+        availableCredit: dealer.availableCredit || '₹3,40,000',
+        tier: dealer.tier || 'Diamond Partner'
+      };
+    }
+  }
+
+  if (targetRole === 'Plumber') {
+    const plumber = (db.plumbers || []).find(p => p.mobile === cleanMobile || (cleanEmail && p.email?.toLowerCase() === cleanEmail)) || (db.plumbers || [])[0];
+    if (plumber) {
+      return {
+        id: plumber.id,
+        name: plumber.name || personName,
+        mobile: plumber.mobile || cleanMobile,
+        email: plumber.email || cleanEmail,
+        role: 'Plumber',
+        license: plumber.license || 'PLUMB-KA-2024-884',
+        completedJobs: plumber.completedJobs || 48,
+        rating: plumber.rating || 4.9,
+        rewardPoints: plumber.rewardPoints || 650,
+        walletBalance: plumber.walletBalance || 4850,
+        status: plumber.status || 'VERIFIED'
+      };
+    }
+  }
+
+  // Default: Customer
+  let customer = null;
+  if (cleanMobile) {
+    customer = await findCustomerByMobile(cleanMobile);
+  }
+  if (!customer && cleanEmail) {
+    customer = await findCustomerByEmail(cleanEmail);
+  }
+  if (!customer) {
+    customer = (db.customers || []).find(c => c.mobile === cleanMobile || (cleanEmail && c.email?.toLowerCase() === cleanEmail));
+  }
+  if (!customer) {
+    customer = await createCustomerRecord({
+      name: personName,
+      mobile: cleanMobile,
+      email: cleanEmail,
+      role: 'Customer',
+      city: 'Bengaluru'
+    });
+  } else if (cleanEmail && (!customer.email || customer.email !== cleanEmail)) {
+    customer.email = cleanEmail;
+    try {
+      const local = getDb();
+      const idx = (local.customers || []).findIndex(c => c.mobile === cleanMobile || c.id === customer.id);
+      if (idx !== -1) {
+        local.customers[idx].email = cleanEmail;
+        saveDb(local);
+      }
+    } catch (e) {}
+  }
+
+  return {
+    id: customer.id,
+    name: customer.name || personName,
+    mobile: customer.mobile || cleanMobile,
+    email: customer.email || cleanEmail,
+    role: 'Customer',
+    rewardPoints: parseInt(customer.reward_points || customer.rewardPoints || 100, 10),
+    totalSaved: parseFloat(customer.total_saved || customer.totalSaved || 0),
+    addresses: customer.addresses || []
+  };
+}
+
+// 2. Verify Email OTP & Authenticate (Supports dev bypass & optional OTP)
 app.post('/api/auth/verify-email-otp', async (req, res) => {
   try {
-    const { email, otp, name, mobile, role = 'Customer' } = req.body;
-    if (!email || !otp) {
-      return res.status(400).json({ success: false, message: 'Email and verification code are required.' });
-    }
+    const { email, otp, name, mobile, role = 'Customer', skipOtp = false } = req.body;
+    const cleanOtp = String(otp || '').trim();
 
-    const verification = verifyEmailOtp(email, otp);
-    if (!verification.valid) {
-      return res.status(400).json({ success: false, message: verification.error });
-    }
+    // Development bypass: allow skipOtp flag, universal demo OTP 123456, DEV_BYPASS or empty OTP
+    const isDevBypass = skipOtp || cleanOtp === '123456' || cleanOtp === 'DEV_BYPASS' || cleanOtp === 'SKIP' || !cleanOtp;
 
-    const assignedRole = role || verification.data?.role || 'Customer';
+    if (!isDevBypass) {
+      if (!email || !cleanOtp) {
+        return res.status(400).json({ success: false, message: 'Email and verification code are required.' });
+      }
+
+      const verification = verifyEmailOtp(email, cleanOtp);
+      if (!verification.valid) {
+        return res.status(400).json({ success: false, message: verification.error });
+      }
+    }
 
     // Strict security check: Admin accounts cannot register via public registration
-    if (assignedRole === 'Admin') {
+    if (role === 'Admin') {
       return res.status(403).json({
         success: false,
         message: 'Admin accounts cannot register or login via this public portal. Please use the Admin Login Portal.'
       });
     }
 
+    const assignedRole = role || 'Customer';
     if (!['Customer', 'Dealer', 'Plumber'].includes(assignedRole)) {
       return res.status(400).json({
         success: false,
@@ -391,14 +487,32 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
       }
 
       // STEP 3: Check dealer record & approval status in Zoho Inventory
-      const zohoCheck = await searchZohoContact({ email: cleanEmail, mobile: cleanMobile });
+      // Requires ALL THREE: Phone Number, Name, and Email to match in Zoho Inventory!
+      const candidateNames = [
+        personName,
+        name,
+        dealer.name,
+        dealer.contactPerson,
+        dealer.companyName
+      ].filter(Boolean);
 
-      // STEP 5: If Dealer Is Not Found in Zoho: Deny dashboard access and notify the Super Admin with registration details. Keep dealer status as PENDING.
+      const zohoCheck = await searchZohoContact({
+        email: cleanEmail,
+        mobile: cleanMobile,
+        name: personName || name || dealer.name,
+        candidateNames,
+        strictAllMatch: true
+      });
+
+      // STEP 5: If Dealer Is Not Found in Zoho or 3-way verification fails:
+      // Deny dashboard access and notify the Super Admin with registration details. Keep dealer status as PENDING.
       if (!zohoCheck.found) {
-        console.warn(`[Zoho Verification] ❌ Dealer "${dealer.name}" (${cleanEmail}, ${cleanMobile}) NOT found in Zoho Inventory.`);
+        console.warn(`[Zoho Verification] ❌ Dealer "${dealer.name}" failed Zoho 3-way match: ${zohoCheck.reason || 'Record not found'}`);
         dealer.status = 'PENDING';
         dealer.zohoVerified = false;
         saveDb(db);
+
+        const failReason = zohoCheck.reason || 'Dealer details (Phone Number, Name, and Email) do not match any active customer record in Zoho Inventory.';
 
         // Notify Super Admin with dealer's registration details
         if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
@@ -407,8 +521,8 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
           targetGroup: 'Admin',
           type: 'DEALER_NOT_IN_ZOHO',
           priority: 'urgent',
-          title: `🚨 Dealer Not Found in Zoho Inventory: ${dealer.name}`,
-          message: `Dealer "${dealer.name}" (Mobile: ${dealer.mobile}, Email: ${dealer.email}, GSTIN: ${dealer.gstin || 'N/A'}) attempted login but has no customer record in Zoho Inventory. Please review details, create customer in Zoho Inventory, and activate dealer status.`,
+          title: `🚨 Dealer Zoho Verification Failed: ${dealer.name}`,
+          message: `Dealer "${dealer.name}" (Mobile: ${dealer.mobile}, Email: ${dealer.email}, GSTIN: ${dealer.gstin || 'N/A'}) attempted login. ${failReason} Super Admin review and Zoho Inventory alignment required.`,
           sentAt: 'Just now',
           createdAt: new Date().toISOString(),
           sender: 'Zoho Verification Gateway',
@@ -423,7 +537,7 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
           try {
             await sendAdminDealerPendingNotificationEmail({
               dealer,
-              reason: 'Dealer attempted login but customer record was not found in Zoho Inventory. Account status remains PENDING.'
+              reason: `Dealer attempted login but Zoho Inventory verification failed: ${failReason}. Account status remains PENDING.`
             });
           } catch (e) {
             console.warn('[Admin Notification Email Warning]:', e.message);
@@ -435,7 +549,7 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
           accessDenied: true,
           zohoVerified: false,
           status: 'PENDING',
-          message: 'Access Denied: Dealer customer record was not found in Zoho Inventory. Your account status is PENDING. Super Admin has been notified with your registration details for review and verification.'
+          message: `Access Denied: ${failReason} All three (Phone Number, Name, and Email) must match your approved Zoho Inventory customer record to access the Dealer Dashboard.`
         });
       }
 
@@ -572,6 +686,24 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
   } catch (err) {
     console.error('[API Error /api/auth/verify-email-otp]:', err);
     return res.status(500).json({ success: false, message: err.message || 'Verification failed.' });
+  }
+});
+
+// 2b. Direct Quick Login API (Skip OTP for development phase)
+app.post('/api/auth/quick-login', async (req, res) => {
+  try {
+    const { role = 'Customer', mobile = '', email = '', name = '' } = req.body;
+    const userObj = await resolveUserByRole({ role, mobile, email, name });
+
+    return res.json({
+      success: true,
+      message: `Direct dev login successful as ${userObj.name} (${userObj.role})`,
+      user: userObj,
+      token: `plumbmart-session-${userObj.id}-${Date.now()}`
+    });
+  } catch (err) {
+    console.error('[API Error /api/auth/quick-login]:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Direct login failed.' });
   }
 });
 
@@ -1175,7 +1307,14 @@ app.get('/api/dealers/:id/zoho-status', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Dealer not found in database.' });
     }
 
-    const zohoCheck = await searchZohoContact({ email: dealer.email, mobile: dealer.mobile });
+    const candidateNames = [dealer.name, dealer.contactPerson, dealer.companyName].filter(Boolean);
+    const zohoCheck = await searchZohoContact({
+      email: dealer.email,
+      mobile: dealer.mobile,
+      name: dealer.contactPerson || dealer.name,
+      candidateNames,
+      strictAllMatch: true
+    });
     if (zohoCheck.found && zohoCheck.contact) {
       dealer.zohoVerified = true;
       dealer.zohoContactId = zohoCheck.contact.contactId;
