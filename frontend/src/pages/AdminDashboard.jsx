@@ -2065,39 +2065,47 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/80">
-                      {payments
-                        .filter(p => paymentStatusFilter === 'All' || p.status === paymentStatusFilter)
-                        .map(pay => (
-                          <tr key={pay.id} className="hover:bg-slate-900/50 transition">
-                            <td className="py-3 px-3 font-mono text-slate-300">{pay.id}</td>
-                            <td className="py-3 px-3 font-mono font-bold text-white">{pay.orderId}</td>
-                            <td className="py-3 px-3 text-slate-200">{pay.clientName}</td>
-                            <td className="py-3 px-3 text-slate-400">{pay.method}</td>
-                            <td className="py-3 px-3 font-mono text-[10px] text-blue-400">{pay.gatewayRef}</td>
-                            <td className="py-3 px-3 font-bold text-white">₹{pay.amount.toLocaleString('en-IN')}</td>
-                            <td className="py-3 px-3">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                pay.status === 'Successful'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                  : pay.status === 'Refunded'
-                                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                              }`}>
-                                {pay.status}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3 text-right">
-                              {pay.status === 'Successful' && (
-                                <button
-                                  onClick={() => handleProcessRefund(pay.id)}
-                                  className="px-2 py-1 rounded bg-slate-900 hover:bg-rose-950 text-rose-400 text-[10px] font-bold border border-rose-900/40"
-                                >
-                                  Refund
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
+                      {payments.filter(p => paymentStatusFilter === 'All' || p.status === paymentStatusFilter).length === 0 ? (
+                        <tr>
+                          <td colSpan="8" className="py-8 text-center text-slate-400">
+                            No payment transactions recorded yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        payments
+                          .filter(p => paymentStatusFilter === 'All' || p.status === paymentStatusFilter)
+                          .map(pay => (
+                            <tr key={pay.id} className="hover:bg-slate-900/50 transition">
+                              <td className="py-3 px-3 font-mono text-slate-300">{pay.id}</td>
+                              <td className="py-3 px-3 font-mono font-bold text-white">{pay.orderId}</td>
+                              <td className="py-3 px-3 text-slate-200">{pay.clientName}</td>
+                              <td className="py-3 px-3 text-slate-400">{pay.method}</td>
+                              <td className="py-3 px-3 font-mono text-[10px] text-blue-400">{pay.gatewayRef}</td>
+                              <td className="py-3 px-3 font-bold text-white">₹{(pay.amount || 0).toLocaleString('en-IN')}</td>
+                              <td className="py-3 px-3">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  pay.status === 'Successful'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                    : pay.status === 'Refunded'
+                                    ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                }`}>
+                                  {pay.status}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 text-right">
+                                {pay.status === 'Successful' && (
+                                  <button
+                                    onClick={() => handleProcessRefund(pay.id)}
+                                    className="px-2 py-1 rounded bg-slate-900 hover:bg-rose-950 text-rose-400 text-[10px] font-bold border border-rose-900/40"
+                                  >
+                                    Refund
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                      )}
                     </tbody>
                   </table>
                 </div>

@@ -328,6 +328,32 @@ export default function LoginPage({ onLoginSuccess }) {
             </div>
           </div>
 
+          {/* Registration Success Banner */}
+          {isRegisteredParam && (
+            <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-start gap-2.5 shadow-2xs">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-emerald-900 text-xs">Registration Successful!</p>
+                <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed">
+                  {paramName ? `Welcome, ${paramName}! ` : ''}Your account has been created. Please log in below to complete your purchase.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Login to Buy Banner */}
+          {redirectTarget === 'checkout' && !isRegisteredParam && (
+            <div className="mb-4 p-3.5 bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded-2xl flex items-start gap-2.5 shadow-2xs">
+              <Lock className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-blue-900 text-xs">Login Required to Buy</p>
+                <p className="text-[11px] text-blue-700 mt-0.5 leading-relaxed">
+                  Please sign in to proceed with your delivery address and checkout. Your cart items are saved!
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Error Banner */}
           {error && (
             <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium animate-in fade-in duration-200 flex items-start gap-2">
@@ -494,7 +520,9 @@ export default function LoginPage({ onLoginSuccess }) {
                     <span>Validating OTP...</span>
                   </>
                 ) : (
-                  <span>Validate OTP &amp; Go to Dashboard</span>
+                  <span>
+                    {redirectTarget === 'checkout' ? 'Validate OTP & Proceed to Buy' : 'Validate OTP & Go to Dashboard'}
+                  </span>
                 )}
               </button>
             </form>
@@ -502,10 +530,21 @@ export default function LoginPage({ onLoginSuccess }) {
 
           {/* Switch to Register link */}
           <div className="mt-6 pt-5 border-t border-slate-200 text-center text-xs text-slate-500">
-            Need a contractor account?{' '}
-            <Link to="/register" className="text-blue-600 font-bold hover:underline">
-              Create an account
-            </Link>
+            {redirectTarget === 'checkout' ? (
+              <span>
+                New customer?{' '}
+                <Link to="/register?redirect=checkout" className="text-blue-600 font-bold hover:underline">
+                  Register here to buy
+                </Link>
+              </span>
+            ) : (
+              <span>
+                Need an account?{' '}
+                <Link to="/register" className="text-blue-600 font-bold hover:underline">
+                  Create an account
+                </Link>
+              </span>
+            )}
           </div>
 
           <div className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
