@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Droplets, 
   User, 
@@ -12,22 +12,33 @@ import {
   CheckCircle2, 
   Loader2, 
   RotateCw, 
-  ArrowRight
+  ArrowRight,
+  AlertTriangle
 } from 'lucide-react';
 import { cleanMobileNumber } from '../firebase';
 
 export default function LoginPage({ onLoginSuccess }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const redirectTarget = searchParams.get('redirect'); // 'checkout' or null
+  const isRegisteredParam = searchParams.get('registered') === 'true';
+  const paramMobile = searchParams.get('mobile') || '';
+  const paramName = searchParams.get('name') || '';
+  const paramEmail = searchParams.get('email') || '';
+  const paramRole = searchParams.get('role') || '';
 
   // Form State: Person Name, Phone Number, Email
-  const [name, setName] = useState('Rahul Sharma');
-  const [mobile, setMobile] = useState('9876543210');
-  const [email, setEmail] = useState('rahul.sharma@example.com');
+  const [name, setName] = useState(paramName || 'Rahul Sharma');
+  const [mobile, setMobile] = useState(paramMobile || '9876543210');
+  const [email, setEmail] = useState(paramEmail || (paramMobile ? `user_${paramMobile}@example.com` : 'rahul.sharma@example.com'));
   const [otp, setOtp] = useState('');
-  const [role, setRole] = useState('Customer');
+  const [role, setRole] = useState(paramRole || 'Customer');
   const [authStep, setAuthStep] = useState('INPUT'); // 'INPUT' | 'OTP'
   const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState(
+    isRegisteredParam ? 'Account created successfully! Please verify to login.' : ''
+  );
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
@@ -213,8 +224,12 @@ export default function LoginPage({ onLoginSuccess }) {
         onLoginSuccess(loggedUser);
       }
 
-      // Redirect immediately to correct role dashboard
-      if (loggedUser.role === 'Dealer') {
+      // Redirect to target or role dashboard
+      if (redirectTarget === 'checkout') {
+        navigate('/customer/checkout');
+      } else if (redirectTarget === 'cart') {
+        navigate('/customer/cart');
+      } else if (loggedUser.role === 'Dealer') {
         navigate('/dealer');
       } else if (loggedUser.role === 'Plumber') {
         navigate('/plumber');

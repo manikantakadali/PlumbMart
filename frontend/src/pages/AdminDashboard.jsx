@@ -1530,13 +1530,24 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
               {/* Plumber Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {plumbers
-                  .filter(p => 
-                    p.name.toLowerCase().includes(plumberSearch.toLowerCase()) ||
-                    p.mobile.includes(plumberSearch) ||
-                    p.license.toLowerCase().includes(plumberSearch.toLowerCase())
-                  )
-                  .map(plumber => (
+                {plumbers.filter(p => 
+                  (p.name || '').toLowerCase().includes(plumberSearch.toLowerCase()) ||
+                  (p.mobile || '').includes(plumberSearch) ||
+                  (p.license && p.license.toLowerCase().includes(plumberSearch.toLowerCase()))
+                ).length === 0 ? (
+                  <div className="col-span-full py-12 text-center text-slate-400 bg-slate-950 rounded-2xl border border-slate-800">
+                    <Wrench className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                    <p className="text-sm font-bold text-slate-300">No registered plumbers found</p>
+                    <p className="text-xs text-slate-500 mt-1">Plumbers will appear here once registered.</p>
+                  </div>
+                ) : (
+                  plumbers
+                    .filter(p => 
+                      (p.name || '').toLowerCase().includes(plumberSearch.toLowerCase()) ||
+                      (p.mobile || '').includes(plumberSearch) ||
+                      (p.license && p.license.toLowerCase().includes(plumberSearch.toLowerCase()))
+                    )
+                    .map(plumber => (
                     <div 
                       key={plumber.id}
                       className="bg-slate-950 rounded-2xl border border-slate-800 p-5 space-y-3.5 hover:border-slate-700 transition flex flex-col justify-between"
@@ -1594,7 +1605,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                         )}
                       </div>
                     </div>
-                  ))}
+                  ))
+                )}
               </div>
 
             </div>
@@ -1700,81 +1712,95 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/80">
-                      {orders
-                        .filter(o => {
-                          const matchClient = orderClientFilter === 'All' || o.clientType === orderClientFilter;
-                          const matchStatus = orderStatusFilter === 'All' || o.status === orderStatusFilter;
-                          const q = orderSearch.toLowerCase();
-                          const matchSearch = o.id.toLowerCase().includes(q) || (o.clientName && o.clientName.toLowerCase().includes(q));
-                          return matchClient && matchStatus && matchSearch;
-                        })
-                        .map(order => (
-                          <tr
-                            key={order.id}
-                            onClick={() => setSelectedOrder(order)}
-                            className="hover:bg-slate-900/80 cursor-pointer transition group"
-                            title="Click to view full order details"
-                          >
-                            <td className="py-3.5 px-4">
-                              <span className="font-mono font-bold text-white group-hover:text-blue-400 transition block">{order.id}</span>
-                              <span className="text-[10px] text-slate-500">{order.date || 'Recent'}</span>
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <span className="font-bold text-slate-200 block">{order.clientName}</span>
-                              <span className={`text-[10px] font-bold ${order.clientType === 'Dealer' ? 'text-indigo-400' : 'text-blue-400'}`}>
-                                {order.clientType} &bull; +91 {order.clientMobile}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-4 font-mono text-slate-300">
-                              {order.paymentMethod}
-                            </td>
-                            <td className="py-3.5 px-4 font-bold text-white">
-                              ₹{(order.total || 0).toLocaleString('en-IN')}
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                                order.status === 'Delivered'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                  : order.status === 'Cancelled'
-                                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                                  : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                              }`}>
-                                {order.status}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-4 text-center">
-                              <select
-                                value={order.status}
-                                onClick={e => e.stopPropagation()}
-                                onChange={e => {
-                                  e.stopPropagation();
-                                  handleUpdateOrderStatus(order.id, e.target.value);
-                                }}
-                                className="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              >
-                                <option value="Pending">Pending</option>
-                                <option value="Confirmed">Confirmed</option>
-                                <option value="Processing">Processing</option>
-                                <option value="Shipped">Shipped</option>
-                                <option value="Out for Delivery">Out for Delivery</option>
-                                <option value="Delivered">Delivered</option>
-                                <option value="Cancelled">Cancelled</option>
-                              </select>
-                            </td>
-                            <td className="py-3.5 px-4 text-right">
-                              <button
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  setSelectedOrder(order);
-                                }}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/15 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 transition text-xs font-semibold shadow-sm"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>View</span>
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                      {orders.filter(o => {
+                        const matchClient = orderClientFilter === 'All' || o.clientType === orderClientFilter;
+                        const matchStatus = orderStatusFilter === 'All' || o.status === orderStatusFilter;
+                        const q = orderSearch.toLowerCase();
+                        const matchSearch = (o.id || '').toLowerCase().includes(q) || (o.clientName && o.clientName.toLowerCase().includes(q));
+                        return matchClient && matchStatus && matchSearch;
+                      }).length === 0 ? (
+                        <tr>
+                          <td colSpan="7" className="py-8 text-center text-slate-400">
+                            No orders found matching the filter criteria.
+                          </td>
+                        </tr>
+                      ) : (
+                        orders
+                          .filter(o => {
+                            const matchClient = orderClientFilter === 'All' || o.clientType === orderClientFilter;
+                            const matchStatus = orderStatusFilter === 'All' || o.status === orderStatusFilter;
+                            const q = orderSearch.toLowerCase();
+                            const matchSearch = (o.id || '').toLowerCase().includes(q) || (o.clientName && o.clientName.toLowerCase().includes(q));
+                            return matchClient && matchStatus && matchSearch;
+                          })
+                          .map(order => (
+                            <tr
+                              key={order.id}
+                              onClick={() => setSelectedOrder(order)}
+                              className="hover:bg-slate-900/80 cursor-pointer transition group"
+                              title="Click to view full order details"
+                            >
+                              <td className="py-3.5 px-4">
+                                <span className="font-mono font-bold text-white group-hover:text-blue-400 transition block">{order.id}</span>
+                                <span className="text-[10px] text-slate-500">{order.date || 'Recent'}</span>
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className="font-bold text-slate-200 block">{order.clientName}</span>
+                                <span className={`text-[10px] font-bold ${order.clientType === 'Dealer' ? 'text-indigo-400' : 'text-blue-400'}`}>
+                                  {order.clientType} &bull; +91 {order.clientMobile}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 font-mono text-slate-300">
+                                {order.paymentMethod}
+                              </td>
+                              <td className="py-3.5 px-4 font-bold text-white">
+                                ₹{(order.total || 0).toLocaleString('en-IN')}
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                  order.status === 'Delivered'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                    : order.status === 'Cancelled'
+                                    ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                    : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                }`}>
+                                  {order.status}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 text-center">
+                                <select
+                                  value={order.status}
+                                  onClick={e => e.stopPropagation()}
+                                  onChange={e => {
+                                    e.stopPropagation();
+                                    handleUpdateOrderStatus(order.id, e.target.value);
+                                  }}
+                                  className="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                >
+                                  <option value="Pending">Pending</option>
+                                  <option value="Confirmed">Confirmed</option>
+                                  <option value="Processing">Processing</option>
+                                  <option value="Shipped">Shipped</option>
+                                  <option value="Out for Delivery">Out for Delivery</option>
+                                  <option value="Delivered">Delivered</option>
+                                  <option value="Cancelled">Cancelled</option>
+                                </select>
+                              </td>
+                              <td className="py-3.5 px-4 text-right">
+                                <button
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    setSelectedOrder(order);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/15 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 transition text-xs font-semibold shadow-sm"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>View</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                      )}
                     </tbody>
                   </table>
                 </div>

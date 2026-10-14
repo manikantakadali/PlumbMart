@@ -343,6 +343,73 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
   // Updates / Announcements State
   const [updates, setUpdates] = useState(INITIAL_UPDATES);
 
+  // Fetch Live Broadcast Announcements targeted to Plumbers & All
+  const fetchPlumberAnnouncements = async () => {
+    try {
+      let res;
+      try {
+        res = await fetch('/api/notifications?role=Plumber');
+      } catch (e1) {
+        res = await fetch('http://localhost:5000/api/notifications?role=Plumber');
+      }
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.data)) {
+        let readIds = [];
+        try {
+          readIds = JSON.parse(localStorage.getItem('plumbmart_plumber_read_announcements') || '[]');
+        } catch {}
+
+        const mappedAnnouncements = data.data.map(notif => ({
+          id: notif.id,
+          type: 'announcement',
+          title: `[${notif.targetGroup} Broadcast] ${notif.title}`,
+          message: notif.message,
+          time: notif.sentAt || 'Today',
+          unread: !readIds.includes(notif.id)
+        }));
+
+        setUpdates(prev => {
+          const jobUpdates = prev.filter(p => p.type !== 'announcement');
+          return [...mappedAnnouncements, ...jobUpdates];
+        });
+      }
+    } catch (err) {}
+  };
+
+  useEffect(() => {
+    fetchPlumberAnnouncements();
+
+    let ch;
+    try {
+      ch = new BroadcastChannel('plumbmart_announcements');
+      ch.onmessage = (event) => {
+        if (event.data && event.data.type === 'NEW_ANNOUNCEMENT') {
+          const target = (event.data.announcement?.targetGroup || 'All').toLowerCase();
+          if (target === 'all' || target.includes('plumber')) {
+            fetchPlumberAnnouncements();
+          }
+        }
+      };
+    } catch {}
+
+    const handleStorage = (e) => {
+      if (e.key === 'plumbmart_announcement_broadcast') {
+        fetchPlumberAnnouncements();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('plumbmart_announcement_created', fetchPlumberAnnouncements);
+
+    const poll = setInterval(fetchPlumberAnnouncements, 3000);
+
+    return () => {
+      if (ch) ch.close();
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('plumbmart_announcement_created', fetchPlumberAnnouncements);
+      clearInterval(poll);
+    };
+  }, []);
+
   // Products & Manuals State
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -398,7 +465,13 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
 
   // Mark all updates as read
   const handleMarkAllUpdatesRead = () => {
-    setUpdates(prev => prev.map(u => ({ ...u, unread: false })));
+    setUpdates(prev => {
+      const readIds = prev.map(u => u.id);
+      try {
+        localStorage.setItem('plumbmart_plumber_read_announcements', JSON.stringify(readIds));
+      } catch {}
+      return prev.map(u => ({ ...u, unread: false }));
+    });
   };
 
   // Filtered Jobs
