@@ -44,7 +44,8 @@ import {
   ChevronDown,
   RotateCcw,
   Truck,
-  Printer
+  Printer,
+  Trash2
 } from 'lucide-react';
 
 export default function AdminDashboard({ currentUser, onLogout }) {
@@ -486,24 +487,75 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     e.preventDefault();
     if (!broadcastForm.title || !broadcastForm.message) return;
 
+    const cleanTarget = broadcastForm.targetGroup || 'All';
+    const now = new Date();
     const newNotif = {
       id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
-      targetGroup: broadcastForm.targetGroup,
-      title: broadcastForm.title,
-      message: broadcastForm.message,
-      sentAt: 'Just now',
-      sender: admin.name
+      targetGroup: cleanTarget,
+      title: broadcastForm.title.trim(),
+      message: broadcastForm.message.trim(),
+      sentAt: 'Today, ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAt: now.toISOString(),
+      sender: admin.name || 'System Admin'
     };
 
+    // 1. Optimistic UI update in Admin
     setNotifications(prev => [newNotif, ...prev]);
     setBroadcastModalOpen(false);
     setBroadcastForm({ targetGroup: 'All', title: '', message: '' });
+    setSyncToast(`Broadcast announcement dispatched to ${cleanTarget}!`);
+    setTimeout(() => setSyncToast(null), 4000);
 
-    fetch('http://localhost:4000/api/admin/notifications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newNotif)
-    }).catch(() => {});
+    // 2. Real-time Cross-tab BroadcastChannel & LocalStorage
+    try {
+      const ch = new BroadcastChannel('plumbmart_announcements');
+      ch.postMessage({ type: 'NEW_ANNOUNCEMENT', announcement: newNotif });
+      ch.close();
+    } catch (err) {}
+
+    try {
+      localStorage.setItem('plumbmart_announcement_broadcast', JSON.stringify({ announcement: newNotif, time: Date.now() }));
+    } catch (err) {}
+
+    window.dispatchEvent(new CustomEvent('plumbmart_announcement_created', { detail: newNotif }));
+
+    // 3. Persist to Backend API with resilient fallbacks
+    try {
+      await fetch('/api/admin/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newNotif)
+      });
+    } catch (err1) {
+      try {
+        await fetch('http://localhost:5000/api/admin/notifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newNotif)
+        });
+      } catch (err2) {
+        try {
+          await fetch('http://localhost:4000/api/admin/notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newNotif)
+          });
+        } catch (err3) {}
+      }
+    }
+  };
+
+  // Delete Broadcast Notification
+  const handleDeleteNotification = async (id) => {
+    if (!window.confirm('Delete this broadcast announcement?')) return;
+    setNotifications(prev => prev.filter(n => n.id !== id));
+    try {
+      await fetch(`/api/admin/notifications/${id}`, { method: 'DELETE' });
+    } catch (e1) {
+      try {
+        await fetch(`http://localhost:5000/api/admin/notifications/${id}`, { method: 'DELETE' });
+      } catch (e2) {}
+    }
   };
 
   // Process Payment Refund
@@ -1195,63 +1247,74 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/80">
-                      {customers
-                        .filter(c => 
-                          c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-                          c.mobile.includes(customerSearch)
-                        )
-                        .map(cust => (
-                          <tr key={cust.id} className="hover:bg-slate-900/50 transition">
-                            <td className="py-3.5 px-4">
-                              <div className="font-bold text-white text-xs">{cust.name}</div>
-                              <span className="text-[10px] text-slate-500 font-mono">ID: {cust.id} &bull; Reg: {cust.registeredDate}</span>
-                            </td>
-                            <td className="py-3.5 px-4 font-mono">
-                              <div className="text-slate-300">+91 {cust.mobile}</div>
-                              <div className="text-slate-500 text-[10px]">{cust.email}</div>
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <div className="font-bold text-white">{cust.totalOrders} Orders</div>
-                              <div className="text-slate-400 text-[10px]">₹{cust.totalSpent.toLocaleString('en-IN')} total spent</div>
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                                cust.status === 'Active'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                  : cust.status === 'Suspended'
-                                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                              }`}>
-                                {cust.status}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  onClick={() => setSelectedCustomer(cust)}
-                                  className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-blue-400 text-xs font-semibold border border-slate-800"
-                                >
-                                  Profile
-                                </button>
-                                {cust.status !== 'Active' ? (
+                      {customers.filter(c => 
+                        (c.name || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
+                        (c.mobile || '').includes(customerSearch)
+                      ).length === 0 ? (
+                        <tr>
+                          <td colSpan="5" className="py-8 text-center text-slate-400">
+                            No registered customer accounts found.
+                          </td>
+                        </tr>
+                      ) : (
+                        customers
+                          .filter(c => 
+                            (c.name || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
+                            (c.mobile || '').includes(customerSearch)
+                          )
+                          .map(cust => (
+                            <tr key={cust.id} className="hover:bg-slate-900/50 transition">
+                              <td className="py-3.5 px-4">
+                                <div className="font-bold text-white text-xs">{cust.name}</div>
+                                <span className="text-[10px] text-slate-500 font-mono">ID: {cust.id} &bull; Reg: {cust.registeredDate}</span>
+                              </td>
+                              <td className="py-3.5 px-4 font-mono">
+                                <div className="text-slate-300">+91 {cust.mobile}</div>
+                                <div className="text-slate-500 text-[10px]">{cust.email}</div>
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <div className="font-bold text-white">{cust.totalOrders} Orders</div>
+                                <div className="text-slate-400 text-[10px]">₹{(cust.totalSpent || 0).toLocaleString('en-IN')} total spent</div>
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                  cust.status === 'Active'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                    : cust.status === 'Suspended'
+                                    ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                    : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                }`}>
+                                  {cust.status}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
                                   <button
-                                    onClick={() => handleUpdateCustomerStatus(cust.id, 'Active')}
-                                    className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[11px] font-bold border border-emerald-500/20"
+                                    onClick={() => setSelectedCustomer(cust)}
+                                    className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-blue-400 text-xs font-semibold border border-slate-800"
                                   >
-                                    Activate
+                                    Profile
                                   </button>
-                                ) : (
-                                  <button
-                                    onClick={() => handleUpdateCustomerStatus(cust.id, 'Suspended')}
-                                    className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[11px] font-bold border border-rose-500/20"
-                                  >
-                                    Suspend
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                                  {cust.status !== 'Active' ? (
+                                    <button
+                                      onClick={() => handleUpdateCustomerStatus(cust.id, 'Active')}
+                                      className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[11px] font-bold border border-emerald-500/20"
+                                    >
+                                      Activate
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleUpdateCustomerStatus(cust.id, 'Suspended')}
+                                      className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[11px] font-bold border border-rose-500/20"
+                                    >
+                                      Suspend
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                      )}
                     </tbody>
                   </table>
                 </div>
