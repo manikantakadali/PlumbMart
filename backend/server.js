@@ -1693,30 +1693,123 @@ app.post('/api/admin/zoho-sync', (req, res) => {
   res.json(syncResult);
 });
 
-// 5. Admin Notifications & Announcements
-let adminNotificationsStore = [];
+// 5. Admin Notifications & Role-based Announcements (Persistent in DB)
+function getNotificationsFromDb() {
+  const db = getDb();
+  if (!Array.isArray(db.notifications)) {
+    db.notifications = [
+      {
+        id: 'NOTIF-01',
+        targetGroup: 'All', // 'All' | 'Customers' | 'Dealers' | 'Plumbers'
+        title: 'Monsoon Operations & Express Delivery Guidelines',
+        message: 'All regional distribution hubs are operating normally. Plumbers and dealers please verify sealed moisture packaging.',
+        sentAt: 'Today, 10:30 AM',
+        sender: 'System Admin',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'NOTIF-02',
+        targetGroup: 'Dealers',
+        title: 'Reminder: 30-Day Credit Reconciliation Cycle',
+        message: 'Monthly sales order invoices due on 15th Oct. Please check your credit limit in Zoho Ledger.',
+        sentAt: 'Yesterday, 04:15 PM',
+        sender: 'Credit Governance Desk',
+        createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+      },
+      {
+        id: 'NOTIF-03',
+        targetGroup: 'Plumbers',
+        title: 'New CPVC IS:15778 Installation Protocols',
+        message: 'Please refer to the technical manuals section for high pressure pipe deburring guidelines.',
+        sentAt: '09 Oct 2026',
+        sender: 'Technical Desk',
+        createdAt: new Date(Date.now() - 48 * 3600 * 1000).toISOString()
+      }
+    ];
+    saveDb(db);
+  }
+  return db.notifications;
+}
 
-app.get('/api/admin/notifications', (req, res) => {
-  res.json({ success: true, data: adminNotificationsStore });
+// Role-based Notifications API: GET /api/notifications?role=Customer
+app.get(['/api/notifications', '/api/admin/notifications'], (req, res) => {
+  const notifications = getNotificationsFromDb();
+  const { role } = req.query;
+
+  if (!role || role.toLowerCase() === 'all' || role.toLowerCase() === 'admin') {
+    return res.json({ success: true, count: notifications.length, data: notifications });
+  }
+
+  const cleanRole = role.toLowerCase().trim();
+  const filtered = notifications.filter(n => {
+    const target = (n.targetGroup || 'All').toLowerCase();
+    if (target === 'all') return true;
+    if (cleanRole === 'customer' || cleanRole === 'customers') {
+      return target === 'customers' || target === 'customer';
+    }
+    if (cleanRole === 'dealer' || cleanRole === 'dealers') {
+      return target === 'dealers' || target === 'dealer';
+    }
+    if (cleanRole === 'plumber' || cleanRole === 'plumbers') {
+      return target === 'plumbers' || target === 'plumber';
+    }
+    return false;
+  });
+
+  res.json({ success: true, count: filtered.length, data: filtered });
 });
 
-app.post('/api/admin/notifications', (req, res) => {
-  const { targetGroup, title, message } = req.body;
+// Admin Broadcast New Notification: POST /api/admin/notifications & /api/notifications
+app.post(['/api/admin/notifications', '/api/notifications'], (req, res) => {
+  const { targetGroup, title, message, sender } = req.body;
   if (!title || !message) {
     return res.status(400).json({ success: false, message: 'Title and message are required' });
   }
 
+  // Standardize targetGroup
+  let cleanTarget = 'All';
+  const rawTarget = (targetGroup || '').trim();
+  if (rawTarget.toLowerCase().includes('customer')) cleanTarget = 'Customers';
+  else if (rawTarget.toLowerCase().includes('dealer')) cleanTarget = 'Dealers';
+  else if (rawTarget.toLowerCase().includes('plumber')) cleanTarget = 'Plumbers';
+  else cleanTarget = 'All';
+
+  const now = new Date();
   const newNotif = {
     id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
-    targetGroup: targetGroup || 'All',
-    title,
-    message,
-    sentAt: 'Just now',
-    sender: 'Administrator'
+    targetGroup: cleanTarget,
+    title: title.trim(),
+    message: message.trim(),
+    sentAt: 'Today, ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    createdAt: now.toISOString(),
+    sender: sender || 'Administrator'
   };
 
-  adminNotificationsStore.unshift(newNotif);
-  res.status(201).json({ success: true, message: 'Notification broadcasted successfully', notification: newNotif });
+  const db = getDb();
+  if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
+  db.notifications.unshift(newNotif);
+  saveDb(db);
+
+  res.status(201).json({
+    success: true,
+    message: `Broadcast announcement successfully sent to ${cleanTarget}!`,
+    notification: newNotif
+  });
+});
+
+// Admin Delete Notification: DELETE /api/admin/notifications/:id
+app.delete(['/api/admin/notifications/:id', '/api/notifications/:id'], (req, res) => {
+  const db = getDb();
+  if (!Array.isArray(db.notifications)) db.notifications = [];
+  const initialLength = db.notifications.length;
+  db.notifications = db.notifications.filter(n => n.id !== req.params.id);
+  
+  if (db.notifications.length === initialLength) {
+    return res.status(404).json({ success: false, message: 'Notification not found' });
+  }
+
+  saveDb(db);
+  res.json({ success: true, message: 'Notification deleted successfully' });
 });
 
 // 6. Admin Payments Reconciliation API

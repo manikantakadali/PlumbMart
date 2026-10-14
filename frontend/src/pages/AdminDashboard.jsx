@@ -69,149 +69,17 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   // ==========================================
 
   // 1. Customers
-  const [customers, setCustomers] = useState([
-    {
-      id: 'CUST-01',
-      name: 'Rahul Sharma',
-      mobile: '9876543210',
-      email: 'rahul.sharma@example.com',
-      status: 'Active', // 'Active' | 'Suspended' | 'Restricted'
-      totalOrders: 4,
-      totalSpent: 14780,
-      rewardPoints: 240,
-      registeredDate: '12 Sep 2026',
-      address: 'Flat 402, Green Glen Heights, Outer Ring Road, Bellandur, Bengaluru - 560103'
-    },
-    {
-      id: 'CUST-02',
-      name: 'Anil Desai',
-      mobile: '9900112233',
-      email: 'anil.desai@example.com',
-      status: 'Active',
-      totalOrders: 2,
-      totalSpent: 7260,
-      rewardPoints: 110,
-      registeredDate: '28 Sep 2026',
-      address: '14th Cross, 2nd Stage, Indiranagar, Bengaluru - 560038'
-    },
-    {
-      id: 'CUST-03',
-      name: 'Pooja Verma',
-      mobile: '9845012345',
-      email: 'pooja.verma@example.com',
-      status: 'Restricted',
-      totalOrders: 1,
-      totalSpent: 1850,
-      rewardPoints: 20,
-      registeredDate: '05 Oct 2026',
-      address: 'Villa 18, Palm Meadows, ECC Road, Whitefield, Bengaluru - 560066'
-    }
-  ]);
+  const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState('');
 
   // 2. Dealers
-  const [dealers, setDealers] = useState([
-    {
-      id: 'DLR-01',
-      name: 'Sri Venkateswara Distributors',
-      contactPerson: 'Srinivas Rao',
-      mobile: '9000011111',
-      email: 'dealer@plumbmart-demo.com',
-      gstin: '29ABCDE1234F1Z5',
-      zohoVerified: true,
-      status: 'Approved', // 'Approved' | 'Pending' | 'Suspended' | 'Rejected'
-      credit30Days: true,
-      credit90Days: true,
-      creditLimit: 500000,
-      availableCredit: 340000,
-      outstandingDue: 160000,
-      nextDueDate: '02 Nov 2026',
-      totalOrders: 18,
-      totalVolume: 485000
-    },
-    {
-      id: 'DLR-02',
-      name: 'Metro Pipe Syndicate',
-      contactPerson: 'Mahesh Patil',
-      mobile: '9000022222',
-      email: 'metro@plumbmart-demo.com',
-      gstin: '29BCDEF2345G2Z6',
-      zohoVerified: true,
-      status: 'Approved',
-      credit30Days: true,
-      credit90Days: false,
-      creditLimit: 250000,
-      availableCredit: 250000,
-      outstandingDue: 0,
-      nextDueDate: 'None',
-      totalOrders: 7,
-      totalVolume: 184000
-    },
-    {
-      id: 'DLR-03',
-      name: 'Coastal Builders Mart',
-      contactPerson: 'Karthik Shenoy',
-      mobile: '9000033333',
-      email: 'coastal@plumbmart-demo.com',
-      gstin: '29CDEFG3456H3Z7',
-      zohoVerified: false,
-      status: 'Pending',
-      credit30Days: false,
-      credit90Days: false,
-      creditLimit: 0,
-      availableCredit: 0,
-      outstandingDue: 0,
-      nextDueDate: 'N/A',
-      totalOrders: 0,
-      totalVolume: 0
-    }
-  ]);
+  const [dealers, setDealers] = useState([]);
   const [selectedDealer, setSelectedDealer] = useState(null);
   const [dealerSearch, setDealerSearch] = useState('');
 
   // 3. Plumbers
-  const [plumbers, setPlumbers] = useState([
-    {
-      id: 'PLM-01',
-      name: 'Ramesh Kumar',
-      mobile: '9111122222',
-      email: 'plumber@plumbmart-demo.com',
-      license: 'PLUMB-KA-2024-884',
-      status: 'VERIFIED', // 'VERIFIED' | 'PENDING_VERIFICATION' | 'SUSPENDED'
-      rating: 4.9,
-      completedJobs: 48,
-      activeJobs: 2,
-      serviceZone: 'Bengaluru East & South',
-      registeredDate: 'March 2024'
-    },
-    {
-      id: 'PLM-02',
-      name: 'Suresh Kumar',
-      mobile: '9111133333',
-      email: 'suresh.plumb@example.com',
-      license: 'PLUMB-KA-2024-912',
-      status: 'PENDING_VERIFICATION',
-      rating: 4.7,
-      completedJobs: 14,
-      activeJobs: 1,
-      serviceZone: 'Bengaluru North',
-      registeredDate: 'August 2026'
-    },
-    {
-      id: 'PLM-03',
-      name: 'Manjunath Gowda',
-      mobile: '9111144444',
-      email: 'manju.g@example.com',
-      license: 'PLUMB-KA-2025-108',
-      status: 'VERIFIED',
-      rating: 4.8,
-      completedJobs: 32,
-      activeJobs: 0,
-      serviceZone: 'Bengaluru Central',
-      registeredDate: 'January 2025'
-    }
-  ]);
+  const [plumbers, setPlumbers] = useState([]);
   const [selectedPlumber, setSelectedPlumber] = useState(null);
   const [plumberSearch, setPlumberSearch] = useState('');
 
@@ -232,76 +100,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   const [syncToast, setSyncToast] = useState(null);
 
   // 5. Orders
-  const [orders, setOrders] = useState([
-    {
-      id: 'PM-928410',
-      clientName: 'Rahul Sharma',
-      clientMobile: '9876543210',
-      clientType: 'Customer',
-      date: 'Today, 07:15 AM',
-      itemsCount: 6,
-      items: [
-        { name: 'Astral CPVC Pro High Pressure Pipe (1 Inch, 3m)', qty: 4, price: 480 },
-        { name: 'Ashirvad Brass Concealed Stop Cock (15mm Heavy)', qty: 2, price: 720 }
-      ],
-      total: 3360,
-      paymentMethod: 'Online Payment (UPI)',
-      paymentStatus: 'Paid',
-      status: 'Out for Delivery', // 'Pending' | 'Confirmed' | 'Processing' | 'Shipped' | 'Out for Delivery' | 'Delivered' | 'Cancelled'
-      deliveryAddress: 'Flat 402, Green Glen Heights, Bellandur, Bengaluru - 560103'
-    },
-    {
-      id: 'PM-881902',
-      clientName: 'Sri Venkateswara Distributors',
-      clientMobile: '9000011111',
-      clientType: 'Dealer',
-      date: 'Yesterday, 02:40 PM',
-      itemsCount: 150,
-      items: [
-        { name: 'Astral CPVC Pro High Pressure Pipe (1 Inch, 3m)', qty: 100, price: 375 },
-        { name: 'Supreme UPVC Ball Valve Heavy Body (25mm)', qty: 50, price: 155 }
-      ],
-      total: 68400,
-      paymentMethod: '30-Day Credit',
-      paymentStatus: 'Pending Settlement',
-      status: 'Shipped',
-      deliveryAddress: 'Industrial Warehouse Depot 02, Peenya, Bengaluru - 560058'
-    },
-    {
-      id: 'PM-817294',
-      clientName: 'Anil Desai',
-      clientMobile: '9900112233',
-      clientType: 'Customer',
-      date: '10 Oct 2026',
-      itemsCount: 3,
-      items: [
-        { name: 'Jaquar Alive Single Lever Basin Mixer Tap', qty: 1, price: 3450 },
-        { name: 'Pidilite M-Seal Sanitary & Plumbing Epoxy Putty', qty: 2, price: 180 }
-      ],
-      total: 3810,
-      paymentMethod: 'Online Payment (Card)',
-      paymentStatus: 'Paid',
-      status: 'Delivered',
-      deliveryAddress: '14th Cross, 2nd Stage, Indiranagar, Bengaluru - 560038'
-    },
-    {
-      id: 'PM-742109',
-      clientName: 'Sri Venkateswara Distributors',
-      clientMobile: '9000011111',
-      clientType: 'Dealer',
-      date: '15 Sep 2026',
-      itemsCount: 40,
-      items: [
-        { name: 'Jaquar Alive Basin Mixer Tap', qty: 25, price: 2750 },
-        { name: 'Cera SS Rain Shower 8 Inch', qty: 15, price: 1420 }
-      ],
-      total: 91600,
-      paymentMethod: '90-Day Credit',
-      paymentStatus: 'Settled',
-      status: 'Delivered',
-      deliveryAddress: 'Industrial Warehouse Depot 02, Peenya, Bengaluru - 560058'
-    }
-  ]);
+  const [orders, setOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('All');
