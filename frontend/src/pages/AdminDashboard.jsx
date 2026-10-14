@@ -107,81 +107,11 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   const [orderClientFilter, setOrderClientFilter] = useState('All');
 
   // 6. Payments
-  const [payments, setPayments] = useState([
-    {
-      id: 'PAY-901',
-      orderId: 'PM-928410',
-      clientName: 'Rahul Sharma (Customer)',
-      amount: 3360,
-      method: 'UPI / QR (PhonePe)',
-      gatewayRef: 'TXN-RZP-92840192',
-      date: 'Today, 07:15 AM',
-      status: 'Successful', // 'Successful' | 'Pending' | 'Failed' | 'Refunded'
-      reconciled: true
-    },
-    {
-      id: 'PAY-892',
-      orderId: 'PM-881902',
-      clientName: 'Sri Venkateswara Distributors (Dealer)',
-      amount: 68400,
-      method: '30-Day Approved Credit',
-      gatewayRef: 'ZOHO-INVOICE-881902',
-      date: 'Yesterday, 02:40 PM',
-      status: 'Pending',
-      reconciled: true
-    },
-    {
-      id: 'PAY-810',
-      orderId: 'PM-817294',
-      clientName: 'Anil Desai (Customer)',
-      amount: 3810,
-      method: 'Credit Card (HDFC Visa)',
-      gatewayRef: 'TXN-RZP-81729400',
-      date: '10 Oct 2026',
-      status: 'Successful',
-      reconciled: true
-    },
-    {
-      id: 'PAY-740',
-      orderId: 'PM-742109',
-      clientName: 'Sri Venkateswara Distributors (Dealer)',
-      amount: 91600,
-      method: '90-Day Credit (Settled via NEFT)',
-      gatewayRef: 'UTR-HDFC-99120482',
-      date: '15 Sep 2026',
-      status: 'Successful',
-      reconciled: true
-    }
-  ]);
+  const [payments, setPayments] = useState([]);
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
 
   // 7. Notifications
-  const [notifications, setNotifications] = useState([
-    {
-      id: 'NOTIF-01',
-      targetGroup: 'All',
-      title: 'Monsoon Operations & Express Delivery Guidelines',
-      message: 'All regional distribution hubs are operating normally. Plumbers and dealers please verify sealed moisture packaging.',
-      sentAt: 'Today, 10:30 AM',
-      sender: 'System Admin'
-    },
-    {
-      id: 'NOTIF-02',
-      targetGroup: 'Dealers',
-      title: 'Reminder: 30-Day Credit Reconciliation Cycle',
-      message: 'Monthly sales order invoices due on 15th Oct. Please check your credit limit in Zoho Ledger.',
-      sentAt: 'Yesterday, 04:15 PM',
-      sender: 'Credit Governance Desk'
-    },
-    {
-      id: 'NOTIF-03',
-      targetGroup: 'Plumbers',
-      title: 'New CPVC IS:15778 Installation Protocols',
-      message: 'Please refer to the technical manuals section for high pressure pipe deburring guidelines.',
-      sentAt: '09 Oct 2026',
-      sender: 'Technical Desk'
-    }
-  ]);
+  const [notifications, setNotifications] = useState([]);
   const [broadcastModalOpen, setBroadcastModalOpen] = useState(false);
   const [broadcastForm, setBroadcastForm] = useState({
     targetGroup: 'All',
@@ -264,15 +194,22 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
   // Fetch initial data from backend & setup real-time listeners
   useEffect(() => {
+    // 0. Fetch Customers
+    resilientFetch('/api/customers').then(data => {
+      if (data && data.success && Array.isArray(data.data)) {
+        setCustomers(data.data);
+      }
+    });
+
     // 1. Fetch Dealers
     resilientFetch('/api/dealers').then(data => {
-      if (data && data.success && data.data?.length > 0) {
+      if (data && data.success && Array.isArray(data.data)) {
         setDealers(data.data.map(d => ({
           ...d,
-          contactPerson: d.contactPerson || d.name.split(' ')[0],
-          creditLimit: parseInt((d.creditLimit || '500000').toString().replace(/[^0-9]/g, ''), 10) || 500000,
-          availableCredit: parseInt((d.availableCredit || '340000').toString().replace(/[^0-9]/g, ''), 10) || 340000,
-          outstandingDue: d.outstandingDue || 160000,
+          contactPerson: d.contactPerson || (d.name ? d.name.split(' ')[0] : 'Dealer'),
+          creditLimit: typeof d.creditLimit === 'number' ? d.creditLimit : (parseInt((d.creditLimit || '500000').toString().replace(/[^0-9]/g, ''), 10) || 500000),
+          availableCredit: typeof d.availableCredit === 'number' ? d.availableCredit : (parseInt((d.availableCredit !== undefined ? d.availableCredit : '500000').toString().replace(/[^0-9]/g, ''), 10) || 500000),
+          outstandingDue: typeof d.outstandingDue === 'number' ? d.outstandingDue : 0,
           status: d.status || (d.zohoVerified ? 'Approved' : 'Pending')
         })));
       }
@@ -280,17 +217,17 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
     // 2. Fetch Plumbers
     resilientFetch('/api/plumbers').then(data => {
-      if (data && data.success && data.data?.length > 0) {
+      if (data && data.success && Array.isArray(data.data)) {
         setPlumbers(data.data.map(p => ({
           ...p,
-          activeJobs: p.activeJobs || 1
+          activeJobs: p.activeJobs || 0
         })));
       }
     });
 
     // 3. Fetch Products
     resilientFetch('/api/products').then(data => {
-      if (data && data.success && data.data?.length > 0) {
+      if (data && data.success && Array.isArray(data.data)) {
         setProducts(data.data);
         setZohoSyncMeta(prev => ({
           ...prev,
@@ -304,14 +241,14 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
     // 5. Fetch Notifications
     resilientFetch('/api/admin/notifications').then(data => {
-      if (data && data.success && data.data?.length > 0) {
+      if (data && data.success && Array.isArray(data.data)) {
         setNotifications(data.data);
       }
     });
 
     // 6. Fetch Payments
     resilientFetch('/api/admin/payments').then(data => {
-      if (data && data.success && data.data?.length > 0) {
+      if (data && data.success && Array.isArray(data.data)) {
         setPayments(data.data);
       }
     });
