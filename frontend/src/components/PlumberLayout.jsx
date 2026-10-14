@@ -16,7 +16,8 @@ import {
   CheckCircle2, 
   X,
   CalendarCheck,
-  AlertCircle
+  AlertCircle,
+  Package
 } from 'lucide-react';
 import InAppNotificationToast from './InAppNotificationToast';
 
@@ -27,7 +28,8 @@ export default function PlumberLayout({
   activeTab = 'activities',
   onSelectTab,
   unreadCount = 2,
-  activeJobsCount = 2
+  activeJobsCount = 2,
+  dealerOrdersCount = 0
 }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -122,6 +124,14 @@ export default function PlumberLayout({
       description: 'Check & Perform Assigned Work',
       badge: activeJobsCount > 0 ? `${activeJobsCount} Active` : null,
       badgeColor: 'bg-amber-100 text-amber-800'
+    },
+    {
+      id: 'dealer-orders',
+      name: 'Distributor Orders',
+      icon: Package,
+      description: 'Sri Venkateswara Orders',
+      badge: dealerOrdersCount > 0 ? `${dealerOrdersCount} Orders` : null,
+      badgeColor: 'bg-blue-100 text-blue-800'
     },
     {
       id: 'products',
