@@ -119,6 +119,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     title: '',
     message: ''
   });
+  const [notifFilter, setNotifFilter] = useState('All'); // 'All' | 'Customers' | 'Dealers' | 'Plumbers'
 
   const [isRefreshingOrders, setIsRefreshingOrders] = useState(false);
   const [newOrderAlert, setNewOrderAlert] = useState(null);
@@ -1354,13 +1355,24 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
               {/* Dealers Cards & Table */}
               <div className="space-y-3">
-                {dealers
-                  .filter(d => 
-                    d.name.toLowerCase().includes(dealerSearch.toLowerCase()) ||
-                    d.mobile.includes(dealerSearch) ||
-                    (d.gstin && d.gstin.toLowerCase().includes(dealerSearch.toLowerCase()))
-                  )
-                  .map(dealer => (
+                {dealers.filter(d => 
+                  (d.name || '').toLowerCase().includes(dealerSearch.toLowerCase()) ||
+                  (d.mobile || '').includes(dealerSearch) ||
+                  (d.gstin && d.gstin.toLowerCase().includes(dealerSearch.toLowerCase()))
+                ).length === 0 ? (
+                  <div className="p-12 text-center text-slate-400 bg-slate-950 rounded-2xl border border-slate-800">
+                    <Building2 className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                    <p className="text-sm font-bold text-slate-300">No registered dealers found</p>
+                    <p className="text-xs text-slate-500 mt-1">Dealers will appear here once registered.</p>
+                  </div>
+                ) : (
+                  dealers
+                    .filter(d => 
+                      (d.name || '').toLowerCase().includes(dealerSearch.toLowerCase()) ||
+                      (d.mobile || '').includes(dealerSearch) ||
+                      (d.gstin && d.gstin.toLowerCase().includes(dealerSearch.toLowerCase()))
+                    )
+                    .map(dealer => (
                     <div 
                       key={dealer.id}
                       className="bg-slate-950 rounded-2xl border border-slate-800 p-5 space-y-4 hover:border-slate-700 transition"
@@ -1480,7 +1492,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                       </div>
 
                     </div>
-                  ))}
+                  ))
+                )}
               </div>
 
             </div>
@@ -2471,37 +2484,83 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
                 <button
                   onClick={() => setBroadcastModalOpen(true)}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-blue-600/20 self-start sm:self-auto transition"
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-blue-600/20 self-start sm:self-auto transition cursor-pointer"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Send Broadcast Announcement</span>
                 </button>
               </div>
 
+              {/* Target Audience Filter Pills */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {[
+                  { id: 'All', label: `All Audiences (${notifications.length})` },
+                  { id: 'Customers', label: `Customers (${notifications.filter(n => n.targetGroup === 'Customers').length})` },
+                  { id: 'Dealers', label: `Dealers (${notifications.filter(n => n.targetGroup === 'Dealers').length})` },
+                  { id: 'Plumbers', label: `Plumbers (${notifications.filter(n => n.targetGroup === 'Plumbers').length})` }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setNotifFilter(tab.id)}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                      notifFilter === tab.id
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-slate-950 text-slate-400 hover:text-white hover:bg-slate-900 border border-slate-800'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
               {/* Notification History Feed */}
               <div className="space-y-3">
-                {notifications.map(notif => (
-                  <div 
-                    key={notif.id}
-                    className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-start justify-between gap-4"
-                  >
-                    <div className="flex items-start gap-3.5">
-                      <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-blue-400 shrink-0 mt-0.5">
-                        <Bell className="w-4 h-4" />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="font-bold text-xs text-white">{notif.title}</h4>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                            Target: {notif.targetGroup}
-                          </span>
+                {notifications
+                  .filter(n => notifFilter === 'All' || n.targetGroup === notifFilter)
+                  .map(notif => {
+                    let badgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+                    if (notif.targetGroup === 'Dealers') badgeClass = 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
+                    else if (notif.targetGroup === 'Plumbers') badgeClass = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+                    else if (notif.targetGroup === 'All') badgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+
+                    return (
+                      <div 
+                        key={notif.id}
+                        className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 flex items-start justify-between gap-4 group hover:border-slate-700 transition"
+                      >
+                        <div className="flex items-start gap-3.5">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0 mt-0.5 border ${
+                            notif.targetGroup === 'Dealers' ? 'bg-indigo-950/40 border-indigo-800 text-indigo-400' :
+                            notif.targetGroup === 'Plumbers' ? 'bg-amber-950/40 border-amber-800 text-amber-400' :
+                            notif.targetGroup === 'Customers' ? 'bg-blue-950/40 border-blue-800 text-blue-400' :
+                            'bg-emerald-950/40 border-emerald-800 text-emerald-400'
+                          }`}>
+                            <Bell className="w-4 h-4" />
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-bold text-xs text-white">{notif.title}</h4>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badgeClass}`}>
+                                Target: {notif.targetGroup} Only
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-relaxed">{notif.message}</p>
+                            <span className="text-[10px] text-slate-500 block font-mono">
+                              Sent {notif.sentAt} by {notif.sender || 'Administrator'}
+                            </span>
+                          </div>
                         </div>
-                        <p className="text-xs text-slate-400 leading-relaxed">{notif.message}</p>
-                        <span className="text-[10px] text-slate-500 block font-mono">Sent {notif.sentAt} by {notif.sender}</span>
+
+                        <button
+                          onClick={() => handleDeleteNotification(notif.id)}
+                          className="p-2 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition shrink-0 opacity-70 group-hover:opacity-100 cursor-pointer"
+                          title="Delete broadcast announcement"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })}
               </div>
 
             </div>

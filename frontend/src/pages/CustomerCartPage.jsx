@@ -11,7 +11,8 @@ import {
   ShieldCheck, 
   CheckCircle2, 
   Box,
-  Truck
+  Truck,
+  Lock
 } from 'lucide-react';
 import { 
   getCustomerCart, 
@@ -243,14 +244,47 @@ export default function CustomerCartPage({ currentUser, onLogout }) {
                   <span>Dispatched directly from regional warehouse hub</span>
                 </div>
 
-                {/* Proceed to Checkout Button */}
-                <button
-                  onClick={() => navigate('/customer/checkout')}
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/25 transition active:scale-98"
-                >
-                  <span>Proceed to Online Checkout</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                {/* Proceed to Checkout Button or Login to Buy */}
+                {!currentUser ? (
+                  <div className="space-y-3 pt-1">
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start gap-2.5">
+                      <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold text-amber-900 text-xs">Login Required to Buy</p>
+                        <p className="text-[11px] text-amber-700 mt-0.5 leading-snug">
+                          Please log in or register to set delivery address and complete your online order.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => navigate('/login?redirect=checkout')}
+                      className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/25 transition active:scale-98"
+                    >
+                      <Lock className="w-4 h-4" />
+                      <span>Login to Buy</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+
+                    <div className="text-center text-xs text-slate-500 pt-0.5">
+                      <span>New to PlumbMart? </span>
+                      <Link
+                        to="/register?redirect=checkout"
+                        className="font-bold text-blue-600 hover:underline hover:text-blue-700"
+                      >
+                        Register here
+                      </Link>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => navigate('/customer/checkout')}
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/25 transition active:scale-98"
+                  >
+                    <span>Proceed to Online Checkout</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                )}
 
                 <p className="text-[10px] text-slate-400 text-center leading-tight">
                   Instant secure online payment via UPI, Credit/Debit Card &amp; Net Banking.

@@ -26,7 +26,7 @@ export default function CustomerCheckoutPage({ currentUser, onLogout }) {
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const customer = currentUser && currentUser.role === 'Customer' ? currentUser : {
+  const customer = currentUser || {
     id: 'CUST-01',
     name: 'Rahul Sharma',
     mobile: '9876543210',
@@ -34,24 +34,26 @@ export default function CustomerCheckoutPage({ currentUser, onLogout }) {
     role: 'Customer'
   };
 
-  const [deliveryAddress, setDeliveryAddress] = useState({
-    recipientName: customer.name || 'Rahul Sharma',
-    phone: customer.mobile || '9876543210',
+  const [deliveryAddress, setDeliveryAddress] = useState(() => ({
+    recipientName: currentUser?.name || 'Rahul Sharma',
+    phone: currentUser?.mobile || '9876543210',
     addressType: 'Home / Flat',
-    streetAddress: 'Flat 402, Green Glen Heights, Outer Ring Road, Bellandur',
+    streetAddress: currentUser?.deliveryAddress || currentUser?.address || 'Flat 402, Green Glen Heights, Outer Ring Road, Bellandur',
     landmark: 'Near EcoSpace Tech Park',
-    city: 'Bengaluru',
-    state: 'Karnataka',
-    pincode: '560103'
-  });
+    city: currentUser?.city || 'Bengaluru',
+    state: currentUser?.state || 'Karnataka',
+    pincode: currentUser?.pincode || '560103'
+  }));
 
+  // Auth guard: If user is not logged in, redirect to login with redirect=checkout
   useEffect(() => {
+    if (!currentUser) {
+      navigate('/login?redirect=checkout', { replace: true });
+      return;
+    }
     const items = getCustomerCart();
     setCartItems(items);
-    if (items.length === 0) {
-      // Empty cart redirect
-    }
-  }, [navigate]);
+  }, [currentUser, navigate]);
 
   const totals = getCustomerCartTotals(cartItems);
 

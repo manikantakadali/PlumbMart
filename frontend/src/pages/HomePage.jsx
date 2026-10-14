@@ -231,6 +231,7 @@ export default function HomePage({
         onRemoveItem={onRemoveItem}
         onClearCart={onClearCart}
         onCheckoutSuccess={onCheckoutSuccess}
+        currentUser={currentUser}
       />
 
       {/* Profile Modal */}

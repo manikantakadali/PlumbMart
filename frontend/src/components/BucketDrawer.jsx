@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, Plus, Minus, Trash2, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, Plus, Minus, Trash2, ArrowRight, ShieldCheck, CheckCircle2, Lock } from 'lucide-react';
 import { BucketIcon } from './Header';
 
 export default function BucketDrawer({
@@ -9,8 +10,10 @@ export default function BucketDrawer({
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
-  onCheckoutSuccess
+  onCheckoutSuccess,
+  currentUser
 }) {
+  const navigate = useNavigate();
   const [checkoutStep, setCheckoutStep] = React.useState('cart'); // 'cart' | 'placed'
   const [placedOrderId, setPlacedOrderId] = React.useState(null);
 
@@ -209,17 +212,72 @@ export default function BucketDrawer({
                 </div>
               </div>
 
-              <button
-                onClick={handleCheckout}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs tracking-wide shadow-lg shadow-blue-600/20 transition active:scale-[0.98]"
-              >
-                <span>Proceed to Demo Checkout</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+              {!currentUser ? (
+                <div className="space-y-2.5 pt-1">
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start gap-2.5">
+                    <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-amber-900 text-xs">Login Required to Buy</p>
+                      <p className="text-[11px] text-amber-700 mt-0.5 leading-snug">
+                        Please sign in with your mobile number to confirm delivery address and place your order.
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-500">
+                  <button
+                    onClick={() => {
+                      onClose();
+                      navigate('/login?redirect=checkout');
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs tracking-wide shadow-lg shadow-blue-600/25 transition active:scale-[0.98]"
+                  >
+                    <Lock className="w-4 h-4" />
+                    <span>Login to Buy</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+
+                  <div className="text-center text-xs text-slate-500 pt-0.5">
+                    <span>New to PlumbMart? </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        navigate('/register?redirect=checkout');
+                      }}
+                      className="font-bold text-blue-600 hover:underline hover:text-blue-700"
+                    >
+                      Register here
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2 pt-1">
+                  <button
+                    onClick={() => {
+                      onClose();
+                      navigate('/customer/checkout');
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs tracking-wide shadow-lg shadow-blue-600/25 transition active:scale-[0.98]"
+                  >
+                    <span>Proceed to Checkout</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onClose();
+                      navigate('/customer/cart');
+                    }}
+                    className="w-full py-2 px-3 text-center text-xs text-slate-600 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition font-semibold"
+                  >
+                    View Shopping Cart Details
+                  </button>
+                </div>
+              )}
+
+              <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-500 pt-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Simulated secure test checkout • 100% Mock Transaction</span>
+                <span>100% Genuine Plumbing Supplies • Fast Dispatch</span>
               </div>
             </div>
           )}

@@ -17,6 +17,13 @@ import CustomerCartPage from './pages/CustomerCartPage';
 import CustomerCheckoutPage from './pages/CustomerCheckoutPage';
 import CustomerOrdersPage from './pages/CustomerOrdersPage';
 import { CheckCircle2 } from 'lucide-react';
+import { 
+  getCustomerCart, 
+  addToCustomerCart, 
+  updateCustomerCartQuantity, 
+  removeFromCustomerCart, 
+  clearCustomerCart 
+} from './utils/customerCart';
 
 const DEFAULT_PRODUCTS = [
   {
@@ -175,8 +182,8 @@ export default function App() {
   const [products, setProducts] = useState(DEFAULT_PRODUCTS);
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Cart / Bucket state
-  const [cartItems, setCartItems] = useState([]);
+  // Cart / Bucket state synced with localStorage
+  const [cartItems, setCartItems] = useState(() => getCustomerCart());
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   // Profile modal state
@@ -189,6 +196,15 @@ export default function App() {
       return null;
     }
   });
+
+  // Listen to customer_cart_updated event to keep cartItems synchronized
+  useEffect(() => {
+    const handleCartSync = () => {
+      setCartItems(getCustomerCart());
+    };
+    window.addEventListener('customer_cart_updated', handleCartSync);
+    return () => window.removeEventListener('customer_cart_updated', handleCartSync);
+  }, []);
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState(null);
@@ -223,38 +239,26 @@ export default function App() {
     loadProducts().catch(() => {});
   }, []);
 
-  // Cart operations
+  // Cart operations synchronized with customerCart utils
   const handleAddToCart = (product) => {
-    setCartItems((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
-        );
-      }
-      return [...prev, { ...product, quantity: 1 }];
-    });
+    const updated = addToCustomerCart(product, 1);
+    setCartItems(updated);
     showToast(`Added ${product.name.slice(0, 24)}... to bucket`);
   };
 
   const handleUpdateQuantity = (productId, newQuantity) => {
-    if (newQuantity <= 0) {
-      handleRemoveItem(productId);
-    } else {
-      setCartItems((prev) =>
-        prev.map((item) =>
-          item.id === productId ? { ...item, quantity: newQuantity } : item
-        )
-      );
-    }
+    const updated = updateCustomerCartQuantity(productId, newQuantity);
+    setCartItems(updated);
   };
 
   const handleRemoveItem = (productId) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== productId));
+    const updated = removeFromCustomerCart(productId);
+    setCartItems(updated);
   };
 
   const handleClearCart = () => {
-    setCartItems([]);
+    const updated = clearCustomerCart();
+    setCartItems(updated);
   };
 
   const handleCheckoutSuccess = (orderId, total) => {
