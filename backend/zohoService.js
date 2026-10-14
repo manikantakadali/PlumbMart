@@ -381,7 +381,7 @@ function getProductImage(sku, name, category) {
   const feProductsDir = path.join(__dirname, '../frontend/public/products');
   const beProductsDir = path.join(__dirname, 'public/products');
   
-  const possibleExts = ['.jpg', '.jpeg', '.png', '.webp'];
+  const possibleExts = ['.svg', '.png', '.jpg', '.jpeg', '.webp'];
   for (const ext of possibleExts) {
     const filename = `${skuClean}${ext}`;
     if (
@@ -412,7 +412,7 @@ function getProductImage(sku, name, category) {
   if (lower.includes('ball valve')) {
     return 'https://images.unsplash.com/photo-1584992236310-6edddc08acff?auto=format&fit=crop&w=600&q=80';
   }
-  if (lower.includes('valve') || skuClean.includes('VALVE') || lower.includes('cock')) {
+  if (lower.includes('valve') || skuClean.includes('VALVE') || lower.includes('bib cock') || lower.includes('stop cock') || lower.includes('angle cock') || lower.includes('ball cock')) {
     return 'https://images.unsplash.com/photo-1584992236310-6edddc08acff?auto=format&fit=crop&w=600&q=80';
   }
   if (lower.includes('elbow') || lower.includes('tee') || lower.includes('coupling') || lower.includes('reducer') || lower.includes('union') || lower.includes('nipple') || skuClean.startsWith('PLB-FIT')) {
@@ -453,6 +453,12 @@ function getProductImage(sku, name, category) {
   if (category === 'Tools & Sealants') {
     return 'https://images.unsplash.com/photo-1581244277943-fe4a9c777189?auto=format&fit=crop&w=600&q=80';
   }
+  if (category === 'Water Tanks & Storage') {
+    return '/products/PLB-WS-020.svg';
+  }
+  if (category === 'Drainage & Sanitary') {
+    return '/products/PLB-DS-036.svg';
+  }
 
   return '/products/PLB-PIPE-051.jpg';
 }
@@ -481,6 +487,14 @@ function formatZohoItemToProduct(item) {
     category = 'Pumps & Motors';
   } else if (skuUpper.startsWith('PLB-TS') || skuUpper.startsWith('PLB-TOOL')) {
     category = 'Tools & Sealants';
+  } else if (skuUpper.startsWith('PLB-WS') || skuUpper.startsWith('PLB-WT') || skuUpper.startsWith('PLB-TANK')) {
+    category = 'Water Tanks & Storage';
+  } else if (skuUpper.startsWith('PLB-DS') || skuUpper.startsWith('PLB-DRAIN')) {
+    category = 'Drainage & Sanitary';
+  } else if (lower.includes('water tank') || lower.includes('storage tank') || lower.includes('loft tank') || (lower.includes('tank') && !lower.includes('connector'))) {
+    category = 'Water Tanks & Storage';
+  } else if (lower.includes('drain') || lower.includes('trap') || lower.includes('nahani') || lower.includes('gully') || lower.includes('chamber')) {
+    category = 'Drainage & Sanitary';
   } else if (lower.includes('pump') || lower.includes('motor') || lower.includes('booster')) {
     category = 'Pumps & Motors';
   } else if (lower.includes('wrench') || lower.includes('tape') || lower.includes('cement') || lower.includes('tool') || lower.includes('glue') || lower.includes('cutter') || lower.includes('deburr') || lower.includes('seal') || lower.includes('oil')) {

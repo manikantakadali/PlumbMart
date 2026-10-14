@@ -28,11 +28,15 @@ export default function RegisterPage({ onRegisterSuccess }) {
   const redirectTarget = searchParams.get('redirect'); // e.g. 'checkout'
   const { verifiedMobile, idToken: stateIdToken } = location.state || {};
 
+  const urlRole = searchParams.get('role');
+  const validRoles = ['Customer', 'Dealer', 'Plumber'];
+  const initialRole = validRoles.includes(urlRole) ? urlRole : 'Customer';
+
   const [formData, setFormData] = useState({
     name: '',
     mobile: verifiedMobile || '',
     email: '',
-    role: 'Customer',
+    role: initialRole,
     city: 'Bengaluru'
   });
 
@@ -150,19 +154,22 @@ export default function RegisterPage({ onRegisterSuccess }) {
 
       setIsPhoneVerified(true);
       setOtpStepActive(false);
-      setSuccessMsg(`Email & Mobile verified! Account created for ${data.user.name}. Redirecting to Login...`);
+      const roleName = formData.role;
+      setSuccessMsg(`Email verified! ${roleName} account created for ${data.user.name}. Redirecting to Login...`);
 
-      const query = new URLSearchParams({
+      const queryParams = new URLSearchParams({
         registered: 'true',
-        redirect: redirectTarget || 'checkout',
         mobile: clean,
         name: data.user.name || formData.name.trim(),
         email: formData.email.trim(),
-        role: formData.role
-      }).toString();
+        role: roleName
+      });
+      if (redirectTarget) {
+        queryParams.set('redirect', redirectTarget);
+      }
 
       setTimeout(() => {
-        navigate(`/login?${query}`);
+        navigate(`/login?${queryParams.toString()}`);
       }, 900);
 
     } catch (err) {
@@ -174,7 +181,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
   };
 
 
-  // Submit complete customer profile
+  // Submit complete customer, dealer, or plumber profile
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) {
@@ -188,9 +195,19 @@ export default function RegisterPage({ onRegisterSuccess }) {
       return;
     }
 
-    // If customer role and email/phone not yet verified, request verification
-    if (formData.role === 'Customer' && !isPhoneVerified) {
-      setError('Please verify your email via 6-digit OTP code first');
+    if (!formData.email.trim() || !formData.email.includes('@')) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
+    if (!['Customer', 'Dealer', 'Plumber'].includes(formData.role)) {
+      setError('Only Customer, Dealer, and Plumber accounts are eligible to register.');
+      return;
+    }
+
+    // Require email verification via 6-digit OTP code before creating profile
+    if (!isPhoneVerified) {
+      setError('Please verify your email via 6-digit OTP code to complete registration.');
       handleSendRegisterOtp();
       return;
     }
@@ -220,19 +237,21 @@ export default function RegisterPage({ onRegisterSuccess }) {
       }
 
       const registeredUser = data.user;
-      setSuccessMsg(`Account created for ${registeredUser.name}! Redirecting to Login...`);
+      setSuccessMsg(`${formData.role} account created for ${registeredUser.name}! Redirecting to Login...`);
 
-      const query = new URLSearchParams({
+      const queryParams = new URLSearchParams({
         registered: 'true',
-        redirect: redirectTarget || 'checkout',
         mobile: clean,
         name: registeredUser.name || formData.name.trim(),
         email: formData.email.trim(),
         role: formData.role
-      }).toString();
+      });
+      if (redirectTarget) {
+        queryParams.set('redirect', redirectTarget);
+      }
 
       setTimeout(() => {
-        navigate(`/login?${query}`);
+        navigate(`/login?${queryParams.toString()}`);
       }, 900);
     } catch (err) {
       setError(err.message || 'Connection error. Please try again.');
@@ -262,7 +281,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
           </Link>
 
           <div className="text-xs text-slate-500 hidden sm:block">
-            Need help? <span className="font-semibold text-blue-600">+91 98765 43210</span>
+            Need help? <a href="tel:9347486117" className="font-semibold text-blue-600 hover:underline">+91 93474 86117</a>
           </div>
         </div>
       </header>
@@ -388,11 +407,11 @@ export default function RegisterPage({ onRegisterSuccess }) {
               </div>
             </div>
 
-            {/* OTP Verification Prompt if opened directly without prior verification */}
-            {!isPhoneVerified && formData.role === 'Customer' && (
+            {/* OTP Verification Prompt */}
+            {!isPhoneVerified && (
               <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-2xl text-xs space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-amber-900">Email Verification Required</span>
+                  <span className="font-semibold text-amber-900">Email Verification Required ({formData.role})</span>
                   {!otpStepActive ? (
                     <button
                       type="button"
@@ -447,18 +466,33 @@ export default function RegisterPage({ onRegisterSuccess }) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Account Type
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span>Account Type</span>
+                  <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    {formData.role}
+                  </span>
                 </label>
                 <select
                   value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  onChange={(e) => {
+                    const chosen = e.target.value;
+                    if (['Customer', 'Dealer', 'Plumber'].includes(chosen)) {
+                      setFormData({ ...formData, role: chosen });
+                      setIsPhoneVerified(false);
+                      setOtpStepActive(false);
+                    }
+                  }}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:bg-white transition font-medium"
                 >
-                  <option value="Customer">Customer</option>
-                  <option value="Dealer">Dealer</option>
-                  <option value="Plumber">Plumber</option>
+                  <option value="Customer">Customer (Retail Buyer)</option>
+                  <option value="Dealer">Dealer (B2B Wholesale & Credit)</option>
+                  <option value="Plumber">Plumber (Contractor Rewards)</option>
                 </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {formData.role === 'Dealer' && 'B2B wholesale pricing, credit approval & live stock tracking.'}
+                  {formData.role === 'Plumber' && 'Loyalty points, cashback rewards & technician discounts.'}
+                  {formData.role === 'Customer' && 'Retail plumbing catalog, quick checkout & doorstep delivery.'}
+                </p>
               </div>
 
               <div>
@@ -486,10 +520,10 @@ export default function RegisterPage({ onRegisterSuccess }) {
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Registering Account in Database...</span>
+                  <span>Registering {formData.role} Account...</span>
                 </>
               ) : (
-                <span>Register Account &amp; Unlock Wholesale Rates</span>
+                <span>Register {formData.role} Account &amp; Proceed to Login</span>
               )}
             </button>
           </form>
@@ -498,7 +532,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
           <div className="mt-6 pt-5 border-t border-slate-200 text-center text-xs text-slate-500">
             Already have an account?{' '}
             <Link 
-              to={redirectTarget ? `/login?redirect=${redirectTarget}` : '/login'} 
+              to={redirectTarget ? `/login?redirect=${redirectTarget}&role=${formData.role}` : `/login?role=${formData.role}`} 
               className="text-emerald-700 font-bold hover:underline"
             >
               Sign in to your account

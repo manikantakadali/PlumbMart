@@ -175,6 +175,36 @@ const DEFAULT_PRODUCTS = [
     tag: 'Fast Bonding',
     image: 'https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=600&q=80',
     description: 'Solvent cement for compatible PVC pipe and fitting joints; follow product instructions.'
+  },
+  {
+    id: 'plb-wt-001',
+    sku: 'PLB-WT-001',
+    name: 'Sintex 500L Triple Layer Overhead Water Tank',
+    category: 'Water Tanks & Storage',
+    brand: 'Sintex',
+    price: 3850,
+    mrp: 4800,
+    rating: 4.8,
+    reviews: 64,
+    stock: 25,
+    tag: 'UV-Stabilized',
+    image: '/products/PLB-WS-010.svg',
+    description: 'Sintex 500 Litre 3-Layer White Water Storage Tank with 100% UV stabilization, food-grade virgin plastic.'
+  },
+  {
+    id: 'plb-ds-001',
+    sku: 'PLB-DS-001',
+    name: 'SS-304 Cockroach Trap Floor Drain 5x5 Inch',
+    category: 'Drainage & Sanitary',
+    brand: 'Chilly',
+    price: 380,
+    mrp: 520,
+    rating: 4.8,
+    reviews: 95,
+    stock: 50,
+    tag: 'Anti-Odor',
+    image: '/products/PLB-DS-036.svg',
+    description: 'Premium AISI-304 grade stainless steel floor drain with integrated deep water-seal cockroach trap.'
   }
 ];
 

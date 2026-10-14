@@ -724,7 +724,7 @@ export default function CustomerDashboard({ currentUser, onLogout }) {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                 <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
                   <span className="text-xs font-bold text-slate-900 block mb-1">Toll-Free Helpline</span>
-                  <span className="text-sm font-black text-blue-600 block">+91 98765 43210</span>
+                  <a href="tel:9347486117" className="text-sm font-black text-blue-600 block hover:underline">+91 93474 86117</a>
                   <span className="text-[10px] text-slate-500 block mt-1">Available 8 AM - 8 PM</span>
                 </div>
                 <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">

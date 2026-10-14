@@ -26,7 +26,9 @@ const CATEGORIES = [
   'Fittings & Valves',
   'Bath & Faucets',
   'Pumps & Motors',
-  'Tools & Sealants'
+  'Tools & Sealants',
+  'Water Tanks & Storage',
+  'Drainage & Sanitary'
 ];
 
 export default function DealerProductsPage({ currentUser, onLogout }) {

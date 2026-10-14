@@ -18,7 +18,9 @@ import {
   LayoutDashboard,
   Bell,
   AlertTriangle,
-  Mail
+  Mail,
+  Cylinder,
+  Filter
 } from 'lucide-react';
 import { getDealerCart } from '../utils/dealerCart';
 import InAppNotificationToast from './InAppNotificationToast';
@@ -26,12 +28,14 @@ import DealerSupportModal from './DealerSupportModal';
 import DealerWelcomeBackModal from './DealerWelcomeBackModal';
 
 const SIDEBAR_CATEGORIES = [
-  { name: 'All Categories', query: '', icon: Layers, count: 9 },
-  { name: 'Pipes & Tubes', query: 'Pipes & Tubes', icon: Box, count: 2 },
-  { name: 'Fittings & Valves', query: 'Fittings & Valves', icon: Wrench, count: 2 },
-  { name: 'Bath & Faucets', query: 'Bath & Faucets', icon: Droplets, count: 2 },
-  { name: 'Pumps & Motors', query: 'Pumps & Motors', icon: Zap, count: 1 },
-  { name: 'Tools & Sealants', query: 'Tools & Sealants', icon: Hammer, count: 2 }
+  { name: 'All Categories', query: '', icon: Layers, count: 215 },
+  { name: 'Pipes & Tubes', query: 'Pipes & Tubes', icon: Box, count: 50 },
+  { name: 'Fittings & Valves', query: 'Fittings & Valves', icon: Wrench, count: 40 },
+  { name: 'Bath & Faucets', query: 'Bath & Faucets', icon: Droplets, count: 30 },
+  { name: 'Pumps & Motors', query: 'Pumps & Motors', icon: Zap, count: 30 },
+  { name: 'Tools & Sealants', query: 'Tools & Sealants', icon: Hammer, count: 35 },
+  { name: 'Water Tanks & Storage', query: 'Water Tanks & Storage', icon: Cylinder, count: 15 },
+  { name: 'Drainage & Sanitary', query: 'Drainage & Sanitary', icon: Filter, count: 15 }
 ];
 
 export default function DealerLayout({ children, currentUser, onLogout, products = [] }) {
@@ -48,13 +52,15 @@ export default function DealerLayout({ children, currentUser, onLogout, products
   const categoryCounts = React.useMemo(() => {
     if (!products || products.length === 0) {
       return {
-        '': 180,
-        'All Categories': 180,
+        '': 215,
+        'All Categories': 215,
         'Pipes & Tubes': 50,
-        'Tools & Sealants': 40,
+        'Fittings & Valves': 40,
+        'Tools & Sealants': 35,
         'Pumps & Motors': 30,
         'Bath & Faucets': 30,
-        'Fittings & Valves': 30
+        'Water Tanks & Storage': 15,
+        'Drainage & Sanitary': 15
       };
     }
     const counts = { '': products.length, 'All Categories': products.length };

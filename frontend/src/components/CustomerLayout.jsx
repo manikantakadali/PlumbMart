@@ -24,7 +24,9 @@ import {
   Check,
   Loader2,
   AlertCircle,
-  Bell
+  Bell,
+  Cylinder,
+  Filter
 } from 'lucide-react';
 import { getCustomerCart } from '../utils/customerCart';
 import InAppNotificationToast from './InAppNotificationToast';
@@ -35,7 +37,9 @@ const SIDEBAR_CATEGORIES = [
   { name: 'Fittings & Valves', query: 'Fittings & Valves', icon: Wrench },
   { name: 'Bath & Faucets', query: 'Bath & Faucets', icon: Droplets },
   { name: 'Pumps & Motors', query: 'Pumps & Motors', icon: Zap },
-  { name: 'Tools & Sealants', query: 'Tools & Sealants', icon: Hammer }
+  { name: 'Tools & Sealants', query: 'Tools & Sealants', icon: Hammer },
+  { name: 'Water Tanks & Storage', query: 'Water Tanks & Storage', icon: Cylinder },
+  { name: 'Drainage & Sanitary', query: 'Drainage & Sanitary', icon: Filter }
 ];
 
 export default function CustomerLayout({ children, currentUser, onLogout }) {
@@ -650,7 +654,10 @@ export default function CustomerLayout({ children, currentUser, onLogout }) {
             : cat.name === 'Fittings & Valves' ? 'Fittings'
             : cat.name === 'Bath & Faucets' ? 'Bath'
             : cat.name === 'Pumps & Motors' ? 'Pumps'
-            : 'Tools';
+            : cat.name === 'Tools & Sealants' ? 'Tools'
+            : cat.name === 'Water Tanks & Storage' ? 'Tanks'
+            : cat.name === 'Drainage & Sanitary' ? 'Drainage'
+            : cat.name;
 
           const displayCount = categoryCounts[cat.query] !== undefined ? categoryCounts[cat.query] : 0;
 

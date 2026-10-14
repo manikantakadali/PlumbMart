@@ -884,7 +884,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               </div>
 
               <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-                {['All', 'Pipes & Tubes', 'Fittings & Valves', 'Bath & Faucets', 'Pumps & Motors', 'Tools & Sealants'].map(cat => (
+                {['All', 'Pipes & Tubes', 'Fittings & Valves', 'Bath & Faucets', 'Pumps & Motors', 'Tools & Sealants', 'Water Tanks & Storage', 'Drainage & Sanitary'].map(cat => (
                   <button
                     key={cat}
                     onClick={() => setProductCategoryFilter(cat)}

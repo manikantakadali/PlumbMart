@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f8fafc"/><stop offset="100%" stop-color="#e2e8f0"/></linearGradient>
+    <linearGradient id="brass" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fef08a"/><stop offset="50%" stop-color="#ca8a04"/><stop offset="100%" stop-color="#854d0e"/></linearGradient>
+  </defs>
+  <rect width="600" height="600" fill="url(#bg)"/>
+  <ellipse cx="300" cy="480" rx="170" ry="24" fill="#000" opacity="0.14"/>
+  <circle cx="300" cy="300" r="150" fill="url(#brass)" stroke="#713f12" stroke-width="6"/>
+  <circle cx="300" cy="300" r="120" fill="#a16207"/>
+  <!-- Threaded Hex Head -->
+  <polygon points="300,210 380,255 380,345 300,390 220,345 220,255" fill="#eab308" stroke="#854d0e" stroke-width="4"/>
+  <circle cx="300" cy="300" r="30" fill="#ca8a04"/>
+  <rect x="30" y="30" width="150" height="32" rx="16" fill="#ca8a04"/>
+  <text x="105" y="51" fill="#fff" font-family="sans-serif" font-size="11" font-weight="bold" text-anchor="middle">CLEANOUT PLUG</text>
+  <text x="300" y="545" fill="#0f172a" font-family="sans-serif" font-size="18" font-weight="900" text-anchor="middle">FLOOR CLEANOUT PLUG 4 INCH</text>
+</svg>

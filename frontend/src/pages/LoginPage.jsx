@@ -28,10 +28,10 @@ export default function LoginPage({ onLoginSuccess }) {
   const paramEmail = searchParams.get('email') || '';
   const paramRole = searchParams.get('role') || '';
 
-  // Form State: Person Name, Phone Number, Email
-  const [name, setName] = useState(paramName || 'Rahul Sharma');
-  const [mobile, setMobile] = useState(paramMobile || '9876543210');
-  const [email, setEmail] = useState(paramEmail || (paramMobile ? `user_${paramMobile}@example.com` : 'rahul.sharma@example.com'));
+  // Form State: Person Name, Phone Number, Email (starts completely empty by default)
+  const [name, setName] = useState(paramName || '');
+  const [mobile, setMobile] = useState(paramMobile || '');
+  const [email, setEmail] = useState(paramEmail || '');
   const [otp, setOtp] = useState('');
   const [role, setRole] = useState(paramRole || 'Customer');
   const [authStep, setAuthStep] = useState('INPUT'); // 'INPUT' | 'OTP'
@@ -61,15 +61,37 @@ export default function LoginPage({ onLoginSuccess }) {
     };
   }, [resendCooldown]);
 
-  const setDemoAccount = (demoName, demoMobile, demoEmail, demoRole) => {
-    setName(demoName);
-    setMobile(demoMobile);
-    setEmail(demoEmail);
-    setRole(demoRole);
+  // Dynamic role and registration synchronization from URL search params
+  useEffect(() => {
+    const urlRole = searchParams.get('role');
+    if (urlRole && ['Customer', 'Dealer', 'Plumber'].includes(urlRole)) {
+      setRole(urlRole);
+      setOtp('');
+      setAuthStep('INPUT');
+      setError('');
+    }
+    const regParam = searchParams.get('registered') === 'true';
+    const regName = searchParams.get('name');
+    const regMobile = searchParams.get('mobile');
+    const regEmail = searchParams.get('email');
+    if (regName) setName(regName);
+    if (regMobile) setMobile(regMobile);
+    if (regEmail) setEmail(regEmail);
+    if (regParam) {
+      const activeRole = urlRole || 'Customer';
+      setSuccessMsg(`Account registered for ${regName || 'user'} (${activeRole})! Please request and verify OTP to sign in to your dashboard.`);
+    }
+  }, [searchParams]);
+
+  const handleSelectRole = (newRole) => {
+    setRole(newRole);
     setOtp('');
     setAuthStep('INPUT');
     setError('');
     setSuccessMsg('');
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('role', newRole);
+    navigate(`/login?${nextParams.toString()}`, { replace: true });
   };
 
   // Step 1: Submit Person Name, Phone, and Email to receive Email OTP
@@ -225,14 +247,16 @@ export default function LoginPage({ onLoginSuccess }) {
       }
 
       // Redirect to target or role dashboard
-      if (redirectTarget === 'checkout') {
-        navigate('/customer/checkout');
-      } else if (redirectTarget === 'cart') {
-        navigate('/customer/cart');
-      } else if (loggedUser.role === 'Dealer') {
+      if (loggedUser.role === 'Dealer') {
         navigate('/dealer');
       } else if (loggedUser.role === 'Plumber') {
         navigate('/plumber');
+      } else if (loggedUser.role === 'Admin') {
+        navigate('/admin');
+      } else if (redirectTarget === 'checkout') {
+        navigate('/customer/checkout');
+      } else if (redirectTarget === 'cart') {
+        navigate('/customer/cart');
       } else {
         navigate('/customer');
       }
@@ -266,7 +290,7 @@ export default function LoginPage({ onLoginSuccess }) {
           </Link>
 
           <div className="text-xs text-slate-500 hidden sm:block">
-            Need help? <span className="font-semibold text-blue-600">+91 98765 43210</span>
+            Need help? <a href="tel:9347486117" className="font-semibold text-blue-600 hover:underline">+91 93474 86117</a>
           </div>
         </div>
       </header>
@@ -285,16 +309,20 @@ export default function LoginPage({ onLoginSuccess }) {
             </p>
           </div>
 
-          {/* Quick Demo Test Accounts Box */}
+          {/* Account Role Selector */}
           <div className="mb-5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
-            <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Select Demo Account:</span>
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                Select Account Role:
+              </span>
+              <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                {role} Portal
+              </span>
+            </div>
             <div className="grid grid-cols-3 gap-1.5 text-xs">
               <button
                 type="button"
-                onClick={() => setDemoAccount('Rahul Sharma', '9876543210', 'rahul.sharma@example.com', 'Customer')}
+                onClick={() => handleSelectRole('Customer')}
                 className={`py-2 px-1 rounded-xl border text-center transition font-semibold ${
                   role === 'Customer'
                     ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
@@ -305,7 +333,7 @@ export default function LoginPage({ onLoginSuccess }) {
               </button>
               <button
                 type="button"
-                onClick={() => setDemoAccount('Sri Venkateswara Traders', '9000011111', 'dealer@plumbmart-demo.com', 'Dealer')}
+                onClick={() => handleSelectRole('Dealer')}
                 className={`py-2 px-1 rounded-xl border text-center transition font-semibold ${
                   role === 'Dealer'
                     ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
@@ -316,7 +344,7 @@ export default function LoginPage({ onLoginSuccess }) {
               </button>
               <button
                 type="button"
-                onClick={() => setDemoAccount('Ramesh Kumar', '9111122222', 'plumber@plumbmart-demo.com', 'Plumber')}
+                onClick={() => handleSelectRole('Plumber')}
                 className={`py-2 px-1 rounded-xl border text-center transition font-semibold ${
                   role === 'Plumber'
                     ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
@@ -333,9 +361,9 @@ export default function LoginPage({ onLoginSuccess }) {
             <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-start gap-2.5 shadow-2xs">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold text-emerald-900 text-xs">Registration Successful!</p>
+                <p className="font-bold text-emerald-900 text-xs">{role} Registration Successful!</p>
                 <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed">
-                  {paramName ? `Welcome, ${paramName}! ` : ''}Your account has been created. Please log in below to complete your purchase.
+                  {name ? `Welcome, ${name}! ` : ''}Your {role} account is created. Enter the OTP code sent to your email to log in directly to your {role === 'Dealer' ? 'Dealer Dashboard' : role === 'Plumber' ? 'Plumber Dashboard' : 'Customer Catalog'}.
                 </p>
               </div>
             </div>
@@ -384,7 +412,7 @@ export default function LoginPage({ onLoginSuccess }) {
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Rahul Sharma"
+                    placeholder="Enter your full name"
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition"
                   />
                 </div>
@@ -404,7 +432,7 @@ export default function LoginPage({ onLoginSuccess }) {
                     required
                     value={mobile}
                     onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    placeholder="9876543210"
+                    placeholder="Enter 10-digit mobile number"
                     className="w-full px-3 py-2.5 bg-transparent text-sm text-slate-900 focus:outline-none font-medium"
                   />
                 </div>
@@ -421,7 +449,7 @@ export default function LoginPage({ onLoginSuccess }) {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="yourname@gmail.com"
+                    placeholder="name@example.com"
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition"
                   />
                 </div>

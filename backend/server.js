@@ -216,13 +216,28 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
     }
 
+    if (role === 'Admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin verification cannot be requested through public registration.'
+      });
+    }
+
+    const assignedRole = role || 'Customer';
+    if (!['Customer', 'Dealer', 'Plumber'].includes(assignedRole)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Only Customer, Dealer, and Plumber accounts are supported.'
+      });
+    }
+
     const cleanMobile = mobile ? String(mobile).replace(/\D/g, '').slice(-10) : '';
 
     const result = await sendEmailOtp({
       email,
-      name: name || 'Customer',
+      name: name || assignedRole,
       mobile: cleanMobile,
-      role
+      role: assignedRole
     });
 
     return res.json({
@@ -250,55 +265,147 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
       return res.status(400).json({ success: false, message: verification.error });
     }
 
-    const cleanEmail = String(email).trim().toLowerCase();
-    const cleanMobile = String(mobile || verification.data.mobile || '').replace(/\D/g, '').slice(-10) || '9876543210';
-    const personName = String(name || verification.data.name || 'Valued Customer').trim();
+    const assignedRole = role || verification.data?.role || 'Customer';
 
-    // Check if customer exists by mobile first (fastest), then by email
-    let customer = null;
-    if (cleanMobile) {
-      customer = await findCustomerByMobile(cleanMobile);
-    }
-    if (!customer && cleanEmail) {
-      customer = await findCustomerByEmail(cleanEmail);
-    }
-
-    if (!customer) {
-      // Create new customer in Supabase & local DB
-      customer = await createCustomerRecord({
-        name: personName,
-        mobile: cleanMobile,
-        email: cleanEmail,
-        role: 'Customer',
-        city: 'Bengaluru'
+    // Strict security check: Admin accounts cannot register via public registration
+    if (assignedRole === 'Admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin accounts cannot register or login via this public portal. Please use the Admin Login Portal.'
       });
-    } else if (cleanEmail && (!customer.email || customer.email !== cleanEmail)) {
-      // Update email on existing record in local database
-      customer.email = cleanEmail;
-      try {
-        const local = getDb();
-        const idx = (local.customers || []).findIndex(c => c.mobile === cleanMobile || c.id === customer.id);
-        if (idx !== -1) {
-          local.customers[idx].email = cleanEmail;
-          saveDb(local);
-        }
-      } catch (e) {}
     }
 
-    const userObj = {
-      id: customer.id,
-      name: customer.name || personName,
-      mobile: customer.mobile || cleanMobile,
-      email: customer.email || cleanEmail,
-      role: 'Customer',
-      rewardPoints: parseInt(customer.reward_points || customer.rewardPoints || 100, 10),
-      totalSaved: parseFloat(customer.total_saved || customer.totalSaved || 0),
-      addresses: customer.addresses || []
-    };
+    if (!['Customer', 'Dealer', 'Plumber'].includes(assignedRole)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role. Only Customer, Dealer, and Plumber accounts are supported.'
+      });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanMobile = String(mobile || verification.data?.mobile || '').replace(/\D/g, '').slice(-10) || '9876543210';
+    const personName = String(name || verification.data?.name || assignedRole).trim();
+
+    const db = getDb();
+    let userObj = null;
+
+    if (assignedRole === 'Dealer') {
+      let dealer = (db.dealers || []).find(d => 
+        (cleanMobile && d.mobile === cleanMobile) || 
+        (cleanEmail && d.email && d.email.toLowerCase() === cleanEmail)
+      );
+
+      if (!dealer) {
+        dealer = {
+          id: 'DLR-' + Date.now().toString().slice(-4),
+          name: personName,
+          mobile: cleanMobile,
+          email: cleanEmail,
+          role: 'Dealer',
+          gstin: '29ABCDE' + Math.floor(1000 + Math.random() * 9000) + 'F1Z5',
+          zohoVerified: true,
+          credit30Days: true,
+          credit90Days: false,
+          creditLimit: '₹3,00,000',
+          availableCredit: '₹3,00,000',
+          city: 'Bengaluru',
+          createdAt: new Date().toISOString()
+        };
+        if (!db.dealers) db.dealers = [];
+        db.dealers.push(dealer);
+        saveDb(db);
+      } else {
+        if (personName && !dealer.name) dealer.name = personName;
+        if (cleanEmail && !dealer.email) dealer.email = cleanEmail;
+        saveDb(db);
+      }
+
+      userObj = {
+        ...dealer,
+        role: 'Dealer'
+      };
+
+    } else if (assignedRole === 'Plumber') {
+      let plumber = (db.plumbers || []).find(p => 
+        (cleanMobile && p.mobile === cleanMobile) || 
+        (cleanEmail && p.email && p.email.toLowerCase() === cleanEmail)
+      );
+
+      if (!plumber) {
+        plumber = {
+          id: 'PLM-' + Date.now().toString().slice(-4),
+          name: personName,
+          mobile: cleanMobile,
+          email: cleanEmail,
+          role: 'Plumber',
+          license: 'PLUMB-KA-2026-' + Math.floor(100 + Math.random() * 900),
+          completedJobs: 0,
+          rating: 5.0,
+          rewardPoints: 100,
+          walletBalance: 250,
+          status: 'VERIFIED',
+          city: 'Bengaluru',
+          createdAt: new Date().toISOString()
+        };
+        if (!db.plumbers) db.plumbers = [];
+        db.plumbers.push(plumber);
+        saveDb(db);
+      } else {
+        if (personName && !plumber.name) plumber.name = personName;
+        if (cleanEmail && !plumber.email) plumber.email = cleanEmail;
+        saveDb(db);
+      }
+
+      userObj = {
+        ...plumber,
+        role: 'Plumber'
+      };
+
+    } else {
+      // Customer: Search Supabase & local database
+      let customer = null;
+      if (cleanMobile) {
+        customer = await findCustomerByMobile(cleanMobile);
+      }
+      if (!customer && cleanEmail) {
+        customer = await findCustomerByEmail(cleanEmail);
+      }
+
+      if (!customer) {
+        customer = await createCustomerRecord({
+          name: personName,
+          mobile: cleanMobile,
+          email: cleanEmail,
+          role: 'Customer',
+          city: 'Bengaluru'
+        });
+      } else if (cleanEmail && (!customer.email || customer.email !== cleanEmail)) {
+        customer.email = cleanEmail;
+        try {
+          const local = getDb();
+          const idx = (local.customers || []).findIndex(c => c.mobile === cleanMobile || c.id === customer.id);
+          if (idx !== -1) {
+            local.customers[idx].email = cleanEmail;
+            saveDb(local);
+          }
+        } catch (e) {}
+      }
+
+      userObj = {
+        id: customer.id,
+        name: customer.name || personName,
+        mobile: customer.mobile || cleanMobile,
+        email: customer.email || cleanEmail,
+        role: 'Customer',
+        rewardPoints: parseInt(customer.reward_points || customer.rewardPoints || 100, 10),
+        totalSaved: parseFloat(customer.total_saved || customer.totalSaved || 0),
+        addresses: customer.addresses || []
+      };
+    }
 
     return res.json({
       success: true,
-      message: `Authenticated successfully as ${userObj.name}`,
+      message: `Authenticated successfully as ${userObj.name} (${userObj.role})`,
       user: userObj,
       token: `plumbmart-session-${userObj.id}-${Date.now()}`
     });
@@ -406,6 +513,22 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     const assignedRole = role || 'Customer';
+
+    // Strict security check: Admin accounts cannot register via public registration
+    if (assignedRole === 'Admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin accounts cannot be registered through public registration. Please contact system management.'
+      });
+    }
+
+    if (!['Customer', 'Dealer', 'Plumber'].includes(assignedRole)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Only Customer, Dealer, and Plumber accounts are eligible to register.'
+      });
+    }
+
     const db = getDb();
 
     // Check if customer already exists in Supabase or local cache

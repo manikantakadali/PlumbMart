@@ -82,6 +82,16 @@ export default function Footer({ onCategoryClick }) {
                   Pipe Wrenches &amp; Sealants
                 </button>
               </li>
+              <li>
+                <button onClick={() => onCategoryClick && onCategoryClick('Water Tanks & Storage')} className="hover:text-blue-600 transition">
+                  Water Storage Tanks
+                </button>
+              </li>
+              <li>
+                <button onClick={() => onCategoryClick && onCategoryClick('Drainage & Sanitary')} className="hover:text-blue-600 transition">
+                  Floor Drains &amp; Traps
+                </button>
+              </li>
             </ul>
           </div>
 
@@ -124,7 +134,7 @@ export default function Footer({ onCategoryClick }) {
               <li className="flex items-start gap-2.5">
                 <Phone className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                 <div>
-                  <span className="text-slate-900 block font-semibold">+91 98765 43210</span>
+                  <a href="tel:9347486117" className="text-slate-900 block font-semibold hover:text-blue-600">+91 93474 86117</a>
                   <span className="text-[11px] text-slate-500">Toll-free Helpdesk</span>
                 </div>
               </li>

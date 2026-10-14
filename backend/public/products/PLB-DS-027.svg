@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f8fafc"/><stop offset="100%" stop-color="#e2e8f0"/></linearGradient>
+    <linearGradient id="ss304" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="50%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="600" fill="url(#bg)"/>
+  <ellipse cx="300" cy="460" rx="220" ry="25" fill="#000" opacity="0.14"/>
+  <rect x="80" y="240" width="440" height="120" rx="16" fill="url(#ss304)" stroke="#64748b" stroke-width="4"/>
+  <rect x="95" y="255" width="410" height="90" rx="8" fill="#1e293b"/>
+  <g fill="url(#ss304)">
+    <rect x="110" y="265" width="12" height="70" rx="4"/><rect x="131" y="265" width="12" height="70" rx="4"/><rect x="152" y="265" width="12" height="70" rx="4"/><rect x="173" y="265" width="12" height="70" rx="4"/><rect x="194" y="265" width="12" height="70" rx="4"/><rect x="215" y="265" width="12" height="70" rx="4"/><rect x="236" y="265" width="12" height="70" rx="4"/><rect x="257" y="265" width="12" height="70" rx="4"/><rect x="278" y="265" width="12" height="70" rx="4"/><rect x="299" y="265" width="12" height="70" rx="4"/><rect x="320" y="265" width="12" height="70" rx="4"/><rect x="341" y="265" width="12" height="70" rx="4"/><rect x="362" y="265" width="12" height="70" rx="4"/><rect x="383" y="265" width="12" height="70" rx="4"/><rect x="404" y="265" width="12" height="70" rx="4"/><rect x="425" y="265" width="12" height="70" rx="4"/><rect x="446" y="265" width="12" height="70" rx="4"/><rect x="467" y="265" width="12" height="70" rx="4"/>
+  </g>
+  <rect x="275" y="360" width="50" height="60" rx="6" fill="#64748b"/>
+  <rect x="30" y="30" width="150" height="32" rx="16" fill="#0284c7"/>
+  <text x="105" y="51" fill="#fff" font-family="sans-serif" font-size="11" font-weight="bold" text-anchor="middle">LINEAR TRENCH DRAIN</text>
+  <text x="300" y="540" fill="#0f172a" font-family="sans-serif" font-size="18" font-weight="900" text-anchor="middle">LINEAR SHOWER DRAIN 2 FEET</text>
+</svg>

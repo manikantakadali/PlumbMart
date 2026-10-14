@@ -2138,10 +2138,13 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-xl space-y-4 p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                    {['All', 'Pipes & Tubes', 'Fittings & Valves', 'Bath & Faucets', 'Pumps & Motors', 'Tools & Sealants'].map(cat => (
+                    {['All', 'Pipes & Tubes', 'Fittings & Valves', 'Bath & Faucets', 'Pumps & Motors', 'Tools & Sealants', 'Water Tanks & Storage', 'Drainage & Sanitary'].map(cat => (
                       <button
                         key={cat}
-                        onClick={() => setProductCatFilter(cat)}
+                        onClick={() => {
+                          playClickSound();
+                          setProductCatFilter(cat);
+                        }}
                         className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
                           productCatFilter === cat
                             ? 'bg-emerald-600 text-white'

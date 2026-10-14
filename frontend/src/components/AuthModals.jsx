@@ -40,40 +40,40 @@ export function ProfileModal({ isOpen, onClose, currentUser, onLogout }) {
           </div>
         </div>
 
-        {/* Role Dashboards Quick Links */}
+        {/* Role Logins Quick Links */}
         <div className="mb-4 space-y-1.5">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Access Dashboards:</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Access Role Logins:</span>
           <Link
-            to="/customer"
+            to="/login?role=Customer"
             onClick={onClose}
             className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:text-blue-700 transition"
           >
-            <span>Customer Dashboard</span>
-            <span className="text-[10px] text-blue-600 font-normal">/customer</span>
+            <span>Customer Login</span>
+            <span className="text-[10px] text-blue-600 font-normal">/login?role=Customer</span>
           </Link>
           <Link
-            to="/dealer"
+            to="/login?role=Dealer"
             onClick={onClose}
             className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:text-indigo-700 transition"
           >
-            <span>Dealer Dashboard (B2B)</span>
-            <span className="text-[10px] text-indigo-600 font-normal">/dealer</span>
+            <span>Dealer Login (B2B)</span>
+            <span className="text-[10px] text-indigo-600 font-normal">/login?role=Dealer</span>
           </Link>
           <Link
-            to="/plumber"
+            to="/login?role=Plumber"
             onClick={onClose}
             className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-emerald-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:text-emerald-700 transition"
           >
-            <span>Plumber Dashboard</span>
-            <span className="text-[10px] text-emerald-600 font-normal">/plumber</span>
+            <span>Plumber Login</span>
+            <span className="text-[10px] text-emerald-600 font-normal">/login?role=Plumber</span>
           </Link>
           <Link
-            to="/admin"
+            to="/admin/login"
             onClick={onClose}
-            className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-800 hover:text-slate-900 transition"
+            className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-purple-50 border border-slate-200 text-xs font-semibold text-slate-800 hover:text-purple-700 transition"
           >
-            <span className="font-bold">Admin Portal</span>
-            <span className="text-[10px] text-purple-600 font-mono font-medium">/admin</span>
+            <span className="font-bold">Admin Login Portal</span>
+            <span className="text-[10px] text-purple-600 font-mono font-medium">/admin/login</span>
           </Link>
         </div>
 
