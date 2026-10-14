@@ -26,6 +26,7 @@ import { getDealerCart } from '../utils/dealerCart';
 import InAppNotificationToast from './InAppNotificationToast';
 import DealerSupportModal from './DealerSupportModal';
 import DealerWelcomeBackModal from './DealerWelcomeBackModal';
+import { getDealerHub } from '../utils/hubResolver';
 
 const SIDEBAR_CATEGORIES = [
   { name: 'All Categories', query: '', icon: Layers, count: 215 },
@@ -871,7 +872,7 @@ export default function DealerLayout({ children, currentUser, onLogout, products
                 </div>
                 <div className="flex justify-between py-1">
                   <span className="text-slate-500">Warehouse Hub</span>
-                  <span className="font-medium text-slate-800 text-right">Peenya Central Depot 01</span>
+                  <span className="font-medium text-slate-800 text-right">{getDealerHub(dealer)}</span>
                 </div>
               </div>
             </div>
@@ -908,7 +909,7 @@ export default function DealerLayout({ children, currentUser, onLogout, products
         dealerName={dealer.name || 'Sri Venkateswara Distributors'}
         creditLimit={dealer.creditLimit || '₹5,00,000'}
         availableCredit={dealer.availableCredit || '₹5,00,000'}
-        hubName="Peenya Central 01"
+        hubName={getDealerHub(dealer)}
         onExploreCatalog={() => {
           setIsWelcomeBackModalOpen(false);
           try {

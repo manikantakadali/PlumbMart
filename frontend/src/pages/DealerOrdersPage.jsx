@@ -20,6 +20,7 @@ import {
   MapPin,
   AlertCircle
 } from 'lucide-react';
+import { getDealerHub } from '../utils/hubResolver';
 
 export default function DealerOrdersPage({ currentUser, onLogout }) {
   const [searchParams] = useSearchParams();
@@ -315,7 +316,7 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
               // Default tracking pipeline if missing
               const trackingSteps = order.tracking || [
                 { step: 1, title: 'Order Confirmed', description: 'Zoho Sales Order created', completed: true, time: 'Completed' },
-                { step: 2, title: 'Zoho Warehouse Allocation', description: 'Peenya Central Depot Hub', completed: true, time: 'Completed' },
+                { step: 2, title: 'Zoho Warehouse Allocation', description: order.hub || getDealerHub({ city: order.city, address: order.deliveryAddress, gstin: order.gstin, ...currentUser }), completed: true, time: 'Completed' },
                 { step: 3, title: 'Packed & Quality Verified', description: 'Barcode inspection passed', completed: order.status !== 'Order Confirmed', time: 'In Progress' },
                 { step: 4, title: 'Dispatched / In Transit', description: 'Assigned to logistics vehicle', completed: order.status === 'Dispatched / In Transit' || order.status === 'Delivered', time: 'Expected' },
                 { step: 5, title: 'Delivered', description: 'Depot delivery acknowledgment', completed: order.status === 'Delivered', time: 'Pending' }

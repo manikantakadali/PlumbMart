@@ -16,6 +16,7 @@ const {
   updateCustomerProfile,
   getPlumberByMobile,
   updatePlumberProfile,
+  updatePlumberStatusInDb,
   createPlumberProfile,
   checkConnection,
   getProductsList
@@ -26,7 +27,8 @@ const {
   sendOrderReceiptEmail, 
   sendDealerAppealEmail,
   sendDealerSuspensionNotificationEmail,
-  sendDealerApprovalNotificationEmail
+  sendDealerApprovalNotificationEmail,
+  sendAdminDealerPendingNotificationEmail
 } = require('./emailService');
 const {
   generateAuthUrl,
@@ -36,7 +38,9 @@ const {
   fetchOrganizations,
   fetchInventoryItems,
   getSyncedZohoProducts,
-  syncZohoItemsToDb
+  syncZohoItemsToDb,
+  searchZohoContact,
+  createZohoCustomerContact
 } = require('./zohoService');
 
 
@@ -244,7 +248,8 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
       success: true,
       message: `Verification code sent to ${result.email}`,
       email: result.email,
-      emailSentViaSmtp: result.emailSentViaSmtp
+      emailSentViaSmtp: result.emailSentViaSmtp,
+      devOtp: result.devOtp
     });
   } catch (err) {
     console.error('[API Error /api/auth/send-email-otp]:', err);
@@ -290,39 +295,194 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
     let userObj = null;
 
     if (assignedRole === 'Dealer') {
+      const isRegistration = Boolean(req.body.isRegistration || req.body.action === 'register');
+
       let dealer = (db.dealers || []).find(d => 
         (cleanMobile && d.mobile === cleanMobile) || 
         (cleanEmail && d.email && d.email.toLowerCase() === cleanEmail)
       );
 
-      if (!dealer) {
-        dealer = {
-          id: 'DLR-' + Date.now().toString().slice(-4),
-          name: personName,
-          mobile: cleanMobile,
-          email: cleanEmail,
-          role: 'Dealer',
-          gstin: '29ABCDE' + Math.floor(1000 + Math.random() * 9000) + 'F1Z5',
-          zohoVerified: true,
-          credit30Days: true,
-          credit90Days: false,
-          creditLimit: '₹3,00,000',
-          availableCredit: '₹3,00,000',
-          city: 'Bengaluru',
-          createdAt: new Date().toISOString()
-        };
-        if (!db.dealers) db.dealers = [];
-        db.dealers.push(dealer);
+      // STEP 1: Dealer Registration Verification flow
+      if (isRegistration) {
+        if (!dealer) {
+          dealer = {
+            id: 'DLR-' + Date.now().toString().slice(-4),
+            name: personName,
+            contactPerson: personName,
+            mobile: cleanMobile,
+            email: cleanEmail,
+            role: 'Dealer',
+            gstin: '29ABCDE' + Math.floor(1000 + Math.random() * 9000) + 'F1Z5',
+            status: 'PENDING',
+            zohoVerified: false,
+            credit30Days: false,
+            credit90Days: false,
+            creditLimit: 0,
+            availableCredit: 0,
+            outstandingDue: 0,
+            nextDueDate: 'None',
+            totalOrders: 0,
+            totalVolume: 0,
+            city: 'Bengaluru',
+            createdAt: new Date().toISOString()
+          };
+          if (!db.dealers) db.dealers = [];
+          db.dealers.push(dealer);
+        } else {
+          dealer.name = personName || dealer.name;
+          dealer.email = cleanEmail;
+          if (!dealer.status) dealer.status = 'PENDING';
+        }
+
+        // Notify Super Admin of new Dealer registration with status PENDING
+        if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
+        db.notifications.unshift({
+          id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
+          targetGroup: 'Admin',
+          type: 'DEALER_REGISTRATION_PENDING',
+          priority: 'urgent',
+          title: `⚠️ New Dealer Registered (PENDING): ${dealer.name}`,
+          message: `Dealer "${dealer.name}" has completed registration with status PENDING. Contact: ${dealer.mobile}, Email: ${dealer.email}, GSTIN: ${dealer.gstin}. Super Admin review and Zoho Inventory customer verification required.`,
+          sentAt: 'Just now',
+          createdAt: new Date().toISOString(),
+          sender: 'Registration Service',
+          dealerId: dealer.id,
+          dealerName: dealer.name,
+          dealerEmail: dealer.email,
+          dealerMobile: dealer.mobile
+        });
         saveDb(db);
-      } else {
-        if (personName && !dealer.name) dealer.name = personName;
-        if (cleanEmail && !dealer.email) dealer.email = cleanEmail;
-        saveDb(db);
+
+        (async () => {
+          try {
+            await sendAdminDealerPendingNotificationEmail({
+              dealer,
+              reason: 'Dealer registered via Email OTP with status PENDING. Super Admin review and Zoho Inventory customer verification required.'
+            });
+          } catch (e) {
+            console.warn('[Admin Notification Email Warning]:', e.message);
+          }
+        })();
+
+        return res.json({
+          success: true,
+          message: `Dealer account registered successfully for ${dealer.name} with status PENDING. Please proceed to login.`,
+          user: dealer,
+          status: 'PENDING'
+        });
       }
+
+      // STEP 2 & 3: Dealer Login Flow (Email & Phone OTP -> Zoho Verification)
+      if (!dealer) {
+        return res.status(404).json({
+          success: false,
+          message: 'No registered dealer account found matching this email or mobile. Please complete dealer registration first.'
+        });
+      }
+
+      // Check if suspended by governance
+      if (dealer.status === 'Suspended') {
+        return res.status(403).json({
+          success: false,
+          accessDenied: true,
+          status: 'Suspended',
+          message: 'Your wholesale dealer account has been suspended by Corporate Governance. Please contact system support.'
+        });
+      }
+
+      // STEP 3: Check dealer record & approval status in Zoho Inventory
+      const zohoCheck = await searchZohoContact({ email: cleanEmail, mobile: cleanMobile });
+
+      // STEP 5: If Dealer Is Not Found in Zoho: Deny dashboard access and notify the Super Admin with registration details. Keep dealer status as PENDING.
+      if (!zohoCheck.found) {
+        console.warn(`[Zoho Verification] ❌ Dealer "${dealer.name}" (${cleanEmail}, ${cleanMobile}) NOT found in Zoho Inventory.`);
+        dealer.status = 'PENDING';
+        dealer.zohoVerified = false;
+        saveDb(db);
+
+        // Notify Super Admin with dealer's registration details
+        if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
+        db.notifications.unshift({
+          id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
+          targetGroup: 'Admin',
+          type: 'DEALER_NOT_IN_ZOHO',
+          priority: 'urgent',
+          title: `🚨 Dealer Not Found in Zoho Inventory: ${dealer.name}`,
+          message: `Dealer "${dealer.name}" (Mobile: ${dealer.mobile}, Email: ${dealer.email}, GSTIN: ${dealer.gstin || 'N/A'}) attempted login but has no customer record in Zoho Inventory. Please review details, create customer in Zoho Inventory, and activate dealer status.`,
+          sentAt: 'Just now',
+          createdAt: new Date().toISOString(),
+          sender: 'Zoho Verification Gateway',
+          dealerId: dealer.id,
+          dealerName: dealer.name,
+          dealerEmail: dealer.email,
+          dealerMobile: dealer.mobile
+        });
+        saveDb(db);
+
+        (async () => {
+          try {
+            await sendAdminDealerPendingNotificationEmail({
+              dealer,
+              reason: 'Dealer attempted login but customer record was not found in Zoho Inventory. Account status remains PENDING.'
+            });
+          } catch (e) {
+            console.warn('[Admin Notification Email Warning]:', e.message);
+          }
+        })();
+
+        return res.status(403).json({
+          success: false,
+          accessDenied: true,
+          zohoVerified: false,
+          status: 'PENDING',
+          message: 'Access Denied: Dealer customer record was not found in Zoho Inventory. Your account status is PENDING. Super Admin has been notified with your registration details for review and verification.'
+        });
+      }
+
+      // Zoho record was found!
+      const zohoContact = zohoCheck.contact;
+      if (zohoContact?.status && zohoContact.status.toLowerCase() !== 'active') {
+        return res.status(403).json({
+          success: false,
+          accessDenied: true,
+          message: `Access Denied: Your customer record in Zoho Inventory is marked as "${zohoContact.status}". Active status in Zoho Inventory is required.`
+        });
+      }
+
+      // IMPORTANT REQUIREMENT: Ensure Zoho record existence alone does not grant access; the dealer must be ACTIVE and approved.
+      const isApprovedInPlumbMart = dealer.status === 'ACTIVE' || dealer.status === 'Approved';
+      if (!isApprovedInPlumbMart) {
+        dealer.zohoVerified = true;
+        if (zohoContact?.contactId) dealer.zohoContactId = zohoContact.contactId;
+        if (zohoContact) dealer.zohoDetails = zohoContact;
+        saveDb(db);
+
+        console.warn(`[Zoho Verification] ⚠️ Dealer "${dealer.name}" found in Zoho Inventory but PlumbMart status is "${dealer.status}". Super Admin approval required.`);
+
+        return res.status(403).json({
+          success: false,
+          accessDenied: true,
+          zohoVerified: true,
+          status: dealer.status || 'PENDING',
+          message: 'Access Denied: Customer record verified in Zoho Inventory, but dealer account status is PENDING. Super Admin approval is required to activate your account.'
+        });
+      }
+
+      // STEP 4 & 8: If Dealer Is Active in Zoho AND Approved/Active in PlumbMart -> Grant dashboard access!
+      dealer.zohoVerified = true;
+      if (zohoContact?.contactId) dealer.zohoContactId = zohoContact.contactId;
+      if (zohoContact) dealer.zohoDetails = zohoContact;
+      dealer.status = 'ACTIVE';
+      saveDb(db);
+
+      console.log(`[Zoho Verification] ✅ Dealer "${dealer.name}" successfully verified in Zoho Inventory & approved in PlumbMart! Granting access to dashboard.`);
 
       userObj = {
         ...dealer,
-        role: 'Dealer'
+        role: 'Dealer',
+        status: 'ACTIVE',
+        zohoVerified: true,
+        zohoContact: zohoContact
       };
 
     } else if (assignedRole === 'Plumber') {
@@ -549,22 +709,57 @@ app.post('/api/auth/register', async (req, res) => {
       createdUser = {
         id: 'DLR-' + Date.now().toString().slice(-4),
         name: name.trim(),
+        contactPerson: name.trim(),
         mobile: cleanMobile,
         email: email ? email.trim() : `dealer_${cleanMobile}@plumbmart.com`,
         password: password || '123456',
         role: 'Dealer',
         gstin: gstin || '29ABCDE' + Math.floor(1000 + Math.random() * 9000) + 'F1Z5',
-        zohoVerified: true,
-        credit30Days: true,
+        status: 'PENDING',
+        zohoVerified: false,
+        credit30Days: false,
         credit90Days: false,
-        creditLimit: '₹3,00,000',
-        availableCredit: '₹3,00,000',
+        creditLimit: 0,
+        availableCredit: 0,
+        outstandingDue: 0,
+        nextDueDate: 'None',
+        totalOrders: 0,
+        totalVolume: 0,
         city: city || 'Bengaluru',
         createdAt: new Date().toISOString()
       };
       if (!db.dealers) db.dealers = [];
       db.dealers.push(createdUser);
+
+      // Notify Super Admin of new Dealer registration with status PENDING
+      if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
+      db.notifications.unshift({
+        id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
+        targetGroup: 'Admin',
+        type: 'DEALER_REGISTRATION_PENDING',
+        priority: 'urgent',
+        title: `⚠️ New Dealer Registered (PENDING): ${createdUser.name}`,
+        message: `Dealer "${createdUser.name}" has registered with status PENDING. Contact: ${createdUser.mobile}, Email: ${createdUser.email}, GSTIN: ${createdUser.gstin}. Super Admin review and Zoho Inventory customer verification required.`,
+        sentAt: 'Just now',
+        createdAt: new Date().toISOString(),
+        sender: 'Registration Service',
+        dealerId: createdUser.id,
+        dealerName: createdUser.name,
+        dealerEmail: createdUser.email,
+        dealerMobile: createdUser.mobile
+      });
       saveDb(db);
+
+      (async () => {
+        try {
+          await sendAdminDealerPendingNotificationEmail({
+            dealer: createdUser,
+            reason: 'New dealer registration submitted with status PENDING. Super Admin review and Zoho Inventory customer verification required.'
+          });
+        } catch (e) {
+          console.warn('[Admin Notification Email Warning]:', e.message);
+        }
+      })();
     } else if (assignedRole === 'Plumber') {
       createdUser = {
         id: 'PLM-' + Date.now().toString().slice(-4),
@@ -648,21 +843,28 @@ app.get('/api/auth/check-customer/:mobile', async (req, res) => {
 
 // 4. Dynamic Login API (Credentials / Fallback)
 app.post('/api/auth/login', async (req, res) => {
-  const { mobile, password } = req.body;
+  const { mobile, email, password } = req.body;
 
-  if (!mobile) {
-    return res.status(400).json({ success: false, message: 'Please enter registered mobile number' });
+  if (!mobile && !email) {
+    return res.status(400).json({ success: false, message: 'Please enter registered mobile number or email' });
   }
 
-  const cleanMobile = String(mobile).replace(/\D/g, '').slice(-10);
+  const cleanMobile = mobile ? String(mobile).replace(/\D/g, '').slice(-10) : '';
+  const cleanEmail = email ? String(email).trim().toLowerCase() : '';
   const db = getDb();
 
   // Search in all three tables
-  let matchedUser = (db.dealers || []).find(d => d.mobile === cleanMobile);
+  let matchedUser = (db.dealers || []).find(d => 
+    (cleanMobile && d.mobile === cleanMobile) || 
+    (cleanEmail && (d.email || '').toLowerCase() === cleanEmail)
+  );
   if (!matchedUser) {
-    matchedUser = (db.plumbers || []).find(p => p.mobile === cleanMobile);
+    matchedUser = (db.plumbers || []).find(p => 
+      (cleanMobile && p.mobile === cleanMobile) || 
+      (cleanEmail && (p.email || '').toLowerCase() === cleanEmail)
+    );
   }
-  if (!matchedUser) {
+  if (!matchedUser && cleanMobile) {
     const cust = await findCustomerByMobile(cleanMobile);
     if (cust) {
       matchedUser = {
@@ -709,6 +911,16 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(404).json({ success: false, message: 'Account not found with this mobile number. Please register.' });
   }
 
+  // Check Dealer Status
+  if (matchedUser.role === 'Dealer' && (matchedUser.status === 'PENDING' || matchedUser.status === 'Pending')) {
+    return res.status(403).json({
+      success: false,
+      accessDenied: true,
+      status: 'PENDING',
+      message: 'Access Denied: Dealer account status is PENDING Super Admin approval and Zoho Inventory verification.'
+    });
+  }
+
   // Verify password / OTP
   const isValidPass = !password || password === '123456' || password === matchedUser.password;
   if (!isValidPass) {
@@ -747,6 +959,42 @@ app.post('/api/auth/admin-login', (req, res) => {
 // ROLE SPECIFIC DATA & GOVERNANCE APIS
 // ==========================================
 
+// Helper to resolve regional supply warehouse / hub depot based on dealer location
+function resolveDealerHub(d) {
+  if (d.hub && typeof d.hub === 'string' && d.hub.trim()) return d.hub.trim();
+  const city = (d.city || '').toLowerCase().trim();
+  const address = (d.address || d.deliveryAddress || '').toLowerCase();
+  const gstin = (d.gstin || '').toUpperCase().trim();
+
+  if (city.includes('visakhapatnam') || city.includes('vizag') || address.includes('visakhapatnam') || address.includes('vizag')) {
+    return 'Vizag Central Depot Hub';
+  }
+  if (city.includes('vijayawada') || address.includes('vijayawada')) {
+    return 'Vijayawada Supply Depot';
+  }
+  if (city.includes('guntur') || address.includes('guntur')) {
+    return 'Guntur Distribution Hub';
+  }
+  if (city.includes('tirupati') || address.includes('tirupati')) {
+    return 'Tirupati Supply Hub';
+  }
+  if (city.includes('hyderabad') || city.includes('secunderabad') || address.includes('hyderabad')) {
+    return 'Hyderabad Regional Hub';
+  }
+  if (city.includes('chennai') || address.includes('chennai')) {
+    return 'Chennai Central Hub';
+  }
+  if (city.includes('bengaluru') || city.includes('bangalore') || address.includes('bengaluru') || address.includes('bangalore')) {
+    return 'Bengaluru Central Depot';
+  }
+  if (gstin.startsWith('37')) return 'Vizag Central Depot Hub';
+  if (gstin.startsWith('36')) return 'Hyderabad Regional Hub';
+  if (gstin.startsWith('33')) return 'Chennai Central Hub';
+  if (gstin.startsWith('29')) return 'Bengaluru Central Depot';
+  if (d.city && typeof d.city === 'string' && d.city.trim()) return `${d.city.trim()} Distribution Depot`;
+  return 'Bengaluru Central Depot';
+}
+
 // Get Dealers list (Admin & B2B) with dynamic order calculation
 app.get('/api/dealers', (req, res) => {
   const db = getDb();
@@ -770,6 +1018,7 @@ app.get('/api/dealers', (req, res) => {
 
     return {
       ...dealer,
+      hub: dealer.hub || resolveDealerHub(dealer),
       creditLimit: limit,
       outstandingDue: finalDue,
       availableCredit: available,
@@ -808,6 +1057,7 @@ app.get('/api/dealers/:id', (req, res) => {
     success: true,
     data: {
       ...dealer,
+      hub: dealer.hub || resolveDealerHub(dealer),
       creditLimit: limit,
       outstandingDue: finalDue,
       availableCredit: available
@@ -864,7 +1114,7 @@ app.put('/api/dealers/:id', (req, res) => {
           console.warn('[Auto-Email Suspension Warning]:', mErr.message);
         }
       })();
-    } else if (req.body.status === 'Approved') {
+    } else if (req.body.status === 'Approved' || req.body.status === 'ACTIVE') {
       const adminOfficer = req.body.approvedBy || {
         name: 'System Administrator',
         email: 'admin@plumbmart.com',
@@ -875,8 +1125,9 @@ app.put('/api/dealers/:id', (req, res) => {
       };
       updated.approvedBy = adminOfficer;
       updated.suspendedBy = null;
+      updated.status = 'ACTIVE';
 
-      // Async dispatch approval notification email to dealer
+      // Async dispatch approval notification email to dealer confirming approval
       (async () => {
         try {
           await sendDealerApprovalNotificationEmail({
@@ -887,6 +1138,9 @@ app.put('/api/dealers/:id', (req, res) => {
           console.warn('[Auto-Email Approval Warning]:', mErr.message);
         }
       })();
+    } else if (req.body.status === 'PENDING' || req.body.status === 'Pending') {
+      updated.status = 'PENDING';
+      updated.zohoVerified = false;
     }
 
     db.dealers[index] = updated;
@@ -910,6 +1164,75 @@ app.put('/api/dealers/:id', (req, res) => {
   
   saveDb(db);
   res.json({ success: true, message: 'Dealer updated successfully', data: db.dealers[index] });
+});
+
+// Check dealer existence and record status in Zoho Inventory
+app.get('/api/dealers/:id/zoho-status', async (req, res) => {
+  try {
+    const db = getDb();
+    const dealer = (db.dealers || []).find(d => d.id === req.params.id || d.mobile === req.params.id);
+    if (!dealer) {
+      return res.status(404).json({ success: false, message: 'Dealer not found in database.' });
+    }
+
+    const zohoCheck = await searchZohoContact({ email: dealer.email, mobile: dealer.mobile });
+    if (zohoCheck.found && zohoCheck.contact) {
+      dealer.zohoVerified = true;
+      dealer.zohoContactId = zohoCheck.contact.contactId;
+      dealer.zohoDetails = zohoCheck.contact;
+      saveDb(db);
+    }
+
+    return res.json({
+      success: true,
+      existsInZoho: zohoCheck.found,
+      zohoContact: zohoCheck.contact || null,
+      dealerStatus: dealer.status,
+      zohoVerified: dealer.zohoVerified
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Create Customer Record in Zoho Inventory (Strictly prevents duplicate records)
+app.post('/api/dealers/:id/create-zoho-customer', async (req, res) => {
+  try {
+    const db = getDb();
+    const dealerIndex = (db.dealers || []).findIndex(d => d.id === req.params.id || d.mobile === req.params.id);
+    if (dealerIndex === -1) {
+      return res.status(404).json({ success: false, message: 'Dealer not found in database.' });
+    }
+
+    const dealer = db.dealers[dealerIndex];
+    const result = await createZohoCustomerContact({
+      name: dealer.contactPerson || dealer.name,
+      companyName: dealer.name,
+      email: dealer.email,
+      mobile: dealer.mobile,
+      gstin: dealer.gstin,
+      city: dealer.city || 'Bengaluru'
+    });
+
+    if (result.contact?.contactId) {
+      dealer.zohoVerified = true;
+      dealer.zohoContactId = result.contact.contactId;
+      dealer.zohoDetails = result.contact;
+      db.dealers[dealerIndex] = dealer;
+      saveDb(db);
+    }
+
+    return res.json({
+      success: true,
+      alreadyExists: Boolean(result.alreadyExists),
+      created: Boolean(result.created),
+      message: result.message || (result.alreadyExists ? 'Customer record already exists in Zoho Inventory.' : 'Customer record successfully created in Zoho Inventory.'),
+      contact: result.contact
+    });
+  } catch (err) {
+    console.error('[Create Zoho Customer API Error]:', err.message);
+    return res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // Explicit endpoint: Send Dealer Suspension Email
@@ -1074,23 +1397,43 @@ app.get('/api/plumbers', (req, res) => {
 });
 
 // Update Plumber KYC / status
-app.put('/api/plumbers/:id', (req, res) => {
+app.put('/api/plumbers/:id', async (req, res) => {
   const db = getDb();
-  const index = db.plumbers.findIndex(p => p.id === req.params.id);
+  if (!db.plumbers) db.plumbers = [];
+  const index = db.plumbers.findIndex(p => p.id === req.params.id || p.mobile === req.params.id);
   if (index === -1) {
     return res.status(404).json({ success: false, message: 'Plumber not found' });
   }
 
-  db.plumbers[index] = { ...db.plumbers[index], ...req.body };
+  const updatedStatus = req.body.status || db.plumbers[index].status;
+  db.plumbers[index] = { 
+    ...db.plumbers[index], 
+    ...req.body,
+    status: updatedStatus,
+    verificationStatus: updatedStatus
+  };
+  const targetPlumber = db.plumbers[index];
+
+  // Also update in Supabase PostgreSQL if mobile exists
+  if (targetPlumber.mobile) {
+    try {
+      await updatePlumberStatusInDb(targetPlumber.mobile, updatedStatus);
+    } catch (err) {
+      console.warn('[Supabase Plumber Status Update Warning]:', err.message);
+    }
+  }
 
   // Create an in-app notification entry for Plumbers
   if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
-  const plumbNoticeMsg = req.body.status 
-    ? `Your plumber account verification status is now "${req.body.status}".`
-    : 'Your plumber profile credentials, skills, or rating were updated by Admin.';
+  const plumbNoticeMsg = updatedStatus === 'SUSPENDED'
+    ? 'Your plumber account has been SUSPENDED by Administration. Job execution is locked.'
+    : (req.body.status 
+      ? `Your plumber account verification status is now "${req.body.status}".`
+      : 'Your plumber profile credentials, skills, or rating were updated by Admin.');
+
   db.notifications.unshift({
     id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
-    title: 'Plumber Profile & Verification Updated',
+    title: updatedStatus === 'SUSPENDED' ? '⚠️ Plumber Account Suspended' : 'Plumber Profile & Verification Updated',
     message: plumbNoticeMsg,
     targetGroup: 'Plumbers',
     priority: 'high',
@@ -2196,6 +2539,43 @@ app.get('/api/zoho/items', async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 });
+
+/**
+ * 6. POST /api/zoho/verify-dealer
+ * Dynamically verifies if a dealer contact exists in Zoho Inventory Contacts
+ */
+app.post('/api/zoho/verify-dealer', async (req, res) => {
+  try {
+    const { email, mobile } = req.body;
+    if (!email && !mobile) {
+      return res.status(400).json({ success: false, message: 'Email or mobile number is required for Zoho verification.' });
+    }
+
+    const cleanEmail = email ? String(email).trim().toLowerCase() : '';
+    const cleanMobile = mobile ? String(mobile).replace(/\D/g, '').slice(-10) : '';
+
+    const result = await searchZohoContact({ email: cleanEmail, mobile: cleanMobile });
+    if (result.found) {
+      return res.json({
+        success: true,
+        zohoVerified: true,
+        message: `Authorized Dealer confirmed in Zoho Inventory: ${result.contact.companyName}`,
+        contact: result.contact
+      });
+    } else {
+      return res.status(404).json({
+        success: false,
+        zohoVerified: false,
+        message: result.reason || `No contact matching "${cleanEmail || cleanMobile}" found in Zoho Inventory (Org: 60091844668)`,
+        error: result.error
+      });
+    }
+  } catch (err) {
+    console.error('[API /api/zoho/verify-dealer error]:', err);
+    return res.status(500).json({ success: false, message: 'Zoho verification query failed: ' + err.message });
+  }
+});
+
 
 // 4. Zoho Sync Trigger & Status Check
 app.post('/api/admin/zoho-sync', (req, res) => {

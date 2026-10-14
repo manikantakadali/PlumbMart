@@ -610,10 +610,19 @@ async function getPlumberByMobile(mobile) {
   const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
   if (!cleanMobile) return null;
 
+  // Check local database first for instant admin updates
+  const local = getDb();
+  const localMatch = (local.plumbers || []).find(p => p.mobile === cleanMobile || p.id === mobile);
+
   try {
     const res = await query('SELECT * FROM plumbers WHERE mobile = $1', [cleanMobile]);
     if (res.rows.length > 0) {
-      return formatPlumberRow(res.rows[0]);
+      const row = formatPlumberRow(res.rows[0]);
+      if (localMatch && localMatch.status) {
+        row.status = localMatch.status;
+        row.verificationStatus = localMatch.status;
+      }
+      return row;
     }
 
     // Auto-create plumber profile in Supabase if not found
@@ -647,7 +656,12 @@ async function getPlumberByMobile(mobile) {
         'Sanitary Hydrostatic Leak Testing'
       ])
     ]);
-    return formatPlumberRow(insertRes.rows[0]);
+    const createdRow = formatPlumberRow(insertRes.rows[0]);
+    if (localMatch && localMatch.status) {
+      createdRow.status = localMatch.status;
+      createdRow.verificationStatus = localMatch.status;
+    }
+    return createdRow;
   } catch (err) {
     console.warn('[Supabase Fallback] getPlumberByMobile error:', err.message);
     const local = getDb();
@@ -675,8 +689,10 @@ async function updatePlumberProfile(mobile, updateData) {
         address = COALESCE($7, address),
         city = COALESCE($8, city),
         experience_years = COALESCE($9, experience_years),
+        status = COALESCE($10, status),
+        verification_status = COALESCE($10, verification_status),
         updated_at = NOW()
-      WHERE mobile = $10
+      WHERE mobile = $11
       RETURNING *;
     `, [
       updateData.name || null,
@@ -688,6 +704,7 @@ async function updatePlumberProfile(mobile, updateData) {
       updateData.address || null,
       updateData.city || null,
       updateData.experience ? parseInt(updateData.experience, 10) : null,
+      updateData.status || updateData.verificationStatus || null,
       cleanMobile
     ]);
 
@@ -837,6 +854,28 @@ async function getProductsList() {
   return [];
 }
 
+/**
+ * Update Plumber Status directly in Supabase
+ */
+async function updatePlumberStatusInDb(mobile, status) {
+  const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
+  if (!cleanMobile) return null;
+  try {
+    const res = await query(`
+      UPDATE plumbers SET 
+        status = $1, 
+        verification_status = $1, 
+        updated_at = NOW() 
+      WHERE mobile = $2
+      RETURNING *;
+    `, [status, cleanMobile]);
+    return res.rows[0] ? formatPlumberRow(res.rows[0]) : null;
+  } catch (err) {
+    console.warn('[Supabase Fallback] updatePlumberStatusInDb warning:', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   pool,
   query,
@@ -855,6 +894,7 @@ module.exports = {
   updateCustomerProfile,
   getPlumberByMobile,
   updatePlumberProfile,
+  updatePlumberStatusInDb,
   createPlumberProfile,
   getProductsList,
   formatProductRow

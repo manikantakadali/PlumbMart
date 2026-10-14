@@ -500,6 +500,10 @@ export default function App() {
           path="/admin/dashboard"
           element={<AdminDashboard currentUser={currentUser} onLogout={handleLogout} />}
         />
+        <Route
+          path="/admin/dealers/:dealerId"
+          element={<AdminDashboard currentUser={currentUser} onLogout={handleLogout} />}
+        />
 
         {/* Fallback to Home */}
         <Route path="*" element={<Navigate to="/" replace />} />

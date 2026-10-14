@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { 
   ShieldCheck, 
   ArrowLeft, 
@@ -45,6 +45,7 @@ import {
   FileCheck,
   ChevronDown,
   RotateCcw,
+  RotateCw,
   Truck,
   Printer,
   Trash2,
@@ -60,6 +61,7 @@ import {
 
 export default function AdminDashboard({ currentUser, onLogout }) {
   const navigate = useNavigate();
+  const { dealerId: routeDealerId } = useParams();
 
   // Navigation Menu State
   // 'overview' | 'customers' | 'dealers' | 'plumbers' | 'orders' | 'products' | 'payments' | 'reports' | 'notifications'
@@ -170,6 +172,31 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   const [dealers, setDealers] = useState([]);
   const [selectedDealer, setSelectedDealer] = useState(null);
   const [dealerSearch, setDealerSearch] = useState('');
+  const [viewingDealer, setViewingDealer] = useState(null);
+  const [dealerNoticeText, setDealerNoticeText] = useState('');
+  const [isSendingDealerNotice, setIsSendingDealerNotice] = useState(false);
+  const [quickLimitInput, setQuickLimitInput] = useState('');
+
+  // Sync URL route parameter /admin/dealers/:dealerId with viewingDealer
+  useEffect(() => {
+    if (routeDealerId && dealers.length > 0) {
+      const match = dealers.find(d => d.id === routeDealerId || d.mobile === routeDealerId);
+      if (match) {
+        setViewingDealer(match);
+        setActiveTab('dealers');
+      }
+    }
+  }, [routeDealerId, dealers]);
+
+  // Keep viewingDealer up to date when dealers list updates
+  useEffect(() => {
+    if (viewingDealer) {
+      const refreshed = dealers.find(d => d.id === viewingDealer.id);
+      if (refreshed) {
+        setViewingDealer(refreshed);
+      }
+    }
+  }, [dealers]);
 
   // 3. Plumbers
   const [plumbers, setPlumbers] = useState([]);
@@ -306,7 +333,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
           creditLimit: typeof d.creditLimit === 'number' ? d.creditLimit : (parseInt((d.creditLimit || '500000').toString().replace(/[^0-9]/g, ''), 10) || 500000),
           availableCredit: typeof d.availableCredit === 'number' ? d.availableCredit : (parseInt((d.availableCredit !== undefined ? d.availableCredit : '500000').toString().replace(/[^0-9]/g, ''), 10) || 500000),
           outstandingDue: typeof d.outstandingDue === 'number' ? d.outstandingDue : 0,
-          status: d.status || (d.zohoVerified ? 'Approved' : 'Pending')
+          status: d.status || (d.zohoVerified ? 'ACTIVE' : 'PENDING')
         })));
       }
     });
@@ -644,13 +671,14 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     setTimeout(() => setSyncToast(null), 3500);
   };
 
-  // Plumber Verification & Status Toggle
+  // Plumber Verification & Status Toggle with Real-time Multi-Tab Broadcast
   const handleUpdatePlumber = (plumberId, updates) => {
     if (updates.status === 'SUSPENDED' || updates.status === 'REJECTED') {
       playWarningSound();
     } else {
       playSuccessSound();
     }
+
     setPlumbers(prev => prev.map(p => 
       p.id === plumberId ? { ...p, ...updates } : p
     ));
@@ -658,13 +686,46 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       setSelectedPlumber(prev => ({ ...prev, ...updates }));
     }
 
-    // Instant In-App notification broadcast to Plumbers
-    const plumbMsg = updates.status 
-      ? `Your plumber account verification status is now "${updates.status}".`
-      : 'Your plumber credentials, skills, and rating have been updated by Admin.';
+    const targetPlumber = plumbers.find(p => p.id === plumberId) || selectedPlumber;
+    const targetMobile = targetPlumber?.mobile;
+
+    // 1. Cross-tab Broadcast Channel
+    const broadcastPayload = {
+      plumberId,
+      mobile: targetMobile,
+      updates,
+      status: updates.status,
+      timestamp: Date.now()
+    };
+
+    try {
+      const ch = new BroadcastChannel('plumbmart_plumbers');
+      ch.postMessage(broadcastPayload);
+      setTimeout(() => ch.close(), 3000);
+    } catch (e) {}
+
+    // 2. LocalStorage broadcast & plumbmart_user sync
+    try {
+      localStorage.setItem('plumbmart_plumber_status_broadcast', JSON.stringify(broadcastPayload));
+      const savedUserStr = localStorage.getItem('plumbmart_user');
+      if (savedUserStr) {
+        const savedUser = JSON.parse(savedUserStr);
+        if (savedUser && (savedUser.role === 'Plumber' || savedUser.id === plumberId || (targetMobile && savedUser.mobile === targetMobile))) {
+          localStorage.setItem('plumbmart_user', JSON.stringify({ ...savedUser, ...updates }));
+        }
+      }
+    } catch (e) {}
+
+    // 3. Custom Event dispatch
+    window.dispatchEvent(new CustomEvent('plumbmart_plumber_updated', { detail: broadcastPayload }));
+
+    // 4. Instant In-App notification broadcast to Plumbers
+    const plumbMsg = updates.status === 'SUSPENDED'
+      ? 'Your plumber account has been SUSPENDED by Administration. Job execution is locked.'
+      : (updates.status ? `Your plumber account verification status is now "${updates.status}".` : 'Your plumber credentials have been updated.');
 
     dispatchInAppNotification({
-      title: 'Plumber Profile & Verification Updated',
+      title: updates.status === 'SUSPENDED' ? '⚠️ Plumber Account Suspended' : 'Plumber Profile & Verification Updated',
       message: plumbMsg,
       targetGroup: 'Plumbers',
       priority: 'high',
@@ -672,11 +733,48 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       sender: admin.name || 'Admin Operations'
     });
 
-    fetch(`http://localhost:4000/api/plumbers/${plumberId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates)
-    }).catch(() => {});
+    // 5. Resilient API PUT request
+    const syncPlumber = async () => {
+      let saved = false;
+      try {
+        const res = await fetch(`/api/plumbers/${plumberId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+        if (res.ok) saved = true;
+      } catch (e) {}
+
+      if (!saved) {
+        try {
+          const res = await fetch(`http://localhost:5000/api/plumbers/${plumberId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+          });
+          if (res.ok) saved = true;
+        } catch (e) {}
+      }
+
+      if (!saved) {
+        try {
+          await fetch(`http://localhost:4000/api/plumbers/${plumberId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+          });
+        } catch (e) {}
+      }
+    };
+    syncPlumber();
+
+    // 6. Admin Toast
+    if (updates.status === 'SUSPENDED') {
+      setSyncToast(`Plumber #${plumberId} SUSPENDED! Real-time lockdown dispatched.`);
+    } else {
+      setSyncToast(`Plumber #${plumberId} status updated to ${updates.status || 'Verified'}.`);
+    }
+    setTimeout(() => setSyncToast(null), 3500);
   };
 
   // Update Order Status & Broadcast Live Update to Customer Portal
@@ -1572,7 +1670,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                     {[
                       { tab: 'dealers', title: 'Verify Dealers with Zoho', desc: `${dealers.filter(d => !d.zohoVerified).length} pending Zoho checks` },
                       { tab: 'plumbers', title: 'Verify Plumber KYC Licenses', desc: `${plumbers.filter(p => p.status === 'PENDING_VERIFICATION').length} awaiting verification` },
-                      { tab: 'payments', title: 'Review 30D/90D Credit Due Dates', desc: `₹${dealers.reduce((s, d) => s + d.outstandingDue, 0).toLocaleString('en-IN')} outstanding` },
+                      { tab: 'payments', title: 'Review 30D/90D Credit Due Dates', desc: `₹${dealers.reduce((s, d) => s + (Number(d.outstandingDue) || 0), 0).toLocaleString('en-IN')} outstanding` },
                       { tab: 'notifications', title: 'Broadcast Push Notification', desc: 'Alert customers, dealers or plumbers' }
                     ].map((item, idx) => (
                       <div
@@ -1721,6 +1819,481 @@ export default function AdminDashboard({ currentUser, onLogout }) {
           {/* 3. DEALER MANAGEMENT                                    */}
           {/* ======================================================== */}
           {activeTab === 'dealers' && (
+            viewingDealer ? (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* 1. Header Navigation & Quick Actions */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        playClickSound();
+                        setViewingDealer(null);
+                        navigate('/admin');
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition flex items-center gap-2 text-xs font-bold cursor-pointer"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      <span>Back to Dealers List</span>
+                    </button>
+                    <div className="h-5 w-px bg-slate-800 hidden sm:block" />
+                    <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400">
+                      <span>Dealers</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                      <span className="font-semibold text-white">{viewingDealer.name}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={async () => {
+                        playClickSound();
+                        try {
+                          const res = await fetch(`/api/dealers/${viewingDealer.id}/zoho-status`);
+                          const data = await res.json();
+                          if (data.existsInZoho) {
+                            playSuccessSound();
+                            setSyncToast(`✓ Dealer verified in Zoho CRM (${data.zohoContact?.companyName || data.zohoContact?.contactName || 'Active'}).`);
+                            handleUpdateDealer(viewingDealer.id, { zohoVerified: true, zohoDetails: data.zohoContact });
+                          } else {
+                            playWarningSound();
+                            setSyncToast(`⚠️ Record NOT found in Zoho Inventory for ${viewingDealer.email}.`);
+                            handleUpdateDealer(viewingDealer.id, { zohoVerified: false });
+                          }
+                          setTimeout(() => setSyncToast(null), 4000);
+                        } catch (e) {
+                          setSyncToast('Failed to check Zoho status.');
+                        }
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold border border-slate-800 flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <RotateCw className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Check Zoho</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        playClickSound();
+                        setSelectedDealer(viewingDealer);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold border border-slate-800 flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Edit Credit Policy</span>
+                    </button>
+
+                    {viewingDealer.status !== 'Approved' && viewingDealer.status !== 'ACTIVE' && viewingDealer.status !== 'Active' ? (
+                      <button
+                        onClick={() => {
+                          handleUpdateDealer(viewingDealer.id, { status: 'ACTIVE', zohoVerified: true });
+                        }}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/25 flex items-center gap-1.5 transition cursor-pointer"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>Approve Dealer</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          handleUpdateDealer(viewingDealer.id, { status: 'Suspended' });
+                        }}
+                        className="px-4 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 text-xs font-bold border border-rose-600/30 flex items-center gap-1.5 transition cursor-pointer"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        <span>Suspend Access</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Hero Profile Banner */}
+                <div className="bg-slate-950 rounded-3xl border border-slate-800 p-6 shadow-xl relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+                  
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+                    <div className="flex items-start sm:items-center gap-4">
+                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-blue-600 flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-indigo-600/30 shrink-0">
+                        <Building2 className="w-8 h-8" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="font-mono font-bold text-xs text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-lg border border-indigo-500/20">
+                            {viewingDealer.id || 'DLR'}
+                          </span>
+                          <span className="font-mono text-xs text-slate-300 bg-slate-900 px-2.5 py-0.5 rounded-lg border border-slate-800">
+                            GSTIN: {viewingDealer.gstin || 'N/A'}
+                          </span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                            viewingDealer.status === 'Approved' || viewingDealer.status === 'ACTIVE' || viewingDealer.status === 'Active'
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                              : viewingDealer.status === 'Pending' || viewingDealer.status === 'PENDING'
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                              : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                          }`}>
+                            Status: {viewingDealer.status === 'Approved' ? 'ACTIVE' : (viewingDealer.status || 'PENDING')}
+                          </span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                            viewingDealer.zohoVerified
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                          }`}>
+                            {viewingDealer.zohoVerified ? '✓ Zoho CRM Record Verified' : '⚠️ Pending Zoho Verification'}
+                          </span>
+                        </div>
+
+                        <h1 className="text-2xl font-black text-white tracking-tight">{viewingDealer.name || 'Registered Dealer'}</h1>
+                        <p className="text-xs text-slate-400 mt-1 flex items-center gap-3 flex-wrap">
+                          <span>Contact Person: <strong className="text-slate-200">{viewingDealer.contactPerson || viewingDealer.name || 'Authorized Contact'}</strong></span>
+                          <span>&bull;</span>
+                          <span>Mobile: <strong className="text-slate-200 font-mono">+91 {viewingDealer.mobile || 'N/A'}</strong></span>
+                          <span>&bull;</span>
+                          <span>Email: <strong className="text-slate-200 font-mono">{viewingDealer.email || 'N/A'}</strong></span>
+                          <span>&bull;</span>
+                          <span>Location: <strong className="text-slate-200">{viewingDealer.city || 'Bengaluru, Karnataka'}</strong></span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Metrics Summary Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-slate-400 text-xs">
+                      <span className="font-bold uppercase tracking-wider text-[10px]">Approved Credit Limit</span>
+                      <CreditCard className="w-4 h-4 text-indigo-400" />
+                    </div>
+                    <div className="text-xl font-black text-white font-mono">
+                      ₹{(Number(viewingDealer.creditLimit) || 0).toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                      <span className={viewingDealer.credit30Days ? 'text-indigo-400 font-semibold' : 'text-slate-500'}>30D Active</span>
+                      <span>&bull;</span>
+                      <span className={viewingDealer.credit90Days ? 'text-emerald-400 font-semibold' : 'text-slate-500'}>90D Approved</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-slate-400 text-xs">
+                      <span className="font-bold uppercase tracking-wider text-[10px]">Available Credit</span>
+                      <TrendingUp className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div className="text-xl font-black text-emerald-400 font-mono">
+                      ₹{(Number(viewingDealer.availableCredit) || 0).toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      {Math.max(0, Math.round(((Number(viewingDealer.availableCredit) || 0) / (Number(viewingDealer.creditLimit) || 1)) * 100))}% Credit Available
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-slate-400 text-xs">
+                      <span className="font-bold uppercase tracking-wider text-[10px]">Outstanding Balance</span>
+                      <Clock className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <div className="text-xl font-black text-amber-400 font-mono">
+                      ₹{(Number(viewingDealer.outstandingDue) || 0).toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Next Due: <strong className="text-slate-300">{viewingDealer.nextDueDate || 'None'}</strong>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-slate-400 text-xs">
+                      <span className="font-bold uppercase tracking-wider text-[10px]">Total B2B Spend</span>
+                      <Package className="w-4 h-4 text-blue-400" />
+                    </div>
+                    <div className="text-xl font-black text-blue-400 font-mono">
+                      ₹{(Number(viewingDealer.totalVolume) || 0).toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      {orders.filter(o => (o.clientId === viewingDealer.id || o.clientMobile === viewingDealer.mobile || o.clientName === viewingDealer.name) && o.clientType === 'Dealer').length} Orders Placed
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Two-Column Detailed Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                  {/* Left Column (5 Cols) */}
+                  <div className="lg:col-span-5 space-y-5">
+                    {/* Credit Governance & Limits */}
+                    <div className="bg-slate-950 rounded-2xl border border-slate-800 p-5 space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                        <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                          <Sliders className="w-4 h-4 text-indigo-400" />
+                          <span>Credit Facility Governance</span>
+                        </h3>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          Usage: {Math.min(100, Math.round((Math.max(0, (Number(viewingDealer.creditLimit) || 0) - (Number(viewingDealer.availableCredit) || 0)) / (Number(viewingDealer.creditLimit) || 1)) * 100))}%
+                        </span>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[11px]">
+                          <span className="text-slate-400">Credit Utilization</span>
+                          <span className="text-white font-mono font-bold">
+                            ₹{Math.max(0, (Number(viewingDealer.creditLimit) || 0) - (Number(viewingDealer.availableCredit) || 0)).toLocaleString('en-IN')} / ₹{(Number(viewingDealer.creditLimit) || 0).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                        <div className="w-full h-2.5 rounded-full bg-slate-900 overflow-hidden border border-slate-800">
+                          <div 
+                            className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-300 rounded-full"
+                            style={{ width: `${Math.min(100, Math.round((Math.max(0, (Number(viewingDealer.creditLimit) || 0) - (Number(viewingDealer.availableCredit) || 0)) / (Number(viewingDealer.creditLimit) || 1)) * 100))}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Eligibility switches */}
+                      <div className="space-y-2 pt-2">
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800">
+                          <div>
+                            <span className="text-xs font-bold text-white block">30-Day Pay Later Terms</span>
+                            <span className="text-[10px] text-slate-400">Invoice due 30 days from dispatch</span>
+                          </div>
+                          <button
+                            onClick={() => handleUpdateDealer(viewingDealer.id, { credit30Days: !viewingDealer.credit30Days })}
+                            className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                              viewingDealer.credit30Days ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-800 text-slate-400'
+                            }`}
+                          >
+                            {viewingDealer.credit30Days ? 'ENABLED' : 'DISABLED'}
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800">
+                          <div>
+                            <span className="text-xs font-bold text-white block">90-Day Tier 1 Credit</span>
+                            <span className="text-[10px] text-slate-400">Quarterly credit for high volume distributors</span>
+                          </div>
+                          <button
+                            onClick={() => handleUpdateDealer(viewingDealer.id, { credit90Days: !viewingDealer.credit90Days })}
+                            className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                              viewingDealer.credit90Days ? 'APPROVED' : 'LOCKED'}
+                            }`}
+                          >
+                            {viewingDealer.credit90Days ? 'APPROVED' : 'LOCKED'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Quick Credit Limit Adjuster */}
+                      <div className="pt-2 border-t border-slate-800 space-y-2">
+                        <label className="text-xs text-slate-300 font-semibold block">Quick Limit Adjustment (₹):</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            value={quickLimitInput}
+                            onChange={(e) => setQuickLimitInput(e.target.value)}
+                            placeholder={(viewingDealer.creditLimit || '500000').toString()}
+                            className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                          />
+                          <button
+                            onClick={() => {
+                              const val = parseInt(quickLimitInput, 10);
+                              if (!isNaN(val) && val >= 0) {
+                                handleUpdateDealer(viewingDealer.id, {
+                                  creditLimit: val,
+                                  availableCredit: Math.max(0, val - (Number(viewingDealer.outstandingDue) || 0))
+                                });
+                                setQuickLimitInput('');
+                              } else {
+                                setSyncToast('Please enter a valid credit amount');
+                              }
+                            }}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-md shadow-indigo-600/20"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Complete Legal & Business Details */}
+                    <div className="bg-slate-950 rounded-2xl border border-slate-800 p-5 space-y-3.5">
+                      <h3 className="font-bold text-sm text-white pb-3 border-b border-slate-800 flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-blue-400" />
+                        <span>Business &amp; Legal Details</span>
+                      </h3>
+
+                      <div className="space-y-2.5 text-xs">
+                        <div className="flex justify-between py-1 border-b border-slate-900">
+                          <span className="text-slate-400">Business / Trade Name</span>
+                          <span className="font-bold text-white text-right">{viewingDealer.name || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-900">
+                          <span className="text-slate-400">Authorized Contact</span>
+                          <span className="text-slate-200">{viewingDealer.contactPerson || viewingDealer.name || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-900">
+                          <span className="text-slate-400">Mobile Phone</span>
+                          <a href={`tel:${viewingDealer.mobile || ''}`} className="font-mono text-blue-400 hover:underline">
+                            +91 {viewingDealer.mobile || 'N/A'}
+                          </a>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-900">
+                          <span className="text-slate-400">Email Address</span>
+                          <a href={`mailto:${viewingDealer.email || ''}`} className="font-mono text-blue-400 hover:underline">
+                            {viewingDealer.email || 'N/A'}
+                          </a>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-900">
+                          <span className="text-slate-400">GSTIN Identification</span>
+                          <span className="font-mono font-bold text-indigo-300">{viewingDealer.gstin || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-900">
+                          <span className="text-slate-400">Operating City / Region</span>
+                          <span className="text-slate-200">{viewingDealer.city || 'Bengaluru, Karnataka'}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-900">
+                          <span className="text-slate-400">System Dealer ID</span>
+                          <span className="font-mono text-slate-300">{viewingDealer.id || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between py-1">
+                          <span className="text-slate-400">Registration Date</span>
+                          <span className="text-slate-300">
+                            {new Date(viewingDealer.createdAt || Date.now()).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Direct In-App Message / Priority Notice */}
+                    <div className="bg-slate-950 rounded-2xl border border-slate-800 p-5 space-y-3">
+                      <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                        <Send className="w-4 h-4 text-emerald-400" />
+                        <span>Send SuperAdmin Notice to Dealer</span>
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        Dispatch a priority notice directly to {viewingDealer.name}&apos;s dashboard.
+                      </p>
+                      <textarea
+                        value={dealerNoticeText}
+                        onChange={(e) => setDealerNoticeText(e.target.value)}
+                        rows={3}
+                        placeholder="e.g. Your credit limit has been increased to ₹5 Lakhs for festive season stock..."
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                      />
+                      <button
+                        onClick={async () => {
+                          if (!dealerNoticeText.trim()) return;
+                          setIsSendingDealerNotice(true);
+                          playClickSound();
+                          try {
+                            dispatchInAppNotification({
+                              targetRole: 'Dealer',
+                              targetId: viewingDealer.id,
+                              title: 'Official Notice from SuperAdmin',
+                              message: dealerNoticeText.trim(),
+                              type: 'account'
+                            });
+                            playSuccessSound();
+                            setSyncToast(`✓ Priority notice sent to ${viewingDealer.name}!`);
+                            setDealerNoticeText('');
+                            setTimeout(() => setSyncToast(null), 3500);
+                          } catch (e) {
+                            setSyncToast('Failed to send notice.');
+                          } finally {
+                            setIsSendingDealerNotice(false);
+                          }
+                        }}
+                        disabled={isSendingDealerNotice || !dealerNoticeText.trim()}
+                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-md shadow-emerald-600/25"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>{isSendingDealerNotice ? 'Sending Notice...' : 'Send Direct Notice'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Right Column (7 Cols): Wholesale Orders History */}
+                  <div className="lg:col-span-7 space-y-5">
+                    <div className="bg-slate-950 rounded-2xl border border-slate-800 p-5 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                        <div>
+                          <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                            <Package className="w-4 h-4 text-blue-400" />
+                            <span>B2B Wholesale Orders &amp; Invoices</span>
+                          </h3>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            Orders placed by {viewingDealer.name} with live shipment and credit status
+                          </p>
+                        </div>
+                        <span className="text-xs font-bold text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-xl border border-blue-500/20 self-start sm:self-auto">
+                          {orders.filter(o => (o.clientId === viewingDealer.id || o.clientMobile === viewingDealer.mobile || o.clientName === viewingDealer.name) && o.clientType === 'Dealer').length} Total Orders
+                        </span>
+                      </div>
+
+                      {/* Orders Table */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
+                            <tr>
+                              <th className="py-3 px-3">Order ID</th>
+                              <th className="py-3 px-3">Date</th>
+                              <th className="py-3 px-3">Amount</th>
+                              <th className="py-3 px-3">Payment Terms</th>
+                              <th className="py-3 px-3">Order Status</th>
+                              <th className="py-3 px-3 text-right">Credit Due</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/80">
+                            {orders.filter(o => (o.clientId === viewingDealer.id || o.clientMobile === viewingDealer.mobile || o.clientName === viewingDealer.name) && o.clientType === 'Dealer').length === 0 ? (
+                              <tr>
+                                <td colSpan="6" className="py-12 text-center text-slate-400">
+                                  <Package className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                                  <p className="text-sm font-bold text-slate-300">No wholesale orders recorded yet</p>
+                                  <p className="text-xs text-slate-500 mt-1">Orders placed by {viewingDealer.name} will appear here in real time.</p>
+                                </td>
+                              </tr>
+                            ) : (
+                              orders
+                                .filter(o => (o.clientId === viewingDealer.id || o.clientMobile === viewingDealer.mobile || o.clientName === viewingDealer.name) && o.clientType === 'Dealer')
+                                .map(ord => (
+                                  <tr key={ord.id} className="hover:bg-slate-900/50 transition">
+                                    <td className="py-3 px-3 font-mono font-bold text-white">{ord.id}</td>
+                                    <td className="py-3 px-3 text-slate-300 text-[11px]">
+                                      {new Date(ord.createdAt || ord.date || Date.now()).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                    </td>
+                                    <td className="py-3 px-3 font-mono font-bold text-emerald-400">
+                                      ₹{(ord.total || 0).toLocaleString('en-IN')}
+                                    </td>
+                                    <td className="py-3 px-3">
+                                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 text-slate-300 border border-slate-800">
+                                        {ord.paymentMethod || 'Upfront'}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-3">
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        ord.status === 'Delivered'
+                                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                          : ord.status === 'Cancelled'
+                                          ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                          : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                      }`}>
+                                        {ord.status || 'Processing'}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-3 text-right">
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        ord.creditStatus && ord.creditStatus.toLowerCase().includes('outstanding')
+                                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                          : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                      }`}>
+                                        {ord.creditStatus || 'Settled'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
             <div className="space-y-5">
               
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1777,7 +2350,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                               {dealer.id}
                             </span>
                             <span className="text-xs font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
-                              GSTIN: {dealer.gstin}
+                              GSTIN: {dealer.gstin || 'N/A'}
                             </span>
                             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
                               dealer.zohoVerified
@@ -1788,22 +2361,22 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                             </span>
                           </div>
 
-                          <h3 className="text-base font-bold text-white">{dealer.name}</h3>
+                          <h3 className="text-base font-bold text-white">{dealer.name || 'Registered Dealer'}</h3>
                           <p className="text-xs text-slate-400 mt-0.5">
-                            Contact Person: <strong className="text-slate-300">{dealer.contactPerson}</strong> &bull; Mobile: <span className="font-mono text-slate-300">+91 {dealer.mobile}</span>
+                            Contact Person: <strong className="text-slate-300">{dealer.contactPerson || dealer.name || 'Authorized Contact'}</strong> &bull; Mobile: <span className="font-mono text-slate-300">+91 {dealer.mobile || 'N/A'}</span>
                           </p>
                         </div>
 
                         {/* Status Badge */}
                         <div className="flex items-center gap-2 self-start">
                           <span className={`px-3 py-1 rounded-xl text-xs font-bold border ${
-                            dealer.status === 'Approved'
+                            dealer.status === 'Approved' || dealer.status === 'ACTIVE' || dealer.status === 'Active'
                               ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                              : dealer.status === 'Pending'
+                              : dealer.status === 'Pending' || dealer.status === 'PENDING'
                               ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                               : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                           }`}>
-                            Status: {dealer.status}
+                            Status: {dealer.status === 'Approved' ? 'ACTIVE' : (dealer.status || 'PENDING')}
                           </span>
                         </div>
                       </div>
@@ -1812,19 +2385,19 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80">
                         <div>
                           <span className="text-[10px] text-slate-500 font-bold uppercase block">Approved Credit Limit</span>
-                          <span className="text-sm font-black text-white">₹{dealer.creditLimit.toLocaleString('en-IN')}</span>
+                          <span className="text-sm font-black text-white">₹{(Number(dealer.creditLimit) || 0).toLocaleString('en-IN')}</span>
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-500 font-bold uppercase block">Available Credit</span>
-                          <span className="text-sm font-black text-emerald-400">₹{dealer.availableCredit.toLocaleString('en-IN')}</span>
+                          <span className="text-sm font-black text-emerald-400">₹{(Number(dealer.availableCredit) || 0).toLocaleString('en-IN')}</span>
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-500 font-bold uppercase block">Outstanding Due</span>
-                          <span className="text-sm font-black text-amber-400">₹{dealer.outstandingDue.toLocaleString('en-IN')}</span>
+                          <span className="text-sm font-black text-amber-400">₹{(Number(dealer.outstandingDue) || 0).toLocaleString('en-IN')}</span>
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-500 font-bold uppercase block">Next Payment Due</span>
-                          <span className="text-xs font-bold text-slate-300">{dealer.nextDueDate}</span>
+                          <span className="text-xs font-bold text-slate-300">{dealer.nextDueDate || 'None'}</span>
                         </div>
                       </div>
 
@@ -1857,8 +2430,47 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                           </button>
                         </div>
 
-                        {/* Approval / Suspension Actions */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={() => {
+                              playClickSound();
+                              setViewingDealer(dealer);
+                              navigate(`/admin/dealers/${dealer.id}`);
+                            }}
+                            className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/25 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                            title="View complete dealer profile and order history"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View Details</span>
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              playClickSound();
+                              try {
+                                const res = await fetch(`/api/dealers/${dealer.id}/zoho-status`);
+                                const data = await res.json();
+                                if (data.existsInZoho) {
+                                  playSuccessSound();
+                                  setSyncToast(`✓ Dealer verified in Zoho Inventory (${data.zohoContact?.companyName || data.zohoContact?.contactName || 'Active'}).`);
+                                  setDealers(prev => prev.map(d => d.id === dealer.id ? { ...d, zohoVerified: true, zohoDetails: data.zohoContact } : d));
+                                } else {
+                                  playWarningSound();
+                                  setSyncToast(`⚠️ Record NOT found in Zoho Inventory for ${dealer.email}. Create customer in Zoho first.`);
+                                  setDealers(prev => prev.map(d => d.id === dealer.id ? { ...d, zohoVerified: false } : d));
+                                }
+                                setTimeout(() => setSyncToast(null), 4000);
+                              } catch (e) {
+                                setSyncToast('Failed to check Zoho status.');
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold border border-slate-800 flex items-center gap-1.5"
+                            title="Verify customer record in Zoho Inventory"
+                          >
+                            <RotateCw className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Check Zoho</span>
+                          </button>
+
                           <button
                             onClick={() => {
                               playClickSound();
@@ -1869,9 +2481,9 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                             Edit Credit Limit
                           </button>
 
-                          {dealer.status !== 'Approved' ? (
+                          {dealer.status !== 'Approved' && dealer.status !== 'ACTIVE' && dealer.status !== 'Active' ? (
                             <button
-                              onClick={() => handleUpdateDealer(dealer.id, { status: 'Approved', zohoVerified: true })}
+                              onClick={() => handleUpdateDealer(dealer.id, { status: 'ACTIVE', zohoVerified: true })}
                               className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20"
                             >
                               Approve Dealer
@@ -1893,7 +2505,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               </div>
 
             </div>
-          )}
+          )
+        )}
 
           {/* ======================================================== */}
           {/* 4. PLUMBER MANAGEMENT                                   */}
@@ -2411,13 +3024,13 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                             </span>
                           </td>
                           <td className="py-3 px-3 font-bold text-white font-mono">
-                            ₹{d.creditLimit.toLocaleString('en-IN')}
+                            ₹{(Number(d.creditLimit) || 0).toLocaleString('en-IN')}
                           </td>
                           <td className="py-3 px-3 font-bold text-amber-400 font-mono">
-                            ₹{d.outstandingDue.toLocaleString('en-IN')}
+                            ₹{(Number(d.outstandingDue) || 0).toLocaleString('en-IN')}
                           </td>
                           <td className="py-3 px-3 text-slate-300">
-                            {d.nextDueDate}
+                            {d.nextDueDate || 'None'}
                           </td>
                         </tr>
                       ))}

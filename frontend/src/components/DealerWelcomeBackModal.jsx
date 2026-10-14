@@ -21,7 +21,7 @@ export default function DealerWelcomeBackModal({
   dealerName = "Sri Venkateswara Distributors",
   creditLimit = "₹5,00,000",
   availableCredit = "₹5,00,000",
-  hubName = "Peenya Central 01",
+  hubName = "Regional Supply Hub",
   onExploreCatalog
 }) {
   const [particles, setParticles] = useState([]);

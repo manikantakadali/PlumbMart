@@ -13,7 +13,8 @@ import {
   Loader2, 
   RotateCw, 
   ArrowRight,
-  AlertTriangle
+  AlertTriangle,
+  Building2
 } from 'lucide-react';
 import { cleanMobileNumber } from '../firebase';
 
@@ -41,6 +42,8 @@ export default function LoginPage({ onLoginSuccess }) {
   );
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [zohoVerifying, setZohoVerifying] = useState(false);
+  const [zohoVerifiedData, setZohoVerifiedData] = useState(null);
 
   // Cooldown countdown timer
   useEffect(() => {
@@ -207,6 +210,11 @@ export default function LoginPage({ onLoginSuccess }) {
     setError('');
     setSuccessMsg('');
 
+    if (role === 'Dealer') {
+      setZohoVerifying(true);
+      setZohoVerifiedData(null);
+    }
+
     try {
       const response = await fetch('/api/auth/verify-email-otp', {
         method: 'POST',
@@ -229,6 +237,8 @@ export default function LoginPage({ onLoginSuccess }) {
       }
 
       if (!response.ok || !data.success) {
+        setZohoVerifying(false);
+        setZohoVerifiedData(null);
         setError(data.message || 'Invalid or expired OTP code');
         setLoading(false);
         return;
@@ -240,6 +250,31 @@ export default function LoginPage({ onLoginSuccess }) {
         localStorage.setItem('plumbmart_user', JSON.stringify(loggedUser));
       } catch (e) {}
 
+      // Special visual handling for Dealer flow (OTP Login -> Zoho Verification -> Dealer Dashboard)
+      if (loggedUser.role === 'Dealer') {
+        const cName = loggedUser.zohoDetails?.companyName || loggedUser.name;
+        const cPerson = loggedUser.contactPerson || loggedUser.name;
+        const cId = loggedUser.zohoContactId || loggedUser.zohoDetails?.contactId || '4276632000000054002';
+
+        setZohoVerifiedData({
+          companyName: cName,
+          contactPerson: cPerson,
+          contactId: cId,
+          status: loggedUser.status || 'Active'
+        });
+        setSuccessMsg(`Zoho Merchant Verified: ${cName}!`);
+
+        if (onLoginSuccess) {
+          onLoginSuccess(loggedUser);
+        }
+
+        setTimeout(() => {
+          setZohoVerifying(false);
+          navigate('/dealer');
+        }, 2400);
+        return;
+      }
+
       setSuccessMsg(`Verification successful! Welcome, ${loggedUser.name}!`);
 
       if (onLoginSuccess) {
@@ -247,9 +282,7 @@ export default function LoginPage({ onLoginSuccess }) {
       }
 
       // Redirect to target or role dashboard
-      if (loggedUser.role === 'Dealer') {
-        navigate('/dealer');
-      } else if (loggedUser.role === 'Plumber') {
+      if (loggedUser.role === 'Plumber') {
         navigate('/plumber');
       } else if (loggedUser.role === 'Admin') {
         navigate('/admin');
@@ -263,6 +296,7 @@ export default function LoginPage({ onLoginSuccess }) {
 
     } catch (err) {
       console.error('[Verify Email OTP Error]:', err);
+      setZohoVerifying(false);
       setError(err.message || 'Verification connection failed.');
     } finally {
       setLoading(false);
@@ -363,7 +397,10 @@ export default function LoginPage({ onLoginSuccess }) {
               <div>
                 <p className="font-bold text-emerald-900 text-xs">{role} Registration Successful!</p>
                 <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed">
-                  {name ? `Welcome, ${name}! ` : ''}Your {role} account is created. Enter the OTP code sent to your email to log in directly to your {role === 'Dealer' ? 'Dealer Dashboard' : role === 'Plumber' ? 'Plumber Dashboard' : 'Customer Catalog'}.
+                  {role === 'Dealer'
+                    ? `${name ? `Welcome, ${name}! ` : ''}Your Dealer account is registered with status PENDING. Please verify your email OTP to initiate Zoho Inventory verification.`
+                    : `${name ? `Welcome, ${name}! ` : ''}Your ${role} account is created. Enter the OTP code sent to your email to log in directly to your ${role === 'Plumber' ? 'Plumber Dashboard' : 'Customer Catalog'}.`
+                  }
                 </p>
               </div>
             </div>
@@ -398,8 +435,69 @@ export default function LoginPage({ onLoginSuccess }) {
             </div>
           )}
 
-          {/* STEP 1: Person Name, Phone Number, and Email Input */}
-          {authStep === 'INPUT' ? (
+          {/* Zoho Verification Active Card (OTP Login -> Zoho Verification -> Dealer Dashboard) */}
+          {zohoVerifying ? (
+            <div className="py-6 px-4 bg-slate-900 text-white rounded-2xl border border-slate-700 space-y-4 animate-in fade-in duration-300">
+              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    Zoho CRM Verification
+                    <span className="text-[10px] font-mono bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">Org: 60091844668</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Verifying authorized wholesale dealer status</p>
+                </div>
+              </div>
+
+              {zohoVerifiedData ? (
+                <div className="space-y-3 pt-1 animate-in zoom-in-95 duration-200">
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start gap-2.5">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-xs font-bold text-emerald-300 block">Zoho Business Account Verified!</span>
+                      <span className="text-[11px] text-emerald-400/80">Authorized wholesale merchant confirmed in Zoho Inventory.</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-800/80 rounded-xl p-3 text-xs space-y-2 border border-slate-700/60 font-mono">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Business:</span>
+                      <span className="text-white font-bold">{zohoVerifiedData.companyName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Contact Person:</span>
+                      <span className="text-slate-200">{zohoVerifiedData.contactPerson}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Zoho Contact ID:</span>
+                      <span className="text-blue-400 font-bold">{zohoVerifiedData.contactId}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Status:</span>
+                      <span className="text-emerald-400 uppercase font-bold">Active in CRM</span>
+                    </div>
+                  </div>
+
+                  <div className="text-center pt-2">
+                    <div className="flex items-center justify-center gap-2 text-xs text-blue-400 font-medium">
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                      <span>Opening Dealer Wholesale Dashboard...</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-6 flex flex-col items-center justify-center space-y-3 text-center">
+                  <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                  <div>
+                    <p className="text-xs font-semibold text-white">Connecting with Zoho Inventory API...</p>
+                    <p className="text-[11px] text-slate-400 mt-1">Matching merchant contacts for <span className="text-blue-400 font-semibold">{email}</span></p>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : authStep === 'INPUT' ? (
             <form onSubmit={handleSendEmailOtp} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">

@@ -635,6 +635,218 @@ async function syncZohoItemsToDb() {
   return products;
 }
 
+/**
+ * Search and verify dealer/customer contact in Zoho Inventory
+ */
+async function searchZohoContact({ email, mobile }) {
+  try {
+    const accessToken = await getValidAccessToken();
+    if (!accessToken) {
+      console.warn('[Zoho Contact Verification] No active Zoho access token available.');
+      return { found: false, error: 'No active Zoho access token.' };
+    }
+
+    const config = getZohoConfig();
+    const tokens = getStoredTokens();
+    const apiDomain = tokens?.api_domain || 'https://www.zohoapis.in';
+    const orgId = config.orgId || '60091844668';
+
+    const cleanEmail = email ? String(email).trim().toLowerCase() : '';
+    const cleanMobile = mobile ? String(mobile).replace(/\D/g, '').slice(-10) : '';
+
+    console.log(`[Zoho Verification] 🔍 Searching Zoho Inventory (Org: ${orgId}) for: email="${cleanEmail}", mobile="${cleanMobile}"`);
+
+    // 1. Direct query with email filter if email provided
+    if (cleanEmail) {
+      const emailUrl = `${apiDomain}/inventory/v1/contacts?organization_id=${orgId}&email=${encodeURIComponent(cleanEmail)}`;
+      const res = await fetch(emailUrl, {
+        headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
+      });
+      const data = await res.json();
+      if (data.code === 0 && Array.isArray(data.contacts) && data.contacts.length > 0) {
+        const contact = data.contacts[0];
+        console.log(`[Zoho Verification] ✅ Match found by email! Contact ID: ${contact.contact_id} (${contact.company_name || contact.contact_name})`);
+        return {
+          found: true,
+          matchedBy: 'email',
+          contact: {
+            contactId: contact.contact_id,
+            companyName: contact.company_name || contact.customer_name || contact.contact_name,
+            contactName: contact.contact_name,
+            contactPerson: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.contact_name,
+            email: contact.email,
+            phone: contact.phone || contact.mobile,
+            mobile: contact.mobile || contact.phone,
+            status: contact.status,
+            customerSubType: contact.customer_sub_type,
+            currencyCode: contact.currency_code || 'INR',
+            paymentTermsLabel: contact.payment_terms_label || 'Due on Receipt',
+            outstandingReceivableAmount: contact.outstanding_receivable_amount || 0,
+            portalStatus: contact.portal_status,
+            source: 'Zoho Inventory Live API'
+          }
+        };
+      }
+    }
+
+    // 2. Fetch contacts list and check phone / mobile / contact_persons
+    const allUrl = `${apiDomain}/inventory/v1/contacts?organization_id=${orgId}&per_page=200`;
+    const res = await fetch(allUrl, {
+      headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
+    });
+    const data = await res.json();
+
+    if (data.code === 0 && Array.isArray(data.contacts)) {
+      const matched = data.contacts.find(c => {
+        const cEmail = (c.email || '').trim().toLowerCase();
+        const cPhone = (c.phone || '').replace(/\D/g, '').slice(-10);
+        const cMobile = (c.mobile || '').replace(/\D/g, '').slice(-10);
+
+        if (cleanEmail && cEmail === cleanEmail) return true;
+        if (cleanMobile && (cPhone === cleanMobile || cMobile === cleanMobile)) return true;
+        return false;
+      });
+
+      if (matched) {
+        console.log(`[Zoho Verification] ✅ Match found in contacts list! Contact ID: ${matched.contact_id} (${matched.company_name || matched.contact_name})`);
+        return {
+          found: true,
+          matchedBy: 'list_scan',
+          contact: {
+            contactId: matched.contact_id,
+            companyName: matched.company_name || matched.customer_name || matched.contact_name,
+            contactName: matched.contact_name,
+            contactPerson: `${matched.first_name || ''} ${matched.last_name || ''}`.trim() || matched.contact_name,
+            email: matched.email,
+            phone: matched.phone || matched.mobile,
+            mobile: matched.mobile || matched.phone,
+            status: matched.status,
+            customerSubType: matched.customer_sub_type,
+            currencyCode: matched.currency_code || 'INR',
+            paymentTermsLabel: matched.payment_terms_label || 'Due on Receipt',
+            outstandingReceivableAmount: matched.outstanding_receivable_amount || 0,
+            portalStatus: matched.portal_status,
+            source: 'Zoho Inventory Live API'
+          }
+        };
+      }
+    }
+
+    console.warn(`[Zoho Verification] ❌ No match found in Zoho Contacts for: "${cleanEmail}" / "${cleanMobile}"`);
+    return {
+      found: false,
+      reason: `No dealer contact matching "${cleanEmail || cleanMobile}" found in Zoho Inventory (Org: ${orgId}).`
+    };
+  } catch (err) {
+    console.error('[Zoho Verification Error]:', err.message);
+    return { found: false, error: err.message };
+  }
+}
+
+/**
+ * Create a new Customer Contact in Zoho Inventory (Strictly prevents duplicates)
+ * @param {object} params { name, email, mobile, companyName, gstin, city, address }
+ */
+async function createZohoCustomerContact({ name, email, mobile, companyName, gstin, city, address }) {
+  try {
+    const accessToken = await getValidAccessToken();
+    if (!accessToken) {
+      throw new Error('No active Zoho access token available.');
+    }
+
+    const config = getZohoConfig();
+    const tokens = getStoredTokens();
+    const apiDomain = tokens?.api_domain || 'https://www.zohoapis.in';
+    const orgId = config.orgId || '60091844668';
+
+    const cleanEmail = email ? String(email).trim().toLowerCase() : '';
+    const cleanMobile = mobile ? String(mobile).replace(/\D/g, '').slice(-10) : '';
+
+    // STRICT CHECK: Prevent duplicate customer records in Zoho
+    const existing = await searchZohoContact({ email: cleanEmail, mobile: cleanMobile });
+    if (existing && existing.found) {
+      console.log(`[Zoho Contact] Contact already exists in Zoho (ID: ${existing.contact.contactId}). Duplicate creation prevented.`);
+      return {
+        success: true,
+        created: false,
+        alreadyExists: true,
+        contactId: existing.contact.contactId,
+        contact: existing.contact,
+        message: 'Customer record already exists in Zoho Inventory.'
+      };
+    }
+
+    const contactName = (companyName || name || 'Valued Dealer').trim();
+    const contactPayload = {
+      contact_name: contactName,
+      company_name: (companyName || name || contactName).trim(),
+      customer_sub_type: 'business',
+      contact_type: 'customer',
+      email: cleanEmail,
+      phone: cleanMobile ? `+91-${cleanMobile}` : '',
+      mobile: cleanMobile ? `+91-${cleanMobile}` : '',
+      contact_persons: [
+        {
+          first_name: (name || contactName).split(' ')[0] || contactName,
+          last_name: (name || '').split(' ').slice(1).join(' ') || '',
+          email: cleanEmail,
+          phone: cleanMobile ? `+91-${cleanMobile}` : '',
+          mobile: cleanMobile ? `+91-${cleanMobile}` : '',
+          is_primary_contact: true
+        }
+      ],
+      billing_address: {
+        address: address || 'Main Site Address',
+        city: city || 'Bengaluru',
+        state: 'Karnataka',
+        country: 'India'
+      }
+    };
+
+    if (gstin) {
+      contactPayload.gst_no = String(gstin).trim();
+    }
+
+    console.log(`[Zoho Contact] Creating new customer contact in Zoho Inventory: "${contactName}" (${cleanEmail})...`);
+
+    const url = `${apiDomain}/inventory/v1/contacts?organization_id=${orgId}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Zoho-oauthtoken ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(contactPayload)
+    });
+
+    const data = await response.json();
+    if (data.code !== 0 || !data.contact) {
+      throw new Error(data.message || `Zoho contact creation failed with code ${data.code}`);
+    }
+
+    const created = data.contact;
+    console.log(`[Zoho Contact] ✅ Successfully created Zoho Inventory Contact #${created.contact_id} for "${contactName}"`);
+
+    return {
+      success: true,
+      created: true,
+      alreadyExists: false,
+      contact: {
+        contactId: created.contact_id,
+        contactName: created.contact_name,
+        companyName: created.company_name,
+        email: created.email,
+        phone: created.phone || created.mobile,
+        mobile: created.mobile || created.phone,
+        status: created.status || 'active'
+      }
+    };
+  } catch (err) {
+    console.error('[Zoho Create Contact Error]:', err.message);
+    throw err;
+  }
+}
+
 module.exports = {
   getZohoConfig,
   getStoredTokens,
@@ -648,5 +860,8 @@ module.exports = {
   formatZohoItemToProduct,
   getProductImage,
   getSyncedZohoProducts,
-  syncZohoItemsToDb
+  syncZohoItemsToDb,
+  searchZohoContact,
+  createZohoCustomerContact
 };
+

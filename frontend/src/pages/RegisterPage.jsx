@@ -141,7 +141,8 @@ export default function RegisterPage({ onRegisterSuccess }) {
           otp: otpCode.trim(),
           name: formData.name.trim(),
           mobile: clean,
-          role: formData.role
+          role: formData.role,
+          isRegistration: true
         })
       });
 
@@ -155,7 +156,11 @@ export default function RegisterPage({ onRegisterSuccess }) {
       setIsPhoneVerified(true);
       setOtpStepActive(false);
       const roleName = formData.role;
-      setSuccessMsg(`Email verified! ${roleName} account created for ${data.user.name}. Redirecting to Login...`);
+      setSuccessMsg(
+        roleName === 'Dealer'
+          ? `Email verified! Dealer registration saved with status PENDING. Redirecting to Login...`
+          : `Email verified! ${roleName} account created for ${data.user.name}. Redirecting to Login...`
+      );
 
       const queryParams = new URLSearchParams({
         registered: 'true',
@@ -237,7 +242,11 @@ export default function RegisterPage({ onRegisterSuccess }) {
       }
 
       const registeredUser = data.user;
-      setSuccessMsg(`${formData.role} account created for ${registeredUser.name}! Redirecting to Login...`);
+      setSuccessMsg(
+        formData.role === 'Dealer'
+          ? `Dealer registration submitted with status PENDING! Redirecting to Login...`
+          : `${formData.role} account created for ${registeredUser.name}! Redirecting to Login...`
+      );
 
       const queryParams = new URLSearchParams({
         registered: 'true',

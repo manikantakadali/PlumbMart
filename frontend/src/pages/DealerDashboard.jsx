@@ -40,6 +40,7 @@ import {
   X
 } from 'lucide-react';
 import { addToDealerCart, getDealerCart } from '../utils/dealerCart';
+import { getDealerHub } from '../utils/hubResolver';
 import DealerSuspendedModal from '../components/DealerSuspendedModal';
 import DealerSupportModal from '../components/DealerSupportModal';
 
@@ -167,7 +168,7 @@ export default function DealerDashboard({ currentUser, onLogout }) {
                 time: new Date().toLocaleTimeString(),
                 isSuspended: true
               });
-            } else if (d.status === 'Approved' || d.status === 'Active') {
+            } else if (d.status === 'Approved' || d.status === 'Active' || d.status === 'ACTIVE') {
               setIsSuspendedModalOpen(false);
               setIsWelcomeBackActive(true);
               try {
@@ -180,6 +181,8 @@ export default function DealerDashboard({ currentUser, onLogout }) {
                 time: new Date().toLocaleTimeString(),
                 isApproved: true
               });
+            } else if (d.status === 'PENDING' || d.status === 'Pending') {
+              navigate('/login?role=Dealer', { replace: true });
             }
           }
           return {
@@ -341,6 +344,20 @@ export default function DealerDashboard({ currentUser, onLogout }) {
       ]
     }
   ];
+
+  // Auth guard: Ensure PENDING dealers cannot access dashboard
+  useEffect(() => {
+    let saved = null;
+    try {
+      saved = JSON.parse(localStorage.getItem('plumbmart_user') || 'null');
+    } catch (e) {}
+    const user = saved || currentUser;
+    if (user && (user.role === 'Dealer' || user.companyName)) {
+      if (user.status === 'PENDING' || user.status === 'Pending' || user.zohoVerified === false) {
+        navigate('/login?role=Dealer', { replace: true });
+      }
+    }
+  }, [currentUser, navigate]);
 
   // Setup Real-time Polling & Cross-tab Events
   useEffect(() => {
@@ -833,8 +850,14 @@ export default function DealerDashboard({ currentUser, onLogout }) {
                   </span>
                 )}
 
+                {dealerProfile.zohoContactId && (
+                  <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30 flex items-center gap-1">
+                    Zoho ID: {dealerProfile.zohoContactId}
+                  </span>
+                )}
+
                 <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">
-                  Hub: Peenya Central 01
+                  Hub: {getDealerHub(dealerProfile)}
                 </span>
               </div>
 

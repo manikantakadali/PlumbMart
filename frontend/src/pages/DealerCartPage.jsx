@@ -199,7 +199,7 @@ export default function DealerCartPage({ currentUser, onLogout }) {
                       Zoho Stock Verified • All Items Available
                     </h4>
                     <p className="text-[11px] text-emerald-700 mt-0.5">
-                      All requested quantities are in stock at Peenya Central Depot. You can proceed to payment method selection.
+                      All requested quantities are in stock at your allocated Regional Warehouse Hub. You can proceed to payment method selection.
                     </p>
                   </div>
                 </div>

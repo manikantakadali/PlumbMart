@@ -66,28 +66,63 @@ export default function PlumberLayout({
     specialization: 'CPVC/UPVC Piping, Concealed Valves & Pump Automation'
   });
 
-  // Fetch live plumber profile from Supabase
+  // Fetch live plumber profile and sync across tabs
   useEffect(() => {
     let isMounted = true;
-    fetch(`/api/plumber/profile?mobile=${encodeURIComponent(activeMobile)}`)
-      .then(res => res.json())
-      .then(data => {
-        if (isMounted && data.success && data.plumber) {
-          setPlumber(prev => ({ ...prev, ...data.plumber }));
-        }
-      })
-      .catch(err => console.warn('Could not fetch plumber profile for layout:', err));
+    const loadProfile = () => {
+      fetch(`/api/plumber/profile?mobile=${encodeURIComponent(activeMobile)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (isMounted && data.success && data.plumber) {
+            setPlumber(prev => ({ ...prev, ...data.plumber }));
+          }
+        })
+        .catch(err => console.warn('Could not fetch plumber profile for layout:', err));
+    };
+
+    loadProfile();
+    const poll = setInterval(loadProfile, 2000);
 
     const handleProfileSync = (e) => {
       if (e.detail) {
-        setPlumber(prev => ({ ...prev, ...e.detail }));
+        const updates = e.detail.updates || (e.detail.status ? { status: e.detail.status } : e.detail);
+        setPlumber(prev => ({ ...prev, ...updates }));
       }
     };
     window.addEventListener('plumber_profile_updated', handleProfileSync);
+    window.addEventListener('plumbmart_plumber_updated', handleProfileSync);
+
+    let ch = null;
+    try {
+      ch = new BroadcastChannel('plumbmart_plumbers');
+      ch.onmessage = (evt) => {
+        if (evt.data && (evt.data.status || evt.data.updates)) {
+          const updates = evt.data.updates || { status: evt.data.status };
+          setPlumber(prev => ({ ...prev, ...updates }));
+        }
+      };
+    } catch (e) {}
+
+    const handleStorage = (evt) => {
+      if (evt.key === 'plumbmart_plumber_status_broadcast' && evt.newValue) {
+        try {
+          const parsed = JSON.parse(evt.newValue);
+          if (parsed && (parsed.status || parsed.updates)) {
+            const updates = parsed.updates || { status: parsed.status };
+            setPlumber(prev => ({ ...prev, ...updates }));
+          }
+        } catch (e) {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
 
     return () => {
       isMounted = false;
+      clearInterval(poll);
       window.removeEventListener('plumber_profile_updated', handleProfileSync);
+      window.removeEventListener('plumbmart_plumber_updated', handleProfileSync);
+      window.removeEventListener('storage', handleStorage);
+      if (ch) ch.close();
     };
   }, [activeMobile]);
 
@@ -113,6 +148,8 @@ export default function PlumberLayout({
     }
     navigate('/login');
   };
+
+  const isSuspended = plumber.status === 'SUSPENDED';
 
   const navItems = [
     {
@@ -144,8 +181,10 @@ export default function PlumberLayout({
       name: 'My Profile',
       icon: UserCheck,
       description: 'Verification & Registered Info',
-      badge: 'Verified',
-      badgeColor: 'bg-emerald-100 text-emerald-800'
+      badge: isSuspended ? 'SUSPENDED' : (plumber.status === 'PENDING_VERIFICATION' ? 'Pending' : 'Verified'),
+      badgeColor: isSuspended 
+        ? 'bg-rose-100 text-rose-800 border border-rose-300 font-extrabold animate-pulse' 
+        : (plumber.status === 'PENDING_VERIFICATION' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800')
     }
   ];
 
@@ -153,6 +192,27 @@ export default function PlumberLayout({
     <div className="h-screen bg-slate-50 flex flex-col font-sans text-slate-800 overflow-hidden">
       {/* Real-Time In-App Notification Toast */}
       <InAppNotificationToast role="Plumber" />
+
+      {/* Account Suspended Alert Banner */}
+      {isSuspended && (
+        <div className="bg-rose-600 text-white px-4 py-2 text-xs font-semibold flex flex-wrap items-center justify-between gap-3 shadow-md border-b border-rose-700 z-30">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-white shrink-0 animate-bounce" />
+            <span>
+              <strong>ACCOUNT SUSPENDED:</strong> Your Plumber verification has been suspended by Administration. Job execution and payouts are currently restricted.
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              if (onSelectTab) onSelectTab('profile');
+              window.dispatchEvent(new CustomEvent('open_plumber_suspended_modal'));
+            }}
+            className="px-2.5 py-1 rounded-lg bg-white text-rose-700 hover:bg-rose-50 text-[11px] font-black transition shadow-xs cursor-pointer shrink-0"
+          >
+            Suspension Notice &amp; Help
+          </button>
+        </div>
+      )}
       
       {/* Top Header */}
       <header className="shrink-0 z-40 bg-white border-b border-slate-200 shadow-xs">
@@ -169,9 +229,16 @@ export default function PlumberLayout({
                   <span className="text-base font-black tracking-tight text-slate-900">
                     Plumb<span className="text-amber-600">Mart</span>
                   </span>
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                    Plumber Pro
-                  </span>
+                  {isSuspended ? (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-600 text-white shadow-xs flex items-center gap-1 animate-pulse">
+                      <AlertCircle className="w-3 h-3 text-white" />
+                      SUSPENDED
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                      Plumber Pro
+                    </span>
+                  )}
                 </div>
               </div>
             </Link>

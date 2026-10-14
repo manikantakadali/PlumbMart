@@ -930,6 +930,143 @@ async function sendDealerApprovalNotificationEmail({ dealer = {}, adminOfficer =
   };
 }
 
+/**
+ * Send Pending Zoho Verification & Approval Notification Email to Super Admin
+ * @param {object} params { dealer, reason }
+ */
+async function sendAdminDealerPendingNotificationEmail({ dealer = {}, reason }) {
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.GMAIL_USER || 'admin@plumbmart.com';
+  const dealerName = dealer.name || 'New Dealer';
+  const dealerContact = dealer.contactPerson || dealerName;
+  const dealerMobile = dealer.mobile || '';
+  const dealerEmail = dealer.email || '';
+  const dealerGstin = dealer.gstin || 'Not Provided';
+  const dealerCity = dealer.city || 'Bengaluru';
+  const dealerId = dealer.id || 'DLR-NEW';
+  const nowStr = new Date().toLocaleString('en-IN', { dateStyle: 'full', timeStyle: 'short' });
+
+  const mailOptions = {
+    from: process.env.SMTP_FROM || (process.env.GMAIL_USER ? `"PlumbMart System" <${process.env.GMAIL_USER}>` : '"PlumbMart System" <system@plumbmart.com>'),
+    to: adminEmail,
+    replyTo: dealerEmail || adminEmail,
+    subject: `🚨 [Action Required] New Dealer Pending Zoho Verification - ${dealerName} (${dealerId})`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8"></head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 650px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+          <tr>
+            <td style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%); padding: 30px 24px; text-align: center; color: #ffffff;">
+              <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; background: rgba(0,0,0,0.2); display: inline-block; padding: 4px 14px; border-radius: 9999px; margin-bottom: 10px;">
+                Action Required &bull; Governance Alert
+              </div>
+              <h1 style="margin: 0; font-size: 22px; font-weight: 900;">New Dealer Pending Zoho Inventory Verification</h1>
+              <p style="margin: 6px 0 0 0; font-size: 13px; color: #fef3c7;">Review dealer details, create record in Zoho Inventory, and activate account</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 28px;">
+              <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 16px; margin-bottom: 24px; font-size: 13px; color: #92400e;">
+                <strong>Notice:</strong> ${reason || 'A dealer has registered / attempted login with status PENDING. Customer record was not found or is unverified in Zoho Inventory.'}
+              </div>
+
+              <h3 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #475569; margin: 0 0 12px 0;">Dealer Registration Details</h3>
+              <table width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 24px; font-size: 13px;">
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b; width: 35%;">Dealer ID:</td>
+                  <td style="padding: 6px 0; font-weight: 700; color: #0f172a; font-family: monospace;">${dealerId}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Business Name:</td>
+                  <td style="padding: 6px 0; font-weight: 800; color: #0f172a;">${dealerName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Contact Person:</td>
+                  <td style="padding: 6px 0; font-weight: 600; color: #334155;">${dealerContact}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Contact Mobile:</td>
+                  <td style="padding: 6px 0; font-weight: 700; color: #0f172a; font-family: monospace;">+91 ${dealerMobile}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Registered Email:</td>
+                  <td style="padding: 6px 0; font-weight: 700; color: #0284c7;">${dealerEmail}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">GSTIN:</td>
+                  <td style="padding: 6px 0; font-weight: 700; color: #0f172a; font-family: monospace;">${dealerGstin}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Operating City:</td>
+                  <td style="padding: 6px 0; font-weight: 600; color: #334155;">${dealerCity}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Current Status:</td>
+                  <td style="padding: 6px 0;"><span style="background: #fef3c7; color: #b45309; font-weight: 800; font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 1px solid #fde68a;">PENDING APPROVAL</span></td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Submitted At:</td>
+                  <td style="padding: 6px 0; color: #64748b;">${nowStr}</td>
+                </tr>
+              </table>
+
+              <h3 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #475569; margin: 0 0 12px 0;">Required Next Steps for Super Admin</h3>
+              <ol style="font-size: 13px; line-height: 1.7; color: #334155; padding-left: 20px; margin-bottom: 24px;">
+                <li>Verify the dealer's business credentials and GSTIN.</li>
+                <li>Ensure a customer contact record is created in <b>Zoho Inventory</b> (Org ID: 60091844668).</li>
+                <li>Open the PlumbMart Admin Portal and manually change the dealer status from <b>PENDING</b> to <b>ACTIVE</b>.</li>
+                <li>Upon activation, the dealer will automatically receive an approval email confirmation.</li>
+              </ol>
+
+              <div style="text-align: center; margin-top: 24px;">
+                <a href="http://localhost:5173/admin" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 700; padding: 12px 28px; border-radius: 10px;">
+                  Open Admin Dashboard &rarr;
+                </a>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #0f172a; color: #94a3b8; padding: 18px; text-align: center; font-size: 11px; border-top: 1px solid #e2e8f0;">
+              PlumbMart Automated Governance &bull; Zoho Inventory Verification System
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `
+  };
+
+  const currentTransporter = getTransporter();
+  let emailSentViaSmtp = false;
+
+  if (currentTransporter) {
+    try {
+      const info = await currentTransporter.sendMail(mailOptions);
+      emailSentViaSmtp = true;
+      console.log(`[Email Service] Live pending dealer notification dispatched to Super Admin <${adminEmail}> (MsgID: ${info?.messageId || 'OK'})`);
+    } catch (err) {
+      console.warn(`[Email Service Warning] Failed to dispatch admin pending dealer email via SMTP: ${err.message}`);
+    }
+  }
+
+  console.log('====================================================');
+  console.log(`[PLUMBMART ADMIN NOTIFICATION DISPATCHED]`);
+  console.log(`To Super Admin: <${adminEmail}>`);
+  console.log(`Pending Dealer: ${dealerName} (${dealerId}, Mobile: ${dealerMobile}, Email: ${dealerEmail})`);
+  console.log(`Reason: ${reason || 'Zoho Inventory verification pending'}`);
+  console.log(`Dispatched via SMTP: ${emailSentViaSmtp}`);
+  console.log('====================================================');
+
+  return {
+    success: true,
+    adminEmail,
+    dealerId,
+    dealerName,
+    emailSentViaSmtp
+  };
+}
+
 module.exports = {
   sendEmailOtp,
   verifyEmailOtp,
@@ -937,6 +1074,7 @@ module.exports = {
   sendOrderReceiptEmail,
   sendDealerAppealEmail,
   sendDealerSuspensionNotificationEmail,
-  sendDealerApprovalNotificationEmail
+  sendDealerApprovalNotificationEmail,
+  sendAdminDealerPendingNotificationEmail
 };
 

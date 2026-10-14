@@ -230,6 +230,9 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
     ]
   });
 
+  const isSuspended = plumber && (plumber.status === 'SUSPENDED' || plumber.verificationStatus === 'SUSPENDED');
+  const [isSuspendedModalOpen, setIsSuspendedModalOpen] = useState(false);
+
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
@@ -249,17 +252,50 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Fetch plumber profile from Supabase DB
+  // Fetch plumber profile from Supabase DB or API
   const fetchPlumberProfile = async () => {
     try {
       setIsProfileLoading(true);
-      const res = await fetch(`/api/plumber/profile?mobile=${encodeURIComponent(activeMobile)}`);
-      const data = await res.json();
-      if (data && data.success && data.plumber) {
-        setPlumber(prev => ({ ...prev, ...data.plumber }));
+      let foundPlumber = null;
+      try {
+        const res = await fetch(`/api/plumber/profile?mobile=${encodeURIComponent(activeMobile)}`);
+        const data = await res.json();
+        if (data && data.success && data.plumber) {
+          foundPlumber = data.plumber;
+        }
+      } catch (e1) {
+        try {
+          const res = await fetch(`http://localhost:5000/api/plumber/profile?mobile=${encodeURIComponent(activeMobile)}`);
+          const data = await res.json();
+          if (data && data.success && data.plumber) {
+            foundPlumber = data.plumber;
+          }
+        } catch (e2) {}
+      }
+
+      // Fallback check against /api/plumbers list
+      if (!foundPlumber) {
+        try {
+          const res = await fetch('/api/plumbers');
+          const data = await res.json();
+          if (data && data.success && Array.isArray(data.data)) {
+            foundPlumber = data.data.find(p => p.mobile === activeMobile || p.id === plumber.id || p.id === 'PLM-01');
+          }
+        } catch (e3) {}
+      }
+
+      if (foundPlumber) {
+        setPlumber(prev => {
+          const isNowSuspended = foundPlumber.status === 'SUSPENDED' || foundPlumber.verificationStatus === 'SUSPENDED';
+          const wasSuspended = prev.status === 'SUSPENDED' || prev.verificationStatus === 'SUSPENDED';
+          if (isNowSuspended && !wasSuspended) {
+            setIsSuspendedModalOpen(true);
+          }
+          return { ...prev, ...foundPlumber };
+        });
       }
     } catch (err) {
-      console.warn('Error loading plumber profile from Supabase:', err);
+      console.warn('Error loading plumber profile:', err);
     } finally {
       setIsProfileLoading(false);
     }
@@ -268,6 +304,91 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
   useEffect(() => {
     fetchPlumberProfile();
   }, [activeMobile]);
+
+  // Real-time synchronization listeners across tabs & admin actions
+  useEffect(() => {
+    let ch;
+    try {
+      ch = new BroadcastChannel('plumbmart_plumbers');
+      ch.onmessage = (event) => {
+        if (event.data) {
+          const data = event.data;
+          const targetStatus = data.status || data.updates?.status;
+          const targetMobile = data.mobile;
+          const targetId = data.plumberId;
+
+          const isMatch = !targetId || 
+            targetId === plumber.id || 
+            (targetMobile && (targetMobile === plumber.mobile || targetMobile === activeMobile)) ||
+            (data.plumber && (data.plumber.id === plumber.id || data.plumber.mobile === plumber.mobile));
+
+          if (isMatch && targetStatus) {
+            setPlumber(prev => ({
+              ...prev,
+              status: targetStatus,
+              verificationStatus: targetStatus,
+              ...(data.updates || {})
+            }));
+            if (targetStatus === 'SUSPENDED') {
+              setIsSuspendedModalOpen(true);
+              showToast('⚠️ Plumber Account has been SUSPENDED by Administration');
+            } else {
+              showToast(`Plumber Account status updated: ${targetStatus}`);
+            }
+          }
+        }
+      };
+    } catch (e) {}
+
+    const handleStorage = (e) => {
+      if (e.key === 'plumbmart_plumber_status_broadcast' || e.key === 'plumbmart_user') {
+        try {
+          const stored = JSON.parse(e.newValue);
+          if (stored) {
+            const newStatus = stored.status || stored.updates?.status;
+            if (newStatus) {
+              setPlumber(prev => ({ ...prev, status: newStatus, verificationStatus: newStatus }));
+              if (newStatus === 'SUSPENDED') {
+                setIsSuspendedModalOpen(true);
+              }
+            }
+          }
+        } catch {}
+        fetchPlumberProfile();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    const handleCustomUpdate = (e) => {
+      if (e.detail) {
+        const newStatus = e.detail.status || e.detail.updates?.status;
+        if (newStatus) {
+          setPlumber(prev => ({ ...prev, status: newStatus, verificationStatus: newStatus }));
+          if (newStatus === 'SUSPENDED') {
+            setIsSuspendedModalOpen(true);
+          }
+        }
+      }
+      fetchPlumberProfile();
+    };
+    window.addEventListener('plumbmart_plumber_updated', handleCustomUpdate);
+
+    const handleOpenModal = () => setIsSuspendedModalOpen(true);
+    window.addEventListener('open_plumber_suspended_modal', handleOpenModal);
+
+    // Continuous 2s polling for instant sync with database
+    const poll = setInterval(() => {
+      fetchPlumberProfile();
+    }, 2000);
+
+    return () => {
+      if (ch) ch.close();
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('plumbmart_plumber_updated', handleCustomUpdate);
+      window.removeEventListener('open_plumber_suspended_modal', handleOpenModal);
+      clearInterval(poll);
+    };
+  }, [plumber.id, plumber.mobile, activeMobile]);
 
   const handleOpenEditProfile = () => {
     setProfileForm({
@@ -423,19 +544,34 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
 
   // Fetch product catalog for manuals & specs
   useEffect(() => {
-    fetch('http://localhost:4000/api/products')
-      .then(res => res.json())
-      .then(data => {
+    const loadProducts = async () => {
+      try {
+        let res;
+        try {
+          res = await fetch('/api/products');
+        } catch {
+          res = await fetch('http://localhost:5000/api/products');
+        }
+        const data = await res.json();
         if (data && data.success && Array.isArray(data.data)) {
           setProducts(data.data);
         }
-      })
-      .catch(err => console.error('Error loading products for plumber:', err))
-      .finally(() => setProductsLoading(false));
+      } catch (err) {
+        console.error('Error loading products for plumber:', err);
+      } finally {
+        setProductsLoading(false);
+      }
+    };
+    loadProducts();
   }, []);
 
-  // Update Job Status: Assigned -> In Progress -> Completed
+  // Update Job Status: Assigned -> In Progress -> Completed (Locked if suspended)
   const handleUpdateJobStatus = (jobId, newStatus) => {
+    if (isSuspended) {
+      showToast('⚠️ Action locked: Account is SUSPENDED. Please contact admin.');
+      setIsSuspendedModalOpen(true);
+      return;
+    }
     setJobs(prev => prev.map(job => {
       if (job.id === jobId) {
         const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -450,8 +586,13 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
     }));
   };
 
-  // Toggle checklist item
+  // Toggle checklist item (Locked if suspended)
   const handleToggleChecklist = (jobId, checkId) => {
+    if (isSuspended) {
+      showToast('⚠️ Action locked: Account is SUSPENDED. Please contact admin.');
+      setIsSuspendedModalOpen(true);
+      return;
+    }
     setJobs(prev => prev.map(job => {
       if (job.id === jobId) {
         return {
@@ -562,6 +703,38 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               </div>
             </div>
 
+            {/* Account Suspended Alert Banner in Activities */}
+            {isSuspended && (
+              <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in duration-300">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-rose-600/30">
+                    <AlertCircle className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black text-rose-950 text-sm sm:text-base">
+                        Account Suspended &bull; Job Execution Locked
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-xs">
+                        SUSPENDED
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-700 mt-1 max-w-2xl leading-relaxed">
+                      Your plumber account has been suspended by system administration. All job status changes, task completions, and new dispatches are temporarily locked.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSuspendedModalOpen(true)}
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm transition shrink-0 active:scale-95"
+                >
+                  <span>View Suspension Notice</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             {/* Filter Tabs Pills with Item Counts */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
               {[
@@ -626,40 +799,51 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                         </div>
 
                         {/* Instant 3-Stage Status Switcher (Assigned -> In Progress -> Completed) */}
-                        <div className="flex items-center p-0.5 bg-slate-100 rounded-xl text-xs self-start sm:self-auto">
+                        <div className={`flex items-center p-0.5 rounded-xl text-xs self-start sm:self-auto ${
+                          isSuspended ? 'bg-slate-200/70 opacity-60' : 'bg-slate-100'
+                        }`}>
                           <button
                             type="button"
+                            disabled={isSuspended}
                             onClick={() => handleUpdateJobStatus(job.id, 'Assigned')}
                             className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
-                              isAssigned
+                              isSuspended
+                                ? 'cursor-not-allowed text-slate-400'
+                                : isAssigned
                                 ? 'bg-amber-500 text-white shadow-xs font-bold'
                                 : 'text-slate-600 hover:text-slate-900'
                             }`}
-                            title="Set as Assigned"
+                            title={isSuspended ? 'Action locked: Account Suspended' : 'Set as Assigned'}
                           >
                             Assigned
                           </button>
                           <button
                             type="button"
+                            disabled={isSuspended}
                             onClick={() => handleUpdateJobStatus(job.id, 'In Progress')}
                             className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
-                              isInProgress
+                              isSuspended
+                                ? 'cursor-not-allowed text-slate-400'
+                                : isInProgress
                                 ? 'bg-blue-600 text-white shadow-xs font-bold'
                                 : 'text-slate-600 hover:text-slate-900'
                             }`}
-                            title="Set as In Progress"
+                            title={isSuspended ? 'Action locked: Account Suspended' : 'Set as In Progress'}
                           >
                             In Progress
                           </button>
                           <button
                             type="button"
+                            disabled={isSuspended}
                             onClick={() => handleUpdateJobStatus(job.id, 'Completed')}
                             className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
-                              isCompleted
+                              isSuspended
+                                ? 'cursor-not-allowed text-slate-400'
+                                : isCompleted
                                 ? 'bg-emerald-600 text-white shadow-xs font-bold'
                                 : 'text-slate-600 hover:text-slate-900'
                             }`}
-                            title="Set as Completed"
+                            title={isSuspended ? 'Action locked: Account Suspended' : 'Set as Completed'}
                           >
                             Completed
                           </button>
@@ -803,21 +987,33 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                         <div>
                           {isAssigned && (
                             <button
+                              disabled={isSuspended}
                               onClick={() => handleUpdateJobStatus(job.id, 'In Progress')}
-                              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
+                              className={`w-full sm:w-auto px-4 py-2 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition ${
+                                isSuspended 
+                                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed' 
+                                  : 'bg-amber-600 hover:bg-amber-700'
+                              }`}
+                              title={isSuspended ? 'Action locked: Account Suspended' : 'Start work on site'}
                             >
-                              <span>Start Work</span>
+                              <span>{isSuspended ? 'Locked (Suspended)' : 'Start Work'}</span>
                               <ArrowRight className="w-3.5 h-3.5" />
                             </button>
                           )}
 
                           {isInProgress && (
                             <button
+                              disabled={isSuspended}
                               onClick={() => handleUpdateJobStatus(job.id, 'Completed')}
-                              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
+                              className={`w-full sm:w-auto px-4 py-2 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition ${
+                                isSuspended 
+                                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed' 
+                                  : 'bg-emerald-600 hover:bg-emerald-700'
+                              }`}
+                              title={isSuspended ? 'Action locked: Account Suspended' : 'Mark job completed'}
                             >
                               <CheckCircle2 className="w-4 h-4" />
-                              <span>Mark Job Completed</span>
+                              <span>{isSuspended ? 'Locked (Suspended)' : 'Mark Job Completed'}</span>
                             </button>
                           )}
 
@@ -828,8 +1024,12 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                                 <span>Completed</span>
                               </span>
                               <button
+                                disabled={isSuspended}
                                 onClick={() => handleUpdateJobStatus(job.id, 'In Progress')}
-                                className="text-[10px] text-slate-400 hover:text-slate-700 underline px-1"
+                                className={`text-[10px] px-1 ${
+                                  isSuspended ? 'text-slate-300 cursor-not-allowed' : 'text-slate-400 hover:text-slate-700 underline'
+                                }`}
+                                title={isSuspended ? 'Action locked: Account Suspended' : 'Reopen job'}
                               >
                                 Reopen
                               </button>
@@ -1109,9 +1309,13 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-black tracking-tight">{plumber.name}</h2>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      {plumber.status || 'VERIFIED'}
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1 border ${
+                      isSuspended
+                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                        : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    }`}>
+                      {isSuspended ? <AlertCircle className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                      {isSuspended ? 'SUSPENDED' : (plumber.status || 'VERIFIED')}
                     </span>
                   </div>
                   <p className="text-xs text-slate-300 font-mono mt-0.5">License ID: {plumber.license}</p>
@@ -1168,13 +1372,23 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                     <strong className="text-slate-900 font-mono text-xs">{plumber.email}</strong>
                   </div>
 
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/60 border border-emerald-200 text-emerald-900">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      <span className="font-bold">Verification Status:</span>
+                  {isSuspended ? (
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-rose-600" />
+                        <span className="font-bold">Verification Status:</span>
+                      </div>
+                      <span className="font-black text-rose-700 uppercase">SUSPENDED (Action Required)</span>
                     </div>
-                    <span className="font-black text-emerald-700 uppercase">{plumber.status || 'VERIFIED'} (Active)</span>
-                  </div>
+                  ) : (
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/60 border border-emerald-200 text-emerald-900">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span className="font-bold">Verification Status:</span>
+                      </div>
+                      <span className="font-black text-emerald-700 uppercase">{plumber.status || 'VERIFIED'} (Active)</span>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
                     <div className="flex items-center gap-2 text-slate-600">
@@ -1202,13 +1416,23 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 </h3>
 
                 <div className="space-y-3 text-xs">
-                  <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200 text-amber-900 flex items-center justify-between">
+                  <div className={`p-3 rounded-xl border flex items-center justify-between ${
+                    isSuspended
+                      ? 'bg-rose-50/70 border-rose-200 text-rose-900'
+                      : 'bg-amber-50/70 border-amber-200 text-amber-900'
+                  }`}>
                     <div>
                       <p className="font-bold">Accepting New Work Assignments</p>
-                      <p className="text-[10px] text-amber-700">Receive instant push &amp; SMS alerts for nearby jobs</p>
+                      <p className={`text-[10px] ${isSuspended ? 'text-rose-700' : 'text-amber-700'}`}>
+                        {isSuspended 
+                          ? 'Dispatch temporarily halted due to account suspension' 
+                          : 'Receive instant push & SMS alerts for nearby jobs'}
+                      </p>
                     </div>
-                    <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-600 text-white shadow-xs">
-                      ACTIVE
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-black shadow-xs ${
+                      isSuspended ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'
+                    }`}>
+                      {isSuspended ? 'SUSPENDED' : 'ACTIVE'}
                     </span>
                   </div>
 
@@ -1508,6 +1732,122 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* ACCOUNT SUSPENDED POPUP MODAL                            */}
+        {/* ======================================================== */}
+        {isSuspended && isSuspendedModalOpen && (
+          <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-rose-200 animate-in zoom-in-95 duration-200">
+              
+              {/* Red Warning Header */}
+              <div className="bg-gradient-to-r from-rose-700 via-rose-600 to-rose-700 p-6 text-white text-center relative">
+                <button
+                  type="button"
+                  onClick={() => setIsSuspendedModalOpen(false)}
+                  className="absolute right-4 top-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-full transition"
+                  title="Close modal"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <div className="w-16 h-16 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center mx-auto mb-3 shadow-inner">
+                  <AlertCircle className="w-9 h-9 text-white animate-pulse" />
+                </div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/25 text-rose-100 text-[11px] font-black uppercase tracking-wider mb-2 border border-white/20">
+                  <span>Official Compliance Notice</span> &bull; <span>Status: SUSPENDED</span>
+                </div>
+                <h2 className="text-xl font-black tracking-tight">Plumber Account Suspended</h2>
+                <p className="text-xs text-rose-100 mt-1 max-w-sm mx-auto">
+                  Your PlumbMart professional license &amp; job execution rights have been temporarily suspended.
+                </p>
+              </div>
+
+              {/* Body Details */}
+              <div className="p-6 space-y-4">
+                {/* Plumber Credentials Box */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+                  <div className="flex justify-between items-center text-slate-500">
+                    <span>Plumber Name:</span>
+                    <strong className="text-slate-900 font-bold">{plumber.name}</strong>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-500">
+                    <span>Registered Mobile:</span>
+                    <strong className="text-slate-900 font-mono">+91 {plumber.mobile}</strong>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-500">
+                    <span>License ID:</span>
+                    <strong className="text-slate-900 font-mono">{plumber.license || 'PLUMB-KA-2024-884'}</strong>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-500">
+                    <span>Audit Ref:</span>
+                    <span className="text-rose-600 font-mono font-bold">SUSP-REF-{String(plumber.mobile).slice(-4)}</span>
+                  </div>
+                </div>
+
+                {/* What does this mean? */}
+                <div className="space-y-2 text-xs">
+                  <h4 className="font-bold text-slate-900 uppercase tracking-wide text-[11px]">Suspension Restrictions:</h4>
+                  <ul className="space-y-1.5 text-slate-600">
+                    <li className="flex items-start gap-2">
+                      <span className="text-rose-500 font-bold">✕</span>
+                      <span><strong>No New Job Assignments:</strong> You will not receive any new customer job dispatches.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-rose-500 font-bold">✕</span>
+                      <span><strong>Job Stage Updates Locked:</strong> You cannot start or mark completed existing activities.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-rose-500 font-bold">✕</span>
+                      <span><strong>Incentive Payouts on Hold:</strong> Wallet transfers are temporarily paused pending review.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-600 font-bold">✓</span>
+                      <span className="text-slate-500">Product manuals, pipe specifications, and technical guides remain accessible.</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Helpline Card */}
+                <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs space-y-2">
+                  <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                    <Phone className="w-4 h-4 text-amber-700" />
+                    <span>Need Help or Want to Appeal?</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Please contact PlumbMart Verification &amp; Compliance Desk to submit updated trade license, KYC documents, or resolve queries.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <a
+                      href="tel:180020267586"
+                      className="flex-1 text-center py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition shadow-2xs"
+                    >
+                      📞 Call: 1800-2026-PLUM
+                    </a>
+                    <a
+                      href="mailto:compliance@plumbmart.com"
+                      className="flex-1 text-center py-2 px-3 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs transition shadow-2xs"
+                    >
+                      ✉️ Email Desk
+                    </a>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="pt-2 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsSuspendedModalOpen(false)}
+                    className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition shadow-xs text-center"
+                  >
+                    I Understand &bull; Continue in Read-Only Mode
+                  </button>
+                </div>
+
+              </div>
+
             </div>
           </div>
         )}

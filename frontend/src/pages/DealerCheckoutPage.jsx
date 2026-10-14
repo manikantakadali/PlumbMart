@@ -58,11 +58,11 @@ export default function DealerCheckoutPage({ currentUser, onLogout }) {
     recipientName: dealer.name || 'Sri Venkateswara Distributors',
     phone: dealer.mobile || '9000011111',
     addressType: 'Warehouse / Depot',
-    streetAddress: 'Plot 42, 2nd Cross, Peenya Industrial Area Phase 1',
-    landmark: 'Near Peenya Central Depot Hub 02',
-    city: 'Bengaluru',
-    state: 'Karnataka',
-    pincode: '560058'
+    streetAddress: 'Plot 42, Main Wholesale Commercial Zone, Phase 1',
+    landmark: 'Near Regional Logistics Depot Hub',
+    city: dealer.city || 'Bengaluru',
+    state: dealer.state || 'Karnataka',
+    pincode: '560001'
   });
 
   useEffect(() => {
@@ -578,7 +578,7 @@ export default function DealerCheckoutPage({ currentUser, onLogout }) {
                       type="text"
                       value={deliveryAddress.landmark}
                       onChange={e => setDeliveryAddress(prev => ({ ...prev, landmark: e.target.value }))}
-                      placeholder="e.g. Near Peenya Central Depot 02 / Metro Gate 3"
+                      placeholder="e.g. Near City Wholesale Hub / Main Industrial Road"
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white"
                     />
                   </div>
