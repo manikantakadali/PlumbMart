@@ -488,18 +488,15 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
 
       // STEP 3: Check dealer record & approval status in Zoho Inventory
       // Requires ALL THREE: Phone Number, Name, and Email to match in Zoho Inventory!
-      const candidateNames = [
-        personName,
-        name,
-        dealer.name,
-        dealer.contactPerson,
-        dealer.companyName
-      ].filter(Boolean);
+      const enteredName = String(personName || name || '').trim();
+      const candidateNames = enteredName
+        ? [enteredName]
+        : [dealer.contactPerson, dealer.name, dealer.companyName].filter(Boolean);
 
       const zohoCheck = await searchZohoContact({
         email: cleanEmail,
         mobile: cleanMobile,
-        name: personName || name || dealer.name,
+        name: enteredName || dealer.contactPerson || dealer.name,
         candidateNames,
         strictAllMatch: true
       });
@@ -2802,15 +2799,21 @@ app.get('/api/zoho/items', async (req, res) => {
  */
 app.post('/api/zoho/verify-dealer', async (req, res) => {
   try {
-    const { email, mobile } = req.body;
+    const { email, mobile, name } = req.body;
     if (!email && !mobile) {
       return res.status(400).json({ success: false, message: 'Email or mobile number is required for Zoho verification.' });
     }
 
     const cleanEmail = email ? String(email).trim().toLowerCase() : '';
     const cleanMobile = mobile ? String(mobile).replace(/\D/g, '').slice(-10) : '';
+    const cleanName = name ? String(name).trim() : '';
 
-    const result = await searchZohoContact({ email: cleanEmail, mobile: cleanMobile });
+    const result = await searchZohoContact({
+      email: cleanEmail,
+      mobile: cleanMobile,
+      name: cleanName,
+      strictAllMatch: Boolean(cleanName && cleanEmail && cleanMobile)
+    });
     if (result.found) {
       return res.json({
         success: true,

@@ -636,9 +636,62 @@ async function syncZohoItemsToDb() {
 }
 
 /**
- * Search and verify dealer/customer contact in Zoho Inventory
+ * Normalize name string by removing salutations, special characters, and multiple spaces
  */
-async function searchZohoContact({ email, mobile }) {
+function normalizeName(str) {
+  if (!str) return '';
+  return String(str)
+    .toLowerCase()
+    .replace(/^(mr|mrs|ms|dr|shri|smt)\.?\s+/i, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Strict 3-Way Name Verification Helper
+ * Checks if any candidate name matches any Zoho contact name, company name, or contact person name
+ */
+function checkNameMatch(candidateNames, zohoNames) {
+  const normCandidates = (Array.isArray(candidateNames) ? candidateNames : [candidateNames])
+    .map(normalizeName)
+    .filter(Boolean);
+
+  const normZohoNames = (Array.isArray(zohoNames) ? zohoNames : [zohoNames])
+    .map(normalizeName)
+    .filter(Boolean);
+
+  if (normCandidates.length === 0 || normZohoNames.length === 0) return false;
+
+  for (const c of normCandidates) {
+    for (const z of normZohoNames) {
+      if (c === z) return true;
+      if (c.length >= 3 && z.length >= 3) {
+        if (z.includes(c) || c.includes(z)) return true;
+      }
+      const cWords = c.split(' ').filter(w => w.length >= 3);
+      const zWords = z.split(' ').filter(w => w.length >= 3);
+      if (cWords.length > 0 && zWords.length > 0) {
+        const overlap = cWords.filter(w => zWords.includes(w));
+        if (overlap.length >= 1) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Search and verify dealer/customer contact in Zoho Inventory with strict 3-way verification
+ * (Phone Number + Name + Email)
+ * 
+ * @param {object} params
+ * @param {string} [params.email]
+ * @param {string} [params.mobile]
+ * @param {string} [params.name]
+ * @param {string[]} [params.candidateNames]
+ * @param {boolean} [params.strictAllMatch=true] If true, enforces Phone Number + Name + Email all 3 match.
+ */
+async function searchZohoContact({ email, mobile, name, candidateNames = [], strictAllMatch = true }) {
   try {
     const accessToken = await getValidAccessToken();
     if (!accessToken) {
@@ -653,93 +706,227 @@ async function searchZohoContact({ email, mobile }) {
 
     const cleanEmail = email ? String(email).trim().toLowerCase() : '';
     const cleanMobile = mobile ? String(mobile).replace(/\D/g, '').slice(-10) : '';
+    const namesToTest = [name, ...(Array.isArray(candidateNames) ? candidateNames : [])].filter(Boolean);
 
-    console.log(`[Zoho Verification] 🔍 Searching Zoho Inventory (Org: ${orgId}) for: email="${cleanEmail}", mobile="${cleanMobile}"`);
+    console.log(`[Zoho Verification] 🔍 Searching Zoho (Org: ${orgId}) [strictAllMatch=${strictAllMatch}]: email="${cleanEmail}", mobile="${cleanMobile}", names=[${namesToTest.join(', ')}]`);
+
+    // Helper to fetch full contact details with contact_persons from Zoho
+    async function fetchFullContact(contactId) {
+      try {
+        const detailRes = await fetch(`${apiDomain}/inventory/v1/contacts/${contactId}?organization_id=${orgId}`, {
+          headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
+        });
+        const detailData = await detailRes.json();
+        if (detailData.code === 0 && detailData.contact) {
+          return detailData.contact;
+        }
+      } catch (e) {
+        console.warn(`[Zoho Contact Detail Error]: ${e.message}`);
+      }
+      return null;
+    }
+
+    // Helper to format contact response
+    function formatContact(c) {
+      const primaryPerson = (c.contact_persons && c.contact_persons.length > 0)
+        ? `${c.contact_persons[0].first_name || ''} ${c.contact_persons[0].last_name || ''}`.trim()
+        : '';
+      const fallbackPerson = `${c.first_name || ''} ${c.last_name || ''}`.trim();
+
+      return {
+        contactId: c.contact_id,
+        companyName: c.company_name || c.customer_name || c.contact_name,
+        contactName: c.contact_name,
+        contactPerson: primaryPerson || fallbackPerson || c.contact_name,
+        email: c.email,
+        phone: c.phone || c.mobile,
+        mobile: c.mobile || c.phone,
+        status: c.status,
+        customerSubType: c.customer_sub_type,
+        currencyCode: c.currency_code || 'INR',
+        paymentTermsLabel: c.payment_terms_label || 'Due on Receipt',
+        outstandingReceivableAmount: c.outstanding_receivable_amount || 0,
+        portalStatus: c.portal_status,
+        source: 'Zoho Inventory Live API'
+      };
+    }
+
+    // Collect candidate contacts from Zoho
+    const candidateContactIds = new Set();
+    const candidateSummaries = [];
 
     // 1. Direct query with email filter if email provided
     if (cleanEmail) {
-      const emailUrl = `${apiDomain}/inventory/v1/contacts?organization_id=${orgId}&email=${encodeURIComponent(cleanEmail)}`;
-      const res = await fetch(emailUrl, {
+      try {
+        const emailUrl = `${apiDomain}/inventory/v1/contacts?organization_id=${orgId}&email=${encodeURIComponent(cleanEmail)}`;
+        const res = await fetch(emailUrl, {
+          headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
+        });
+        const data = await res.json();
+        if (data.code === 0 && Array.isArray(data.contacts)) {
+          for (const c of data.contacts) {
+            if (c.contact_id && !candidateContactIds.has(c.contact_id)) {
+              candidateContactIds.add(c.contact_id);
+              candidateSummaries.push(c);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Zoho Email Search Error]:', e.message);
+      }
+    }
+
+    // 2. Fetch contacts list to match by mobile or list scan
+    try {
+      const allUrl = `${apiDomain}/inventory/v1/contacts?organization_id=${orgId}&per_page=200`;
+      const res = await fetch(allUrl, {
         headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
       });
       const data = await res.json();
-      if (data.code === 0 && Array.isArray(data.contacts) && data.contacts.length > 0) {
-        const contact = data.contacts[0];
-        console.log(`[Zoho Verification] ✅ Match found by email! Contact ID: ${contact.contact_id} (${contact.company_name || contact.contact_name})`);
-        return {
-          found: true,
-          matchedBy: 'email',
-          contact: {
-            contactId: contact.contact_id,
-            companyName: contact.company_name || contact.customer_name || contact.contact_name,
-            contactName: contact.contact_name,
-            contactPerson: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.contact_name,
-            email: contact.email,
-            phone: contact.phone || contact.mobile,
-            mobile: contact.mobile || contact.phone,
-            status: contact.status,
-            customerSubType: contact.customer_sub_type,
-            currencyCode: contact.currency_code || 'INR',
-            paymentTermsLabel: contact.payment_terms_label || 'Due on Receipt',
-            outstandingReceivableAmount: contact.outstanding_receivable_amount || 0,
-            portalStatus: contact.portal_status,
-            source: 'Zoho Inventory Live API'
+      if (data.code === 0 && Array.isArray(data.contacts)) {
+        for (const c of data.contacts) {
+          const cEmail = (c.email || '').trim().toLowerCase();
+          const cPhone = (c.phone || '').replace(/\D/g, '').slice(-10);
+          const cMobile = (c.mobile || '').replace(/\D/g, '').slice(-10);
+
+          if ((cleanEmail && cEmail === cleanEmail) || (cleanMobile && (cPhone === cleanMobile || cMobile === cleanMobile))) {
+            if (c.contact_id && !candidateContactIds.has(c.contact_id)) {
+              candidateContactIds.add(c.contact_id);
+              candidateSummaries.push(c);
+            }
           }
-        };
+        }
+      }
+    } catch (e) {
+      console.warn('[Zoho Contact List Error]:', e.message);
+    }
+
+    if (candidateSummaries.length === 0) {
+      console.warn(`[Zoho Verification] ❌ No contact found in Zoho Inventory matching "${cleanEmail || cleanMobile}".`);
+      return {
+        found: false,
+        allMatched: false,
+        emailMatched: false,
+        numberMatched: false,
+        nameMatched: false,
+        reason: `No dealer contact matching "${cleanEmail || cleanMobile}" found in Zoho Inventory (Org: ${orgId}).`
+      };
+    }
+
+    // 3. Evaluate each candidate contact for 3-way match
+    let bestPartialMatch = null;
+
+    for (const summary of candidateSummaries) {
+      const full = (await fetchFullContact(summary.contact_id)) || summary;
+      const contactPersons = full.contact_persons || [];
+
+      // Extract all emails
+      const allEmails = [
+        full.email,
+        summary.email,
+        ...contactPersons.map(cp => cp.email)
+      ].filter(Boolean).map(e => String(e).trim().toLowerCase());
+
+      // Extract all phones (last 10 digits)
+      const allPhones = [
+        full.phone,
+        full.mobile,
+        summary.phone,
+        summary.mobile,
+        ...contactPersons.flatMap(cp => [cp.phone, cp.mobile])
+      ].filter(Boolean).map(p => String(p).replace(/\D/g, '').slice(-10));
+
+      // Extract all names
+      const allNames = [
+        full.contact_name,
+        full.company_name,
+        full.customer_name,
+        summary.contact_name,
+        summary.company_name,
+        `${full.first_name || ''} ${full.last_name || ''}`.trim(),
+        ...contactPersons.flatMap(cp => [
+          cp.contact_person_name,
+          `${cp.salutation || ''} ${cp.first_name || ''} ${cp.last_name || ''}`.trim(),
+          `${cp.first_name || ''} ${cp.last_name || ''}`.trim(),
+          cp.first_name,
+          cp.last_name
+        ])
+      ].filter(Boolean);
+
+      const emailMatched = cleanEmail ? allEmails.includes(cleanEmail) : false;
+      const numberMatched = cleanMobile ? allPhones.some(p => p === cleanMobile) : false;
+      const nameMatched = namesToTest.length > 0 ? checkNameMatch(namesToTest, allNames) : false;
+
+      const formatted = formatContact(full);
+
+      if (strictAllMatch) {
+        if (emailMatched && numberMatched && nameMatched) {
+          console.log(`[Zoho Verification] ✅ 3-WAY MATCH SUCCESS! Contact ID: ${formatted.contactId} (${formatted.companyName} / ${formatted.contactPerson})`);
+          return {
+            found: true,
+            allMatched: true,
+            emailMatched: true,
+            numberMatched: true,
+            nameMatched: true,
+            matchedBy: '3way_strict',
+            contact: formatted
+          };
+        } else {
+          // Track partial match for specific error diagnostic
+          if (!bestPartialMatch || (emailMatched && numberMatched)) {
+            bestPartialMatch = {
+              emailMatched,
+              numberMatched,
+              nameMatched,
+              contact: formatted
+            };
+          }
+        }
+      } else {
+        // Non-strict mode (e.g. for duplicate prevention during registration)
+        if (emailMatched || numberMatched) {
+          return {
+            found: true,
+            allMatched: emailMatched && numberMatched && nameMatched,
+            emailMatched,
+            numberMatched,
+            nameMatched,
+            matchedBy: emailMatched ? 'email' : 'phone',
+            contact: formatted
+          };
+        }
       }
     }
 
-    // 2. Fetch contacts list and check phone / mobile / contact_persons
-    const allUrl = `${apiDomain}/inventory/v1/contacts?organization_id=${orgId}&per_page=200`;
-    const res = await fetch(allUrl, {
-      headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
-    });
-    const data = await res.json();
+    // If strict match was required and not all 3 matched:
+    const evalResult = bestPartialMatch || {
+      emailMatched: false,
+      numberMatched: false,
+      nameMatched: false,
+      contact: null
+    };
 
-    if (data.code === 0 && Array.isArray(data.contacts)) {
-      const matched = data.contacts.find(c => {
-        const cEmail = (c.email || '').trim().toLowerCase();
-        const cPhone = (c.phone || '').replace(/\D/g, '').slice(-10);
-        const cMobile = (c.mobile || '').replace(/\D/g, '').slice(-10);
+    const mismatchReasons = [];
+    if (!evalResult.emailMatched) mismatchReasons.push(`Email does not match ("${cleanEmail || 'not provided'}")`);
+    if (!evalResult.numberMatched) mismatchReasons.push(`Mobile number does not match ("${cleanMobile || 'not provided'}")`);
+    if (!evalResult.nameMatched) mismatchReasons.push(`Name does not match ("${namesToTest.join(', ') || 'not provided'}")`);
 
-        if (cleanEmail && cEmail === cleanEmail) return true;
-        if (cleanMobile && (cPhone === cleanMobile || cMobile === cleanMobile)) return true;
-        return false;
-      });
+    const reasonMsg = `Zoho Inventory 3-way verification failed: ${mismatchReasons.join(', ')}. All three (Phone Number, Name, and Email) must match an active customer record in Zoho Inventory (Org: ${orgId}).`;
+    console.warn(`[Zoho Verification] ❌ ${reasonMsg}`);
 
-      if (matched) {
-        console.log(`[Zoho Verification] ✅ Match found in contacts list! Contact ID: ${matched.contact_id} (${matched.company_name || matched.contact_name})`);
-        return {
-          found: true,
-          matchedBy: 'list_scan',
-          contact: {
-            contactId: matched.contact_id,
-            companyName: matched.company_name || matched.customer_name || matched.contact_name,
-            contactName: matched.contact_name,
-            contactPerson: `${matched.first_name || ''} ${matched.last_name || ''}`.trim() || matched.contact_name,
-            email: matched.email,
-            phone: matched.phone || matched.mobile,
-            mobile: matched.mobile || matched.phone,
-            status: matched.status,
-            customerSubType: matched.customer_sub_type,
-            currencyCode: matched.currency_code || 'INR',
-            paymentTermsLabel: matched.payment_terms_label || 'Due on Receipt',
-            outstandingReceivableAmount: matched.outstanding_receivable_amount || 0,
-            portalStatus: matched.portal_status,
-            source: 'Zoho Inventory Live API'
-          }
-        };
-      }
-    }
-
-    console.warn(`[Zoho Verification] ❌ No match found in Zoho Contacts for: "${cleanEmail}" / "${cleanMobile}"`);
     return {
       found: false,
-      reason: `No dealer contact matching "${cleanEmail || cleanMobile}" found in Zoho Inventory (Org: ${orgId}).`
+      allMatched: false,
+      emailMatched: evalResult.emailMatched,
+      numberMatched: evalResult.numberMatched,
+      nameMatched: evalResult.nameMatched,
+      reason: reasonMsg,
+      contact: evalResult.contact
     };
+
   } catch (err) {
     console.error('[Zoho Verification Error]:', err.message);
-    return { found: false, error: err.message };
+    return { found: false, allMatched: false, error: err.message };
   }
 }
 
@@ -763,7 +950,7 @@ async function createZohoCustomerContact({ name, email, mobile, companyName, gst
     const cleanMobile = mobile ? String(mobile).replace(/\D/g, '').slice(-10) : '';
 
     // STRICT CHECK: Prevent duplicate customer records in Zoho
-    const existing = await searchZohoContact({ email: cleanEmail, mobile: cleanMobile });
+    const existing = await searchZohoContact({ email: cleanEmail, mobile: cleanMobile, strictAllMatch: false });
     if (existing && existing.found) {
       console.log(`[Zoho Contact] Contact already exists in Zoho (ID: ${existing.contact.contactId}). Duplicate creation prevented.`);
       return {
@@ -861,6 +1048,8 @@ module.exports = {
   getProductImage,
   getSyncedZohoProducts,
   syncZohoItemsToDb,
+  normalizeName,
+  checkNameMatch,
   searchZohoContact,
   createZohoCustomerContact
 };

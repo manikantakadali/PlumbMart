@@ -560,7 +560,7 @@ export default function LoginPage({ onLoginSuccess }) {
               )}
             </div>
           ) : authStep === 'INPUT' ? (
-            <form onSubmit={handleDirectSubmit} className="space-y-4">
+            <form onSubmit={handleSendEmailOtp} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Person Name *
@@ -614,7 +614,7 @@ export default function LoginPage({ onLoginSuccess }) {
                   />
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1.5">
-                  Your registered account email address
+                  We will send a 6-digit OTP code to this email address
                 </p>
               </div>
 
@@ -627,28 +627,17 @@ export default function LoginPage({ onLoginSuccess }) {
                   {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Signing in...</span>
+                      <span>Sending OTP to Email...</span>
                     </>
                   ) : (
                     <>
                       <span>
-                        {redirectTarget === 'checkout' ? 'Sign In & Proceed to Buy' : `Sign In as ${role}`}
+                        {redirectTarget === 'checkout' ? 'Continue & Send OTP' : 'Send Verification OTP'}
                       </span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
                 </button>
-
-                <div className="text-center">
-                  <button
-                    type="button"
-                    onClick={handleSendEmailOtp}
-                    disabled={loading}
-                    className="text-[11px] text-slate-500 hover:text-slate-800 hover:underline cursor-pointer"
-                  >
-                    Receive OTP via email instead &rarr;
-                  </button>
-                </div>
               </div>
             </form>
           ) : (
@@ -685,9 +674,10 @@ export default function LoginPage({ onLoginSuccess }) {
                     inputMode="numeric"
                     maxLength={6}
                     autoFocus
+                    required
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="Enter 6-digit OTP (optional)"
+                    placeholder="Enter 6-digit OTP"
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono tracking-widest text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition text-center"
                   />
                 </div>
@@ -714,7 +704,7 @@ export default function LoginPage({ onLoginSuccess }) {
               <div className="space-y-2 pt-1">
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || otp.length < 6}
                   className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs tracking-wide shadow-lg shadow-blue-600/25 transition active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {loading ? (
