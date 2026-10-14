@@ -382,34 +382,51 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       fetchOrders(false);
     }, 2500);
 
-    // (b) BroadcastChannel for instant cross-tab order notification
+    // (b) BroadcastChannel for instant cross-tab order notification & plumber responses
     let channel;
     try {
       channel = new BroadcastChannel('plumbmart_orders');
       channel.onmessage = (event) => {
-        if (event.data && (event.data.type === 'NEW_ORDER' || event.data.type === 'ORDER_PLACED')) {
+        if (event.data && (
+          event.data.type === 'NEW_ORDER' || 
+          event.data.type === 'ORDER_PLACED' || 
+          event.data.type === 'PLUMBER_RESPONSE_SUBMITTED' ||
+          event.data.type === 'STATUS_UPDATED'
+        )) {
           fetchOrders(true);
+          if (event.data.type === 'PLUMBER_RESPONSE_SUBMITTED') {
+            try {
+              playSuccessSound();
+              dispatchInAppNotification({
+                title: `Plumber Update: #${event.data.orderId}`,
+                message: `${event.data.plumberResponse?.plumberName || 'Plumber'} confirmed "${event.data.plumberResponse?.stageLabel || 'Stage Done'}".`,
+                type: 'plumber'
+              });
+            } catch (errNotif) {}
+          }
         }
       };
     } catch (e) {}
 
     // (c) Window storage event listener for cross-tab communication
     const handleStorageEvent = (e) => {
-      if (e.key === 'plumbmart_last_order_broadcast') {
+      if (e.key === 'plumbmart_last_order_broadcast' || e.key === 'plumbmart_status_broadcast') {
         fetchOrders(true);
       }
     };
     window.addEventListener('storage', handleStorageEvent);
 
-    // (d) Window custom event listener for in-app order creation
+    // (d) Window custom event listener for in-app order creation & plumber updates
     const handleCustomOrderEvent = () => fetchOrders(true);
     window.addEventListener('plumbmart_order_created', handleCustomOrderEvent);
+    window.addEventListener('plumbmart_order_updated', handleCustomOrderEvent);
 
     return () => {
       clearInterval(pollTimer);
       if (channel) channel.close();
       window.removeEventListener('storage', handleStorageEvent);
       window.removeEventListener('plumbmart_order_created', handleCustomOrderEvent);
+      window.removeEventListener('plumbmart_order_updated', handleCustomOrderEvent);
     };
   }, []);
 
@@ -2775,6 +2792,19 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                                 }`}>
                                   {order.status}
                                 </span>
+
+                                {/* Live Plumber Telemetry Response Badge */}
+                                {order.plumberStage === 'TASK_DONE' || order.plumberTaskDone ? (
+                                  <span className="flex items-center gap-1 mt-1 text-[9px] font-bold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-md border border-emerald-500/30 w-fit">
+                                    <CheckCircle2 className="w-2.5 h-2.5" />
+                                    <span>Plumber: Task Done &amp; Signed</span>
+                                  </span>
+                                ) : order.plumberStage === 'MATERIALS_RECEIVED' ? (
+                                  <span className="flex items-center gap-1 mt-1 text-[9px] font-bold text-amber-400 bg-amber-500/15 px-2 py-0.5 rounded-md border border-amber-500/30 w-fit">
+                                    <Check className="w-2.5 h-2.5" />
+                                    <span>Plumber: Materials Received</span>
+                                  </span>
+                                ) : null}
                               </td>
                               <td className="py-3.5 px-4 text-center">
                                 <select
@@ -2794,6 +2824,22 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                                   <option value="Delivered">Delivered</option>
                                   <option value="Cancelled">Cancelled</option>
                                 </select>
+
+                                {/* 1-Click Approve Task Completed button when plumber signed off */}
+                                {(order.plumberStage === 'TASK_DONE' || order.plumberTaskDone) && order.status !== 'Delivered' && (
+                                  <button
+                                    type="button"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      handleUpdateOrderStatus(order.id, 'Delivered');
+                                    }}
+                                    className="mt-1.5 w-full px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] flex items-center justify-center gap-1 shadow-sm transition active:scale-95 cursor-pointer"
+                                    title="Verify plumber's field sign-off and mark task complete"
+                                  >
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    <span>Verify &amp; Close Task</span>
+                                  </button>
+                                )}
                               </td>
                               <td className="py-3.5 px-4 text-right">
                                 <button
@@ -4233,6 +4279,80 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Field Plumber Verification & Sign-Off Card */}
+              <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Wrench className="w-4 h-4 text-amber-400" />
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                      Field Plumber Verification &amp; Stage Response
+                    </h4>
+                  </div>
+                  {selectedOrder.plumberStage === 'TASK_DONE' || selectedOrder.plumberTaskDone ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      <span>Plumber Signed Off (Task 100% Done)</span>
+                    </span>
+                  ) : selectedOrder.plumberStage === 'MATERIALS_RECEIVED' ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                      <Check className="w-3 h-3 text-amber-400" />
+                      <span>Materials Received &amp; Inspected</span>
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400">
+                      Awaiting Plumber Response
+                    </span>
+                  )}
+                </div>
+
+                {selectedOrder.plumberResponse ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Assigned Plumber</span>
+                      <p className="text-white font-bold mt-0.5">{selectedOrder.plumberResponse.plumberName}</p>
+                      <p className="text-[11px] text-slate-400 font-mono mt-0.5">License: {selectedOrder.plumberResponse.plumberLicense}</p>
+                      <p className="text-[11px] text-slate-400 font-mono">📱 +91 {selectedOrder.plumberResponse.plumberMobile}</p>
+                    </div>
+
+                    <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 sm:col-span-2 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold">Field Notes / Test Report</span>
+                        <span className="text-[10px] text-slate-500 font-mono">{selectedOrder.plumberResponse.timestampStr}</span>
+                      </div>
+                      <p className="text-slate-200 text-xs italic bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
+                        &ldquo;{selectedOrder.plumberResponse.notes || 'Verified on site'}&rdquo;
+                      </p>
+                      <p className="text-[10px] text-emerald-400 font-medium">
+                        ✓ Live field telematics verified from Plumber Dashboard
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400">
+                    No plumber response recorded yet. When the plumber on site inspects materials or completes the installation, their sign-off and test report will appear here.
+                  </p>
+                )}
+
+                {/* Admin Close Button if Plumber Signed Off */}
+                {selectedOrder.status !== 'Delivered' && (
+                  <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-slate-800/80">
+                    <span className="text-[11px] text-slate-400">
+                      {selectedOrder.plumberStage === 'TASK_DONE'
+                        ? 'Plumber has submitted full sign-off. Admin approval will close this order.'
+                        : 'You can verify and finalize this order once ready.'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'Delivered')}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Approve Plumber Sign-Off &amp; Close Task</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
             </div>

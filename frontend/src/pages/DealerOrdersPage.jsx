@@ -18,7 +18,8 @@ import {
   Search,
   ExternalLink,
   MapPin,
-  AlertCircle
+  AlertCircle,
+  Wrench
 } from 'lucide-react';
 import { getDealerHub } from '../utils/hubResolver';
 
@@ -43,7 +44,17 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
 
   const fetchOrders = async () => {
     try {
-      const res = await fetch(`http://localhost:4000/api/orders?clientType=Dealer`);
+      let res;
+      try {
+        res = await fetch('/api/orders?clientType=Dealer');
+        if (!res.ok) throw new Error('Status: ' + res.status);
+      } catch (e1) {
+        try {
+          res = await fetch('http://localhost:5000/api/orders?clientType=Dealer');
+        } catch (e2) {
+          res = await fetch('http://localhost:4000/api/orders?clientType=Dealer');
+        }
+      }
       const data = await res.json();
       if (data && data.success && Array.isArray(data.data) && data.data.length > 0) {
         setOrders(data.data);
@@ -145,6 +156,32 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
 
   useEffect(() => {
     fetchOrders();
+
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('plumbmart_orders');
+      bc.onmessage = (msg) => {
+        if (msg.data && (
+          msg.data.type === 'NEW_ORDER' || 
+          msg.data.type === 'STATUS_UPDATED' || 
+          msg.data.type === 'PLUMBER_RESPONSE_SUBMITTED'
+        )) {
+          fetchOrders();
+        }
+      };
+    } catch (e) {}
+
+    const handleUpdate = () => fetchOrders();
+    window.addEventListener('plumbmart_order_created', handleUpdate);
+    window.addEventListener('plumbmart_order_updated', handleUpdate);
+    window.addEventListener('plumbmart_status_updated', handleUpdate);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('plumbmart_order_created', handleUpdate);
+      window.removeEventListener('plumbmart_order_updated', handleUpdate);
+      window.removeEventListener('plumbmart_status_updated', handleUpdate);
+    };
   }, []);
 
   // Settle invoice API call
@@ -348,6 +385,18 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
                         }`}>
                           ● {order.status}
                         </span>
+
+                        {order.plumberStage === 'TASK_DONE' || order.plumberTaskDone ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>Field Plumber: Work Done &amp; Tested</span>
+                          </span>
+                        ) : order.plumberStage === 'MATERIALS_RECEIVED' ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-amber-700" />
+                            <span>Field Plumber: Materials Received on Site</span>
+                          </span>
+                        ) : null}
                       </div>
 
                       <div className="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
@@ -357,6 +406,15 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
                         <span>•</span>
                         <span>Est. Delivery: <strong className="text-slate-700">{order.expectedDate || 'Tomorrow'}</strong></span>
                       </div>
+
+                      {order.plumberResponse && (
+                        <div className="flex items-center gap-2 mt-1.5 text-[11px] text-slate-600 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200/80 w-fit">
+                          <Wrench className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span>
+                            Plumber <strong className="text-slate-800">{order.plumberResponse.plumberName}</strong>: {order.plumberResponse.notes || order.plumberResponse.stageLabel}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">

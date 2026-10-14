@@ -38,7 +38,10 @@ import {
   RefreshCw,
   Eye,
   ShoppingBag,
-  Printer
+  Printer,
+  Send,
+  CheckSquare,
+  FileCheck
 } from 'lucide-react';
 
 const INITIAL_JOBS = [
@@ -211,6 +214,11 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
   const [dealerOrderStatusFilter, setDealerOrderStatusFilter] = useState('All');
   const [selectedDealerOrder, setSelectedDealerOrder] = useState(null);
 
+  // Plumber Response & Field Sign-Off State
+  const [submittingResponseOrderId, setSubmittingResponseOrderId] = useState(null);
+  const [stageNoteModal, setStageNoteModal] = useState(null); // { order, targetStage, title, description, defaultNotes }
+  const [stageNoteInput, setStageNoteInput] = useState('');
+
   const fetchDealerOrders = async () => {
     setLoadingDealerOrders(true);
     try {
@@ -236,6 +244,75 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
     }
   };
 
+  const handleSendPlumberResponse = async (orderId, targetStage, notes = '') => {
+    setSubmittingResponseOrderId(orderId);
+    try {
+      const payload = {
+        stage: targetStage,
+        stageLabel: targetStage === 'TASK_DONE' ? 'Task Completed & Signed Off' : 'Materials Received & Inspected',
+        plumberId: plumber.id || 'PLM-01',
+        plumberName: plumber.name || 'Ramesh Kumar',
+        plumberMobile: plumber.mobile || '9111122222',
+        plumberLicense: plumber.license || 'PLUMB-KA-2024-884',
+        notes: notes || (targetStage === 'TASK_DONE' ? 'Installation complete and pressure test passed' : 'Materials inspected on site')
+      };
+
+      let res;
+      try {
+        res = await fetch(`/api/orders/${orderId}/plumber-response`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Status: ' + res.status);
+      } catch (e1) {
+        try {
+          res = await fetch(`http://localhost:5000/api/orders/${orderId}/plumber-response`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        } catch (e2) {
+          res = await fetch(`http://localhost:4000/api/orders/${orderId}/plumber-response`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+      }
+
+      const data = await res.json();
+      if (data && data.success && data.order) {
+        setDealerOrders(prev => prev.map(o => o.id === orderId ? data.order : o));
+        if (selectedDealerOrder && selectedDealerOrder.id === orderId) {
+          setSelectedDealerOrder(data.order);
+        }
+
+        // Broadcast across tabs so Admin & Dealer see it instantly
+        try {
+          const ch = new BroadcastChannel('plumbmart_orders');
+          ch.postMessage({
+            type: 'PLUMBER_RESPONSE_SUBMITTED',
+            orderId,
+            order: data.order,
+            plumberResponse: data.order.plumberResponse
+          });
+          ch.close();
+        } catch (e) {}
+
+        window.dispatchEvent(new CustomEvent('plumbmart_order_updated', { detail: data.order }));
+        showToast(targetStage === 'TASK_DONE' ? '✓ Task completion response submitted to Admin!' : '✓ Materials receipt acknowledged to Admin & Dealer!');
+        setStageNoteModal(null);
+      } else {
+        alert(data?.message || 'Failed to submit plumber response');
+      }
+    } catch (err) {
+      alert('Error submitting plumber response: ' + err.message);
+    } finally {
+      setSubmittingResponseOrderId(null);
+    }
+  };
+
   useEffect(() => {
     fetchDealerOrders();
 
@@ -244,7 +321,16 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         setDealerOrders(prev => [e.detail, ...prev.filter(o => o.id !== e.detail.id)]);
       }
     };
+    const handleOrderUpdated = (e) => {
+      if (e?.detail?.id) {
+        setDealerOrders(prev => prev.map(o => o.id === e.detail.id ? e.detail : o));
+        if (selectedDealerOrder && selectedDealerOrder.id === e.detail.id) {
+          setSelectedDealerOrder(e.detail);
+        }
+      }
+    };
     window.addEventListener('plumbmart_order_created', handleOrderCreated);
+    window.addEventListener('plumbmart_order_updated', handleOrderUpdated);
 
     let bc = null;
     try {
@@ -253,11 +339,24 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         if (msg.data?.type === 'NEW_ORDER' && msg.data?.order) {
           setDealerOrders(prev => [msg.data.order, ...prev.filter(o => o.id !== msg.data.order.id)]);
         }
+        if (msg.data?.type === 'STATUS_UPDATED' && msg.data?.orderId) {
+          setDealerOrders(prev => prev.map(o => o.id === msg.data.orderId ? { ...o, status: msg.data.status } : o));
+          if (selectedDealerOrder && selectedDealerOrder.id === msg.data.orderId) {
+            setSelectedDealerOrder(prev => ({ ...prev, status: msg.data.status }));
+          }
+        }
+        if (msg.data?.type === 'PLUMBER_RESPONSE_SUBMITTED' && msg.data?.order) {
+          setDealerOrders(prev => prev.map(o => o.id === msg.data.orderId ? msg.data.order : o));
+          if (selectedDealerOrder && selectedDealerOrder.id === msg.data.orderId) {
+            setSelectedDealerOrder(msg.data.order);
+          }
+        }
       };
     } catch (e) {}
 
     return () => {
       window.removeEventListener('plumbmart_order_created', handleOrderCreated);
+      window.removeEventListener('plumbmart_order_updated', handleOrderUpdated);
       if (bc) bc.close();
     };
   }, []);
@@ -1408,6 +1507,109 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                         </div>
                       </div>
 
+                      {/* Plumber Field Response & Stage Confirmation Box */}
+                      <div className="p-3.5 rounded-2xl border bg-gradient-to-r from-slate-50 to-amber-50/40 border-slate-200 space-y-2.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 flex items-center justify-center font-bold">
+                              <Wrench className="w-3.5 h-3.5" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-900">
+                                Plumber Field Response &amp; Stage Sign-Off
+                              </p>
+                              <p className="text-[10px] text-slate-500">
+                                Send real-time updates directly to Operations Admin &amp; Sri Venkateswara Distributors
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Current stage badge */}
+                          {order.plumberStage === 'TASK_DONE' || order.status === 'Delivered' ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 self-start sm:self-auto">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Task Signed Off &bull; 100% Done</span>
+                            </span>
+                          ) : order.plumberStage === 'MATERIALS_RECEIVED' ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 self-start sm:self-auto">
+                              <Check className="w-3 h-3 text-amber-700" />
+                              <span>Materials Acknowledged on Site</span>
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 self-start sm:self-auto">
+                              Pending Plumber Acknowledgment
+                            </span>
+                          )}
+                        </div>
+
+                        {/* If plumber previously responded, show details */}
+                        {order.plumberResponse && (
+                          <div className="p-2.5 rounded-xl bg-white border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 font-medium">
+                              <span>Verified by: <strong className="text-slate-800">{order.plumberResponse.plumberName}</strong> ({order.plumberResponse.plumberLicense})</span>
+                              <span className="font-mono text-slate-400">{order.plumberResponse.timestampStr || 'Recent'}</span>
+                            </div>
+                            {order.plumberResponse.notes && (
+                              <p className="text-slate-700 font-medium italic">
+                                &ldquo;{order.plumberResponse.notes}&rdquo;
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Interactive Action Buttons for Plumber */}
+                        <div className="flex items-center gap-2 pt-1 flex-wrap">
+                          {(!order.plumberStage || order.plumberStage === 'NONE') && order.status !== 'Delivered' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStageNoteInput('All items received on site in good condition according to packing slip.');
+                                setStageNoteModal({
+                                  order,
+                                  targetStage: 'MATERIALS_RECEIVED',
+                                  title: 'Acknowledge Materials Received',
+                                  description: `Confirm delivery of ${Array.isArray(order.items) ? order.items.length : 1} material items from Sri Venkateswara Distributors.`,
+                                  defaultNotes: 'All items received on site in good condition according to packing slip.'
+                                });
+                              }}
+                              disabled={submittingResponseOrderId === order.id}
+                              className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>1. Acknowledge Materials Received</span>
+                            </button>
+                          )}
+
+                          {order.plumberStage === 'MATERIALS_RECEIVED' && order.status !== 'Delivered' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStageNoteInput('Work completed successfully. All pipes and valves installed, zero leakage verified under pressure test.');
+                                setStageNoteModal({
+                                  order,
+                                  targetStage: 'TASK_DONE',
+                                  title: 'Submit Task Completion & Sign-Off',
+                                  description: `Submit final installation sign-off for Order #${order.id} to Operations Admin.`,
+                                  defaultNotes: 'Work completed successfully. All pipes and valves installed, zero leakage verified under pressure test.'
+                                });
+                              }}
+                              disabled={submittingResponseOrderId === order.id}
+                              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>2. Mark Work Done &amp; Send Sign-Off to Admin</span>
+                            </button>
+                          )}
+
+                          {order.status === 'Delivered' && (
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200">
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Admin Operations Verified &amp; Closed Task</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
                       {/* Card Action Button */}
                       <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                         <span className="text-[11px] text-slate-500 flex items-center gap-1 font-medium">
@@ -2414,6 +2616,80 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 </div>
               </div>
 
+              {/* Plumber Response Block inside Packing Slip */}
+              <div className="mt-4 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                    <Wrench className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Plumber Field Sign-Off Status:</span>
+                  </span>
+                  {selectedDealerOrder.plumberStage === 'TASK_DONE' || selectedDealerOrder.status === 'Delivered' ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      ✓ Task Completed &amp; Verified
+                    </span>
+                  ) : selectedDealerOrder.plumberStage === 'MATERIALS_RECEIVED' ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                      ✓ Materials Acknowledged on Site
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700">
+                      Pending Plumber Receipt
+                    </span>
+                  )}
+                </div>
+
+                {selectedDealerOrder.plumberResponse && (
+                  <p className="text-[11px] text-slate-600">
+                    Signed by: <strong>{selectedDealerOrder.plumberResponse.plumberName}</strong> ({selectedDealerOrder.plumberResponse.timestampStr}) &bull; Notes: <em>&ldquo;{selectedDealerOrder.plumberResponse.notes || 'Verified'}&rdquo;</em>
+                  </p>
+                )}
+
+                {/* Quick actions inside modal */}
+                {selectedDealerOrder.status !== 'Delivered' && (
+                  <div className="pt-2 flex items-center gap-2">
+                    {(!selectedDealerOrder.plumberStage || selectedDealerOrder.plumberStage === 'NONE') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStageNoteInput('All items received on site in good condition according to packing slip.');
+                          setStageNoteModal({
+                            order: selectedDealerOrder,
+                            targetStage: 'MATERIALS_RECEIVED',
+                            title: 'Acknowledge Materials Received',
+                            description: `Confirm delivery of ${Array.isArray(selectedDealerOrder.items) ? selectedDealerOrder.items.length : 1} material items from Sri Venkateswara Distributors.`,
+                            defaultNotes: 'All items received on site in good condition according to packing slip.'
+                          });
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Acknowledge Materials Received</span>
+                      </button>
+                    )}
+
+                    {selectedDealerOrder.plumberStage === 'MATERIALS_RECEIVED' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStageNoteInput('Work completed successfully. All pipes and valves installed, zero leakage verified under pressure test.');
+                          setStageNoteModal({
+                            order: selectedDealerOrder,
+                            targetStage: 'TASK_DONE',
+                            title: 'Submit Task Completion & Sign-Off',
+                            description: `Submit final installation sign-off for Order #${selectedDealerOrder.id} to Operations Admin.`,
+                            defaultNotes: 'Work completed successfully. All pipes and valves installed, zero leakage verified under pressure test.'
+                          });
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Confirm Work Done &amp; Send Sign-Off to Admin</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Modal Action Buttons */}
               <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
                 <button
@@ -2431,6 +2707,125 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer"
                 >
                   Close Slip
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* PLUMBER STAGE CONFIRMATION & NOTES MODAL                */}
+        {/* ======================================================== */}
+        {stageNoteModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-slate-200 shadow-2xl relative space-y-4">
+              <button
+                onClick={() => setStageNoteModal(null)}
+                className="absolute top-5 right-5 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-100 pr-8">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold shrink-0 ${
+                  stageNoteModal.targetStage === 'TASK_DONE' 
+                    ? 'bg-emerald-50 text-emerald-600' 
+                    : 'bg-amber-50 text-amber-600'
+                }`}>
+                  {stageNoteModal.targetStage === 'TASK_DONE' ? (
+                    <CheckCircle2 className="w-5 h-5" />
+                  ) : (
+                    <Package className="w-5 h-5" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-slate-900">
+                    {stageNoteModal.title}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Order <strong className="font-mono text-slate-700">#{stageNoteModal.order.id}</strong> &bull; Sourced from Sri Venkateswara Distributors
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <p className="text-slate-600 leading-relaxed">
+                  {stageNoteModal.description}
+                </p>
+
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-[11px] text-slate-600 space-y-1">
+                  <p className="font-bold text-slate-800">Signing Plumber Identity:</p>
+                  <p>👤 {plumber.name} &bull; License: <span className="font-mono">{plumber.license}</span></p>
+                  <p>📱 Registered Mobile: +91 {plumber.mobile}</p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1.5">
+                    Field Verification Notes / Remarks (Sent directly to Operations Admin):
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={stageNoteInput}
+                    onChange={(e) => setStageNoteInput(e.target.value)}
+                    placeholder="Enter inspection or test details..."
+                    className="w-full p-3 rounded-xl border border-slate-200 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none resize-none"
+                  />
+                </div>
+
+                {/* Quick remark pills */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {(stageNoteModal.targetStage === 'TASK_DONE' ? [
+                    'Pressure tested at 6 bar - zero leaks',
+                    'All fittings welded & certified',
+                    'Customer handed over inspection'
+                  ] : [
+                    'All items received in good condition',
+                    'Package verified against PO slip',
+                    'Shortage / dent reported none'
+                  ]).map((remark, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setStageNoteInput(remark)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[10px] font-semibold text-slate-600 transition cursor-pointer"
+                    >
+                      + {remark}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setStageNoteModal(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={submittingResponseOrderId === stageNoteModal.order.id}
+                  onClick={() => handleSendPlumberResponse(stageNoteModal.order.id, stageNoteModal.targetStage, stageNoteInput)}
+                  className={`px-5 py-2 rounded-xl text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer ${
+                    stageNoteModal.targetStage === 'TASK_DONE'
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-amber-600 hover:bg-amber-700'
+                  }`}
+                >
+                  {submittingResponseOrderId === stageNoteModal.order.id ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Sending to Admin...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Confirm &amp; Send Response</span>
+                    </>
+                  )}
                 </button>
               </div>
 

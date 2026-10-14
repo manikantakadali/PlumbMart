@@ -2435,6 +2435,19 @@ app.put('/api/orders/:id/status', async (req, res) => {
     orderId: order.id
   });
 
+  // Also notify plumbers when an order is finalized / marked delivered
+  db.notifications.unshift({
+    id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
+    title: `Order #${order.id} Verified & Closed`,
+    message: `Admin Operations verified the field task for Order #${order.id} (${order.clientName || 'Sri Venkateswara Distributors'}). Status: "${status}".`,
+    targetGroup: 'Plumbers',
+    priority: 'normal',
+    sentAt: 'Just now',
+    createdAt: new Date().toISOString(),
+    sender: 'PlumbMart Operations',
+    orderId: order.id
+  });
+
   saveDb(db);
 
   // Sync status update to Supabase orders table
@@ -2448,6 +2461,110 @@ app.put('/api/orders/:id/status', async (req, res) => {
   }
 
   res.json({ success: true, message: `Order #${order.id} status updated to ${status}`, order });
+});
+
+// 4. Plumber Stage Response (Materials Received, Installation In Progress, Task Done)
+app.post('/api/orders/:id/plumber-response', async (req, res) => {
+  const db = getDb();
+  const { stage, stageLabel, plumberId, plumberName, plumberMobile, plumberLicense, notes } = req.body;
+  const order = (db.orders || []).find(o => o.id === req.params.id);
+  if (!order) {
+    return res.status(404).json({ success: false, message: 'Order not found' });
+  }
+
+  const now = new Date();
+  const timestampStr = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+  // Update plumberResponse object on the order
+  const responseEntry = {
+    stage: stage || 'MATERIALS_RECEIVED', // 'MATERIALS_RECEIVED' | 'INSTALLATION_IN_PROGRESS' | 'TASK_DONE'
+    stageLabel: stageLabel || (stage === 'TASK_DONE' ? 'Task Completed & Signed Off' : 'Materials Received & Inspected'),
+    plumberId: plumberId || 'PLM-01',
+    plumberName: plumberName || 'Ramesh Kumar',
+    plumberMobile: plumberMobile || '9111122222',
+    plumberLicense: plumberLicense || 'PLUMB-KA-2024-884',
+    notes: notes || '',
+    updatedAt: now.toISOString(),
+    timestampStr
+  };
+
+  if (!Array.isArray(order.plumberResponses)) {
+    order.plumberResponses = [];
+  }
+  order.plumberResponses.push(responseEntry);
+  order.plumberResponse = responseEntry;
+  order.plumberStage = responseEntry.stage;
+
+  // Dynamically advance tracking steps:
+  if (Array.isArray(order.tracking)) {
+    if (stage === 'MATERIALS_RECEIVED') {
+      if (order.tracking[0]) order.tracking[0].completed = true;
+      if (order.tracking[1]) order.tracking[1].completed = true;
+      if (order.tracking[2]) order.tracking[2].completed = true;
+      if (order.tracking[3]) {
+        order.tracking[3].completed = true;
+        order.tracking[3].time = `Verified by ${responseEntry.plumberName} (${timestampStr})`;
+      }
+      order.status = 'Out for Delivery';
+    } else if (stage === 'INSTALLATION_IN_PROGRESS') {
+      if (order.tracking[3]) order.tracking[3].completed = true;
+      order.status = 'Out for Delivery';
+    } else if (stage === 'TASK_DONE') {
+      order.tracking.forEach(t => t.completed = true);
+      if (order.tracking[4]) {
+        order.tracking[4].completed = true;
+        order.tracking[4].time = `Completed & Tested (${timestampStr})`;
+      }
+      order.status = 'Delivered';
+      order.plumberTaskDone = true;
+    }
+  }
+
+  // Push high-priority notification to Admin
+  if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
+  db.notifications.unshift({
+    id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
+    title: `[Plumber Response] Order #${order.id}`,
+    message: `${responseEntry.plumberName} confirmed "${responseEntry.stageLabel}" for Order #${order.id} (${order.clientName || 'Sri Venkateswara Distributors'}). ${notes ? `Notes: "${notes}"` : ''}`,
+    targetGroup: 'Admin',
+    priority: 'high',
+    sentAt: 'Just now',
+    createdAt: now.toISOString(),
+    sender: `Plumber: ${responseEntry.plumberName}`,
+    orderId: order.id,
+    type: 'plumber_response'
+  });
+
+  // Also push notification to Dealer
+  db.notifications.unshift({
+    id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
+    title: `Site Update: Order #${order.id}`,
+    message: `Plumber ${responseEntry.plumberName} has confirmed "${responseEntry.stageLabel}" on site.`,
+    targetGroup: 'Dealers',
+    priority: 'normal',
+    sentAt: 'Just now',
+    createdAt: now.toISOString(),
+    sender: 'Field Service Operations',
+    orderId: order.id
+  });
+
+  saveDb(db);
+
+  // Sync to Supabase if available
+  try {
+    const { pool } = require('./db');
+    if (pool) {
+      await pool.query('UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2', [order.status, order.id]);
+    }
+  } catch (err) {
+    console.warn('[Supabase Order Status Update Warning]', err.message);
+  }
+
+  res.json({
+    success: true,
+    message: `Plumber response recorded successfully for Order #${order.id}`,
+    order
+  });
 });
 
 // ========================================================
