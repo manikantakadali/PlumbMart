@@ -1,28 +1,124 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Droplets, User, Phone, Mail, MapPin, ArrowLeft, ShieldCheck, UserPlus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { 
+  Droplets, 
+  User, 
+  Phone, 
+  Mail, 
+  MapPin, 
+  ArrowLeft, 
+  ShieldCheck, 
+  UserPlus, 
+  CheckCircle2, 
+  Lock, 
+  Loader2, 
+  RotateCw 
+} from 'lucide-react';
+import { 
+  sendFirebaseOtp, 
+  verifyFirebaseOtp, 
+  cleanMobileNumber, 
+  getFirebaseErrorMessage 
+} from '../firebase';
 
 export default function RegisterPage({ onRegisterSuccess }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { verifiedMobile, idToken: stateIdToken } = location.state || {};
+
   const [formData, setFormData] = useState({
     name: '',
-    mobile: '',
+    mobile: verifiedMobile || '',
     email: '',
     role: 'Customer',
     city: 'Bengaluru'
   });
-  const [error, setError] = useState('');
 
+  const [idToken, setIdToken] = useState(stateIdToken || null);
+  const [isPhoneVerified, setIsPhoneVerified] = useState(Boolean(verifiedMobile));
+  const [otpStepActive, setOtpStepActive] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState(
+    verifiedMobile ? `Mobile number +91 ${verifiedMobile} verified! Please complete your profile.` : ''
+  );
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Resend cooldown timer
+  useEffect(() => {
+    let timer = null;
+    if (resendCooldown > 0) {
+      timer = setInterval(() => {
+        setResendCooldown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [resendCooldown]);
+
+  // Send Email OTP for registration verification
+  const handleSendRegisterOtp = async () => {
+    const clean = cleanMobileNumber(formData.mobile);
     if (!formData.name.trim()) {
       setError('Please enter your full name');
       return;
     }
-    if (!formData.mobile || formData.mobile.trim().length < 10) {
-      setError('Please enter a valid 10-digit mobile number');
+    if (!clean || clean.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number to verify');
+      return;
+    }
+    if (!formData.email.trim() || !formData.email.includes('@')) {
+      setError('Please enter a valid email address to receive your verification code');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccessMsg('');
+
+    try {
+      const response = await fetch('/api/auth/send-email-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name.trim(),
+          mobile: clean,
+          email: formData.email.trim().toLowerCase(),
+          role: formData.role
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        setError(data.message || 'Failed to dispatch verification code to email');
+        setLoading(false);
+        return;
+      }
+
+      setOtpStepActive(true);
+      setResendCooldown(30);
+      setOtpCode('');
+      setSuccessMsg(`Verification code sent to ${data.email}. Please check your inbox.`);
+    } catch (err) {
+      console.error('[Registration Send OTP Error]:', err);
+      setError('Network error while dispatching verification email.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Verify the Email OTP on registration page
+  const handleVerifyRegisterOtp = async () => {
+    if (!otpCode || otpCode.trim().length < 6) {
+      setError('Please enter the 6-digit OTP code received on email');
       return;
     }
 
@@ -30,21 +126,94 @@ export default function RegisterPage({ onRegisterSuccess }) {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:4000/api/auth/register', {
+      const clean = cleanMobileNumber(formData.mobile);
+      const response = await fetch('/api/auth/verify-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          email: formData.email.trim().toLowerCase(),
+          otp: otpCode.trim(),
           name: formData.name.trim(),
-          mobile: formData.mobile.trim(),
-          email: formData.email.trim(),
-          role: formData.role,
-          city: formData.city
+          mobile: clean,
+          role: formData.role
         })
       });
 
       const data = await response.json();
       if (!response.ok || !data.success) {
-        setError(data.message || 'Registration failed');
+        setError(data.message || 'Invalid or expired OTP code');
+        setLoading(false);
+        return;
+      }
+
+      setIsPhoneVerified(true);
+      setOtpStepActive(false);
+      setSuccessMsg(`Email & Mobile verified successfully! Account created for ${data.user.name}.`);
+
+      if (onRegisterSuccess) {
+        onRegisterSuccess(data.user);
+      }
+
+      setTimeout(() => {
+        if (data.user.role === 'Dealer') {
+          navigate('/dealer');
+        } else if (data.user.role === 'Plumber') {
+          navigate('/plumber');
+        } else {
+          navigate('/customer');
+        }
+      }, 700);
+
+    } catch (err) {
+      console.error('[Verify OTP Error]:', err);
+      setError('Verification failed. Please check connection and try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+  // Submit complete customer profile
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.name.trim()) {
+      setError('Please enter your full name or business name');
+      return;
+    }
+
+    const clean = cleanMobileNumber(formData.mobile);
+    if (!clean || clean.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number');
+      return;
+    }
+
+    // If customer role and email/phone not yet verified, request verification
+    if (formData.role === 'Customer' && !isPhoneVerified) {
+      setError('Please verify your email via 6-digit OTP code first');
+      handleSendRegisterOtp();
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name.trim(),
+          mobile: clean,
+          email: formData.email.trim(),
+          role: formData.role,
+          city: formData.city.trim(),
+          idToken
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        setError(data.message || 'Registration failed. Mobile may already be registered.');
         setLoading(false);
         return;
       }
@@ -62,24 +231,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
         navigate('/customer');
       }
     } catch (err) {
-      const fallbackUser = {
-        name: formData.name.trim(),
-        mobile: formData.mobile.trim(),
-        email: formData.email.trim() || `${formData.role.toLowerCase()}@plumbmart-demo.com`,
-        role: formData.role,
-        city: formData.city,
-        rewardPoints: 100
-      };
-      if (onRegisterSuccess) {
-        onRegisterSuccess(fallbackUser);
-      }
-      if (formData.role === 'Dealer') {
-        navigate('/dealer');
-      } else if (formData.role === 'Plumber') {
-        navigate('/plumber');
-      } else {
-        navigate('/customer');
-      }
+      setError(err.message || 'Connection error. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -121,13 +273,27 @@ export default function RegisterPage({ onRegisterSuccess }) {
             </div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Create an Account</h1>
             <p className="text-xs text-slate-500 mt-1">
-              Join PlumbMart for wholesale catalog access, trade discounts &amp; fast site delivery
+              {isPhoneVerified 
+                ? 'Email verified! Please fill in your name and details to finish setup' 
+                : 'Join PlumbMart with Email OTP verification for wholesale catalog access'}
             </p>
           </div>
 
+          {/* Invisible container for Firebase reCAPTCHA */}
+          <div id="register-recaptcha-container"></div>
+
+          {/* Error Banner */}
           {error && (
-            <div className="mb-4 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium">
+            <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium animate-in fade-in duration-200">
               {error}
+            </div>
+          )}
+
+          {/* Success / Status Banner */}
+          {successMsg && (
+            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl font-medium flex items-center gap-2 animate-in fade-in duration-200">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{successMsg}</span>
             </div>
           )}
 
@@ -135,16 +301,17 @@ export default function RegisterPage({ onRegisterSuccess }) {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Full Name / Business Name
+                Full Name / Business Name *
               </label>
               <div className="relative">
                 <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
                   type="text"
                   required
+                  autoFocus={isPhoneVerified}
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g. Ramesh Hardware Mart"
+                  placeholder="e.g. Ramesh Hardware Mart / Rahul Sharma"
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:bg-white transition"
                 />
               </div>
@@ -152,30 +319,49 @@ export default function RegisterPage({ onRegisterSuccess }) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Mobile Number
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex justify-between">
+                  <span>Mobile Number *</span>
+                  {isPhoneVerified && (
+                    <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Verified</span>
+                    </span>
+                  )}
                 </label>
-                <div className="relative">
-                  <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <div className="flex rounded-xl border border-slate-300 bg-slate-50 overflow-hidden focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 focus-within:bg-white transition">
+                  <span className="inline-flex items-center px-3 text-xs font-bold text-slate-700 bg-slate-100 border-r border-slate-200 select-none">
+                    +91
+                  </span>
                   <input
                     type="tel"
                     required
+                    maxLength={10}
+                    disabled={isPhoneVerified}
                     value={formData.mobile}
-                    onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-                    placeholder="e.g. 9876543210"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:bg-white transition"
+                    onChange={(e) => setFormData({ ...formData, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                    placeholder="9876543210"
+                    className={`w-full px-3 py-2.5 bg-transparent text-sm text-slate-900 focus:outline-none font-medium ${
+                      isPhoneVerified ? 'cursor-not-allowed opacity-80' : ''
+                    }`}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Email Address (Optional)
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex justify-between">
+                  <span>Email Address *</span>
+                  {isPhoneVerified && (
+                    <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Verified</span>
+                    </span>
+                  )}
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                   <input
                     type="email"
+                    required
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder="contact@business.com"
@@ -184,6 +370,63 @@ export default function RegisterPage({ onRegisterSuccess }) {
                 </div>
               </div>
             </div>
+
+            {/* OTP Verification Prompt if opened directly without prior verification */}
+            {!isPhoneVerified && formData.role === 'Customer' && (
+              <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-2xl text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-amber-900">Email Verification Required</span>
+                  {!otpStepActive ? (
+                    <button
+                      type="button"
+                      onClick={handleSendRegisterOtp}
+                      disabled={loading || formData.mobile.length !== 10 || !formData.email}
+                      className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[11px] transition disabled:opacity-50"
+                    >
+                      {loading ? 'Sending...' : 'Send OTP to Email'}
+                    </button>
+                  ) : null}
+                </div>
+
+                {otpStepActive && (
+                  <div className="space-y-2 pt-1 border-t border-amber-200">
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={otpCode}
+                          onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          placeholder="Enter 6-digit OTP"
+                          className="w-full pl-8 pr-3 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-mono tracking-widest text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleVerifyRegisterOtp}
+                        disabled={loading || otpCode.length < 6}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs transition disabled:opacity-50"
+                      >
+                        {loading ? 'Verifying...' : 'Verify'}
+                      </button>
+                    </div>
+                    <div className="flex justify-between items-center text-[11px] text-amber-800">
+                      <span>Didn&apos;t receive code?</span>
+                      <button
+                        type="button"
+                        onClick={handleSendRegisterOtp}
+                        disabled={resendCooldown > 0 || loading}
+                        className="font-bold underline disabled:opacity-50"
+                      >
+                        {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend OTP'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -220,9 +463,17 @@ export default function RegisterPage({ onRegisterSuccess }) {
 
             <button
               type="submit"
-              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs tracking-wide shadow-lg shadow-emerald-600/25 transition active:scale-[0.98] mt-2"
+              disabled={loading}
+              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs tracking-wide shadow-lg shadow-emerald-600/25 transition active:scale-[0.98] mt-2 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Register Account &amp; Unlock Wholesale Rates
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Registering Account in Database...</span>
+                </>
+              ) : (
+                <span>Register Account &amp; Unlock Wholesale Rates</span>
+              )}
             </button>
           </form>
 

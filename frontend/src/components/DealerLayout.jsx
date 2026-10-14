@@ -14,7 +14,8 @@ import {
   LogOut, 
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  LayoutDashboard
 } from 'lucide-react';
 import { getDealerCart } from '../utils/dealerCart';
 
@@ -27,7 +28,7 @@ const SIDEBAR_CATEGORIES = [
   { name: 'Tools & Sealants', query: 'Tools & Sealants', icon: Hammer, count: 2 }
 ];
 
-export default function DealerLayout({ children, currentUser, onLogout }) {
+export default function DealerLayout({ children, currentUser, onLogout, products = [] }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -37,6 +38,27 @@ export default function DealerLayout({ children, currentUser, onLogout }) {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const profileDropdownRef = useRef(null);
+
+  const categoryCounts = React.useMemo(() => {
+    if (!products || products.length === 0) {
+      return {
+        '': 180,
+        'All Categories': 180,
+        'Pipes & Tubes': 50,
+        'Tools & Sealants': 40,
+        'Pumps & Motors': 30,
+        'Bath & Faucets': 30,
+        'Fittings & Valves': 30
+      };
+    }
+    const counts = { '': products.length, 'All Categories': products.length };
+    products.forEach(p => {
+      if (p.category) {
+        counts[p.category] = (counts[p.category] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [products]);
 
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try {
@@ -55,14 +77,62 @@ export default function DealerLayout({ children, currentUser, onLogout }) {
     }
   }, [isCollapsed]);
 
-  const dealer = currentUser && currentUser.role === 'Dealer' ? currentUser : {
-    id: 'DLR-01',
-    name: 'Sri Venkateswara Distributors',
-    mobile: '9000011111',
-    gstin: '29ABCDE1234F1Z5',
-    availableCredit: '₹3,40,000',
-    creditLimit: '₹5,00,000'
-  };
+  const [dealer, setDealer] = useState(() => {
+    return currentUser && currentUser.role === 'Dealer' ? currentUser : {
+      id: 'DLR-01',
+      name: 'Sri Venkateswara Distributors',
+      mobile: '9000011111',
+      gstin: '29ABCDE1234F1Z5',
+      availableCredit: '₹3,40,000',
+      creditLimit: '₹5,00,000'
+    };
+  });
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        let res = await fetch('/api/dealers/DLR-01');
+        if (!res || !res.ok) res = await fetch('http://localhost:5000/api/dealers/DLR-01');
+        if (!res || !res.ok) res = await fetch('http://localhost:4000/api/dealers/DLR-01');
+        if (res && res.ok) {
+          const json = await res.json();
+          if (json && json.success && json.data) {
+            const d = json.data;
+            setDealer(prev => ({
+              ...prev,
+              ...d,
+              creditLimit: `₹${(d.creditLimit || 500000).toLocaleString('en-IN')}`,
+              availableCredit: `₹${(d.availableCredit !== undefined ? d.availableCredit : 340000).toLocaleString('en-IN')}`
+            }));
+          }
+        }
+      } catch (e) {}
+    };
+
+    fetchProfile();
+
+    let channel;
+    try {
+      channel = new BroadcastChannel('plumbmart_orders');
+      channel.onmessage = (event) => {
+        if (event.data?.type === 'DEALER_GOVERNANCE_UPDATED') {
+          fetchProfile();
+        }
+      };
+    } catch (e) {}
+
+    const handleStorage = (e) => {
+      if (e.key === 'plumbmart_dealer_governance_broadcast') {
+        fetchProfile();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      if (channel) channel.close();
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
 
   useEffect(() => {
     const updateCount = () => {
@@ -100,15 +170,15 @@ export default function DealerLayout({ children, currentUser, onLogout }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 w-full max-w-full overflow-x-hidden min-w-0">
       
       {/* Main Top Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs">
         <div className="px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-6">
             {/* Brand Logo */}
-            <Link to="/dealer/products" className="flex items-center gap-2 group">
+            <Link to="/dealer" className="flex items-center gap-2 group">
               <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-md shadow-indigo-600/20 group-hover:bg-indigo-700 transition">
                 <Building2 className="w-4.5 h-4.5" />
               </div>
@@ -123,6 +193,43 @@ export default function DealerLayout({ children, currentUser, onLogout }) {
                 </div>
               </div>
             </Link>
+
+            {/* Desktop Navigation Links */}
+            <nav className="hidden md:flex items-center gap-1">
+              <Link
+                to="/dealer"
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  location.pathname === '/dealer' || location.pathname === '/dealer/dashboard'
+                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <LayoutDashboard className="w-3.5 h-3.5" />
+                <span>Dashboard (Stock & Tracking)</span>
+              </Link>
+              <Link
+                to="/dealer/products"
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  location.pathname === '/dealer/products'
+                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Box className="w-3.5 h-3.5" />
+                <span>Catalog</span>
+              </Link>
+              <Link
+                to="/dealer/orders"
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  location.pathname === '/dealer/orders'
+                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Truck className="w-3.5 h-3.5" />
+                <span>Orders</span>
+              </Link>
+            </nav>
           </div>
 
           {/* Header Right Actions */}
@@ -163,21 +270,48 @@ export default function DealerLayout({ children, currentUser, onLogout }) {
               </button>
 
               {isProfileMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
                   <div className="px-3.5 py-2 border-b border-slate-100">
                     <p className="text-xs font-bold text-slate-900 truncate">{dealer.name}</p>
                     <p className="text-[10px] text-slate-500 font-mono">GSTIN: {dealer.gstin}</p>
                   </div>
+
+                  <Link
+                    to="/dealer"
+                    onClick={() => setIsProfileMenuOpen(false)}
+                    className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 flex items-center gap-2 transition"
+                  >
+                    <LayoutDashboard className="w-4 h-4 text-slate-400" />
+                    <span>Dealer Dashboard</span>
+                  </Link>
+
+                  <Link
+                    to="/dealer/products"
+                    onClick={() => setIsProfileMenuOpen(false)}
+                    className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 flex items-center gap-2 transition"
+                  >
+                    <Box className="w-4 h-4 text-slate-400" />
+                    <span>Wholesale Catalog</span>
+                  </Link>
+
+                  <Link
+                    to="/dealer/orders"
+                    onClick={() => setIsProfileMenuOpen(false)}
+                    className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 flex items-center gap-2 transition"
+                  >
+                    <Truck className="w-4 h-4 text-slate-400" />
+                    <span>Order Tracking</span>
+                  </Link>
 
                   <button
                     onClick={() => {
                       setIsProfileMenuOpen(false);
                       setIsProfileModalOpen(true);
                     }}
-                    className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 flex items-center gap-2 transition"
+                    className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 flex items-center gap-2 transition border-t border-slate-100"
                   >
                     <User className="w-4 h-4 text-slate-400" />
-                    <span>Profile</span>
+                    <span>Profile & Credit Limit</span>
                   </button>
 
                   <button
@@ -198,8 +332,8 @@ export default function DealerLayout({ children, currentUser, onLogout }) {
       {/* Body with Category Sidebar + Main Content */}
       <div className="flex-1 flex w-full relative">
         
-        {/* Category Sidebar */}
-        <aside className={`${isCollapsed ? 'w-16 sm:w-18 p-2' : 'w-56 sm:w-60 p-3.5'} shrink-0 bg-white border-r border-slate-200 flex flex-col justify-between transition-all duration-200 min-h-[calc(100vh-65px)]`}>
+        {/* Category Sidebar - Desktop */}
+        <aside className={`${isCollapsed ? 'w-16 sm:w-18 p-2' : 'w-56 sm:w-60 p-3.5'} hidden md:flex shrink-0 bg-white border-r border-slate-200 flex-col justify-between transition-all duration-200 sticky top-[53px] h-[calc(100vh-53px)] self-start overflow-y-auto overflow-x-hidden z-20`}>
           <div>
             {/* Sidebar Corner Toggle Button */}
             <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-end'} pb-2 mb-2 border-b border-slate-100`}>
@@ -250,7 +384,7 @@ export default function DealerLayout({ children, currentUser, onLogout }) {
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
                         isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-500'
                       }`}>
-                        {cat.count}
+                        {categoryCounts[cat.name] ?? categoryCounts[cat.query] ?? cat.count}
                       </span>
                     )}
                   </Link>
@@ -268,19 +402,88 @@ export default function DealerLayout({ children, currentUser, onLogout }) {
         </aside>
 
         {/* Main Content Area */}
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className="flex-1 min-w-0 w-full flex flex-col pb-20 md:pb-0 overflow-x-hidden">
           {/* Render Page Content */}
-          <div className="flex-1">
+          <div className="flex-1 w-full min-w-0">
             {children}
           </div>
         </div>
 
       </div>
 
+      {/* Mobile Bottom Navigation Bar */}
+      <nav 
+        aria-label="Dealer Navigation"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] flex items-center justify-around"
+      >
+        <Link
+          to="/dealer"
+          className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition active:scale-95 ${
+            location.pathname === '/dealer' || location.pathname === '/dealer/dashboard'
+              ? 'text-indigo-600 font-bold bg-indigo-50/80 shadow-2xs'
+              : 'text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <LayoutDashboard className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5 leading-tight">Dashboard</span>
+        </Link>
+
+        <Link
+          to="/dealer/products"
+          className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition active:scale-95 ${
+            location.pathname === '/dealer/products'
+              ? 'text-indigo-600 font-bold bg-indigo-50/80 shadow-2xs'
+              : 'text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Box className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5 leading-tight">Catalog</span>
+        </Link>
+
+        <Link
+          to="/dealer/cart"
+          className={`relative flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition active:scale-95 ${
+            location.pathname === '/dealer/cart'
+              ? 'text-indigo-600 font-bold bg-indigo-50/80 shadow-2xs'
+              : 'text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <div className="relative">
+            <ShoppingCart className="w-5 h-5" />
+            {cartCount > 0 && (
+              <span className="absolute -top-1 -right-2 text-[9px] px-1 rounded-full font-bold bg-indigo-600 text-white leading-none py-0.5">
+                {cartCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] mt-0.5 leading-tight">Cart</span>
+        </Link>
+
+        <Link
+          to="/dealer/orders"
+          className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition active:scale-95 ${
+            location.pathname.startsWith('/dealer/orders')
+              ? 'text-indigo-600 font-bold bg-indigo-50/80 shadow-2xs'
+              : 'text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Truck className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5 leading-tight">Orders</span>
+        </Link>
+
+        <button
+          onClick={() => setIsProfileModalOpen(true)}
+          className="flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-slate-500 hover:text-slate-900 transition active:scale-95"
+        >
+          <User className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5 leading-tight">Account</span>
+        </button>
+      </nav>
+
       {/* Profile Details Modal */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 border border-slate-200 shadow-2xl animate-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 border border-slate-200 shadow-2xl animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">

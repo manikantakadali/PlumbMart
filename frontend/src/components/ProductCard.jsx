@@ -23,10 +23,10 @@ export default function ProductCard({
             </div>
           ) : (
             <img
-              src={product.image}
+              src={product.image || '/products/PLB-PIPE-051.jpg'}
               alt={product.name}
               onError={() => setImageError(true)}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
               loading="lazy"
             />
           )}

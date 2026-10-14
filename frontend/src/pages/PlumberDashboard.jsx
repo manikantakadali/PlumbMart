@@ -28,7 +28,10 @@ import {
   Megaphone, 
   CalendarClock,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  Edit3,
+  Loader2,
+  Mail
 } from 'lucide-react';
 
 const INITIAL_JOBS = [
@@ -201,11 +204,12 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
     setSearchParams(nextParams);
   };
 
-  // Plumber Profile Data
-  const plumber = currentUser && currentUser.role === 'Plumber' ? currentUser : {
+  // Plumber Profile Data (Fetched dynamically from Supabase DB)
+  const activeMobile = (currentUser && currentUser.mobile) || '9111122222';
+  const [plumber, setPlumber] = useState(currentUser && currentUser.role === 'Plumber' ? currentUser : {
     id: 'PLM-01',
     name: 'Ramesh Kumar',
-    mobile: '9111122222',
+    mobile: activeMobile,
     email: 'plumber@plumbmart-demo.com',
     role: 'Plumber',
     license: 'PLUMB-KA-2024-884',
@@ -214,7 +218,108 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
     completedJobs: 48,
     activeSince: 'March 2024',
     city: 'Bengaluru (East & South Zones)',
-    specialization: 'CPVC/UPVC Piping, Concealed Valves & Pump Automation'
+    address: '#42, 5th Main, 7th Cross, HSR Layout Sector 2, Bengaluru, Karnataka, 560102',
+    specialization: 'CPVC/UPVC Piping, Concealed Valves & Pump Automation',
+    experience: 8,
+    skills: [
+      'CPVC High Pressure Solvent Welding',
+      'UPVC Ball Valve Installation',
+      'Basin & Shower Mixer Cartridges',
+      'Kirloskar Pump Servicing',
+      'Sanitary Hydrostatic Leak Testing'
+    ]
+  });
+
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    email: '',
+    city: '',
+    address: '',
+    specialization: '',
+    experience: 8,
+    skillsText: ''
+  });
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Fetch plumber profile from Supabase DB
+  const fetchPlumberProfile = async () => {
+    try {
+      setIsProfileLoading(true);
+      const res = await fetch(`/api/plumber/profile?mobile=${encodeURIComponent(activeMobile)}`);
+      const data = await res.json();
+      if (data && data.success && data.plumber) {
+        setPlumber(prev => ({ ...prev, ...data.plumber }));
+      }
+    } catch (err) {
+      console.warn('Error loading plumber profile from Supabase:', err);
+    } finally {
+      setIsProfileLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPlumberProfile();
+  }, [activeMobile]);
+
+  const handleOpenEditProfile = () => {
+    setProfileForm({
+      name: plumber.name || '',
+      email: plumber.email || '',
+      city: plumber.city || '',
+      address: plumber.address || '',
+      specialization: plumber.specialization || '',
+      experience: plumber.experience || 8,
+      skillsText: Array.isArray(plumber.skills) ? plumber.skills.join(', ') : ''
+    });
+    setIsEditProfileModalOpen(true);
+  };
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSavingProfile(true);
+      const skillsArray = profileForm.skillsText
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      const res = await fetch('/api/plumber/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mobile: plumber.mobile || activeMobile,
+          name: profileForm.name.trim(),
+          email: profileForm.email.trim(),
+          city: profileForm.city.trim(),
+          address: profileForm.address.trim(),
+          specialization: profileForm.specialization.trim(),
+          experience: parseInt(profileForm.experience, 10) || 8,
+          skills: skillsArray.length > 0 ? skillsArray : plumber.skills
+        })
+      });
+
+      const data = await res.json();
+      if (data.success && data.plumber) {
+        setPlumber(data.plumber);
+        setIsEditProfileModalOpen(false);
+        window.dispatchEvent(new CustomEvent('plumber_profile_updated', { detail: data.plumber }));
+        showToast('Profile details updated & saved to Supabase DB successfully!');
+      } else {
+        alert(data.message || 'Failed to update profile');
+      }
+    } catch (err) {
+      alert('Error updating profile: ' + err.message);
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   // Jobs State with Local Storage persistence
@@ -332,7 +437,18 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
       unreadCount={unreadUpdatesCount}
       activeJobsCount={activeJobsCount}
     >
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
+      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 relative">
+
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-slate-900 text-white rounded-2xl shadow-xl text-xs font-semibold animate-in fade-in slide-in-from-top-4 duration-300">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{toastMessage}</span>
+            <button onClick={() => setToastMessage(null)} className="ml-2 text-slate-400 hover:text-white">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* ======================================================== */}
         {/* TAB 1: MY ACTIVITIES (Simple, Clean, Modern UI)         */}
@@ -540,13 +656,13 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                               className="inline-flex items-center gap-2 bg-slate-50 hover:bg-slate-100/80 p-1.5 pr-2.5 rounded-xl border border-slate-200 transition"
                             >
                               <img
-                                src={prod.image}
+                                src={prod.image || '/products/PLB-PIPE-051.jpg'}
                                 alt={prod.name}
                                 onError={(e) => {
                                   e.currentTarget.onerror = null;
-                                  e.currentTarget.src = 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=600&q=80';
+                                  e.currentTarget.src = '/products/PLB-PIPE-051.jpg';
                                 }}
-                                className="w-7 h-7 rounded-lg object-cover bg-white border border-slate-200 shrink-0"
+                                className="w-7 h-7 rounded-lg object-contain p-0.5 bg-white border border-slate-200 shrink-0"
                               />
                               <div className="text-left">
                                 <span className="font-semibold text-xs text-slate-800 truncate block max-w-[200px] sm:max-w-xs">{prod.name}</span>
@@ -737,15 +853,15 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   >
                     <div>
                       {/* Thumbnail & SKU */}
-                      <div className="relative h-36 w-full rounded-xl overflow-hidden bg-slate-100 mb-3">
+                      <div className="relative h-36 w-full rounded-xl overflow-hidden bg-white mb-3 border border-slate-100 flex items-center justify-center">
                         <img 
-                          src={product.image} 
+                          src={product.image || '/products/PLB-PIPE-051.jpg'} 
                           alt={product.name}
                           onError={(e) => {
                             e.currentTarget.onerror = null;
-                            e.currentTarget.src = 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=600&q=80';
+                            e.currentTarget.src = '/products/PLB-PIPE-051.jpg';
                           }}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain p-2"
                         />
                         <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-bold bg-white/95 text-amber-700 shadow-xs">
                           {product.brand}
@@ -881,18 +997,34 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         {/* ======================================================== */}
         {/* TAB 4: MANAGE PROFILE & VERIFICATION STATUS             */}
         {/* ======================================================== */}
+        {/* ======================================================== */}
+        {/* TAB 4: MANAGE PROFILE & VERIFICATION STATUS             */}
+        {/* ======================================================== */}
         {activeTab === 'profile' && (
           <div className="space-y-6">
             
             {/* Header */}
-            <div>
-              <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-amber-600" />
-                <span>Plumber Profile &amp; Verification</span>
-              </h1>
-              <p className="text-xs text-slate-500">
-                Registered mobile number, verified credentials, and field performance
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-amber-600" />
+                  <span>Plumber Profile &amp; Verification</span>
+                  {isProfileLoading && (
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-600 ml-1" />
+                  )}
+                </h1>
+                <p className="text-xs text-slate-500">
+                  Registered mobile number, verified credentials, and field performance
+                </p>
+              </div>
+
+              <button
+                onClick={handleOpenEditProfile}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-sm shadow-amber-600/20 active:scale-95"
+              >
+                <Edit3 className="w-4 h-4" />
+                <span>Edit Profile &amp; KYC</span>
+              </button>
             </div>
 
             {/* Top Identity Hero Card */}
@@ -932,10 +1064,19 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               
               {/* Registered Contact & Verification */}
               <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs space-y-4">
-                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2 pb-3 border-b border-slate-100">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span>Registered Contact &amp; Verification</span>
-                </h3>
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Registered Contact &amp; Verification</span>
+                  </h3>
+                  <button
+                    onClick={handleOpenEditProfile}
+                    className="text-[11px] font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                    <span>Edit</span>
+                  </button>
+                </div>
 
                 <div className="space-y-3 text-xs">
                   <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
@@ -969,6 +1110,14 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                     </div>
                     <strong className="text-slate-800 text-xs">{plumber.city}</strong>
                   </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                    <div className="flex items-center gap-2 text-slate-600 shrink-0">
+                      <MapPin className="w-4 h-4 text-slate-400" />
+                      <span>Registered Address:</span>
+                    </div>
+                    <strong className="text-slate-800 text-xs text-right max-w-xs truncate">{plumber.address}</strong>
+                  </div>
                 </div>
               </div>
 
@@ -991,10 +1140,19 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                   </div>
 
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
-                    <span className="text-slate-500 font-semibold block">Certified Skills:</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 font-semibold block">Certified Skills:</span>
+                      <span className="text-[10px] text-slate-400">{Array.isArray(plumber.skills) ? plumber.skills.length : 0} Verified</span>
+                    </div>
                     <div className="flex flex-wrap gap-1.5 pt-1">
-                      {['CPVC High Pressure Solvent Welding', 'UPVC Ball Valve Installation', 'Basin & Shower Mixer Cartridges', 'Kirloskar Pump Servicing', 'Sanitary Hydrostatic Leak Testing'].map((skill, i) => (
-                        <span key={i} className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-[10px] font-semibold text-slate-700">
+                      {(Array.isArray(plumber.skills) && plumber.skills.length > 0 ? plumber.skills : [
+                        'CPVC High Pressure Solvent Welding',
+                        'UPVC Ball Valve Installation',
+                        'Basin & Shower Mixer Cartridges',
+                        'Kirloskar Pump Servicing',
+                        'Sanitary Hydrostatic Leak Testing'
+                      ]).map((skill, i) => (
+                        <span key={i} className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-[10px] font-semibold text-slate-700 shadow-2xs">
                           ✓ {skill}
                         </span>
                       ))}
@@ -1029,9 +1187,13 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
               {/* Modal Header */}
               <div className="flex items-start gap-4 pb-4 border-b border-slate-100 pr-8">
                 <img
-                  src={selectedProductManual.image}
+                  src={selectedProductManual.image || '/products/PLB-PIPE-051.jpg'}
                   alt={selectedProductManual.name}
-                  className="w-16 h-16 rounded-2xl object-cover bg-slate-100 border border-slate-200 shrink-0"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = '/products/PLB-PIPE-051.jpg';
+                  }}
+                  className="w-16 h-16 rounded-2xl object-contain p-1 bg-white border border-slate-200 shrink-0"
                 />
                 <div>
                   <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider block">
@@ -1135,6 +1297,144 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 </button>
               </div>
 
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* EDIT PLUMBER PROFILE MODAL (SUPABASE DB SYNC)            */}
+        {/* ======================================================== */}
+        {isEditProfileModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-slate-200 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+              <button
+                onClick={() => setIsEditProfileModalOpen(false)}
+                className="absolute top-5 right-5 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3 pb-4 border-b border-slate-100 pr-8">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Edit Plumber Profile &amp; KYC</h3>
+                  <p className="text-xs text-slate-500">Save changes directly to Supabase database</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveProfile} className="py-4 space-y-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileForm.name}
+                    onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                    placeholder="e.g. Ramesh Kumar"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Registered Email *</label>
+                    <input
+                      type="email"
+                      required
+                      value={profileForm.email}
+                      onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                      placeholder="e.g. plumber@plumbmart.com"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Operating City / Region *</label>
+                    <input
+                      type="text"
+                      required
+                      value={profileForm.city}
+                      onChange={(e) => setProfileForm({ ...profileForm, city: e.target.value })}
+                      placeholder="e.g. Bengaluru (East & South Zones)"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Registered Address *</label>
+                  <textarea
+                    rows={2}
+                    required
+                    value={profileForm.address}
+                    onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
+                    placeholder="Workshop / Residential address..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none resize-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="block font-bold text-slate-700 mb-1">Specialization</label>
+                    <input
+                      type="text"
+                      value={profileForm.specialization}
+                      onChange={(e) => setProfileForm({ ...profileForm, specialization: e.target.value })}
+                      placeholder="e.g. CPVC/UPVC Piping, Pumps"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Experience (Yrs)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={profileForm.experience}
+                      onChange={(e) => setProfileForm({ ...profileForm, experience: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Certified Skills (Comma-separated)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={profileForm.skillsText}
+                    onChange={(e) => setProfileForm({ ...profileForm, skillsText: e.target.value })}
+                    placeholder="CPVC Solvent Welding, UPVC Ball Valve Installation, Mixer Cartridges..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none resize-none"
+                  />
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditProfileModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingProfile}
+                    className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition flex items-center gap-2 shadow-sm shadow-amber-600/25 disabled:opacity-50"
+                  >
+                    {isSavingProfile ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Saving to Supabase...</span>
+                      </>
+                    ) : (
+                      <span>Save to Database</span>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   ShieldCheck, 
@@ -42,7 +42,9 @@ import {
   TrendingDown,
   FileCheck,
   ChevronDown,
-  RotateCcw
+  RotateCcw,
+  Truck,
+  Printer
 } from 'lucide-react';
 
 export default function AdminDashboard({ currentUser, onLogout }) {
@@ -388,71 +390,168 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     message: ''
   });
 
-  // Fetch initial data from backend
+  const [isRefreshingOrders, setIsRefreshingOrders] = useState(false);
+  const [newOrderAlert, setNewOrderAlert] = useState(null);
+  const knownOrderIdsRef = useRef(new Set());
+
+  // 8. Dynamic Reports & Analytics State
+  const [analyticsPeriod, setAnalyticsPeriod] = useState('all'); // 'all' | 'month' | 'week' | 'today'
+  const [analyticsChannel, setAnalyticsChannel] = useState('all'); // 'all' | 'Dealer' | 'Customer'
+  const [analyticsStockFilter, setAnalyticsStockFilter] = useState('all'); // 'all' | 'low' | 'optimal' | 'out' | 'highDemand'
+  const [analyticsSearch, setAnalyticsSearch] = useState('');
+  const [analyticsDisplayCount, setAnalyticsDisplayCount] = useState(10);
+
+  // Dedicated real-time Orders fetcher
+  const fetchOrders = async (showSpinner = false) => {
+    if (showSpinner) setIsRefreshingOrders(true);
+    try {
+      let res;
+      try {
+        res = await fetch('/api/orders');
+        if (!res.ok) throw new Error('Proxy error: ' + res.status);
+      } catch (e1) {
+        try {
+          res = await fetch('http://localhost:5000/api/orders');
+          if (!res.ok) throw new Error('Port 5000 error: ' + res.status);
+        } catch (e2) {
+          res = await fetch('http://localhost:4000/api/orders');
+        }
+      }
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.data)) {
+        // Detect newly arrived orders in real-time
+        if (knownOrderIdsRef.current.size > 0) {
+          const freshOrders = data.data.filter(o => !knownOrderIdsRef.current.has(o.id));
+          if (freshOrders.length > 0) {
+            const latest = freshOrders[0];
+            setNewOrderAlert({
+              id: latest.id,
+              clientName: latest.clientName || 'Valued Customer',
+              clientType: latest.clientType || 'Customer',
+              total: latest.total || 0,
+              time: 'Just now'
+            });
+            setTimeout(() => setNewOrderAlert(null), 7000);
+          }
+        }
+
+        // Record all current IDs
+        data.data.forEach(o => knownOrderIdsRef.current.add(o.id));
+        setOrders(data.data);
+      }
+    } catch (err) {
+      console.warn('Orders live fetch error:', err.message);
+    } finally {
+      if (showSpinner) setIsRefreshingOrders(false);
+    }
+  };
+
+  // Resilient API GET helper
+  const resilientFetch = async (endpoint) => {
+    try {
+      const res = await fetch(endpoint);
+      if (res.ok) return await res.json();
+    } catch (e) {}
+    try {
+      const res = await fetch('http://localhost:5000' + endpoint);
+      if (res.ok) return await res.json();
+    } catch (e) {}
+    try {
+      const res = await fetch('http://localhost:4000' + endpoint);
+      if (res.ok) return await res.json();
+    } catch (e) {}
+    return null;
+  };
+
+  // Fetch initial data from backend & setup real-time listeners
   useEffect(() => {
     // 1. Fetch Dealers
-    fetch('http://localhost:4000/api/dealers')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.data?.length > 0) {
-          setDealers(data.data.map(d => ({
-            ...d,
-            contactPerson: d.contactPerson || d.name.split(' ')[0],
-            creditLimit: parseInt((d.creditLimit || '500000').toString().replace(/[^0-9]/g, ''), 10) || 500000,
-            availableCredit: parseInt((d.availableCredit || '340000').toString().replace(/[^0-9]/g, ''), 10) || 340000,
-            outstandingDue: d.outstandingDue || 160000,
-            status: d.status || (d.zohoVerified ? 'Approved' : 'Pending')
-          })));
-        }
-      })
-      .catch(() => {});
+    resilientFetch('/api/dealers').then(data => {
+      if (data && data.success && data.data?.length > 0) {
+        setDealers(data.data.map(d => ({
+          ...d,
+          contactPerson: d.contactPerson || d.name.split(' ')[0],
+          creditLimit: parseInt((d.creditLimit || '500000').toString().replace(/[^0-9]/g, ''), 10) || 500000,
+          availableCredit: parseInt((d.availableCredit || '340000').toString().replace(/[^0-9]/g, ''), 10) || 340000,
+          outstandingDue: d.outstandingDue || 160000,
+          status: d.status || (d.zohoVerified ? 'Approved' : 'Pending')
+        })));
+      }
+    });
 
     // 2. Fetch Plumbers
-    fetch('http://localhost:4000/api/plumbers')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.data?.length > 0) {
-          setPlumbers(data.data.map(p => ({
-            ...p,
-            activeJobs: p.activeJobs || 1
-          })));
-        }
-      })
-      .catch(() => {});
+    resilientFetch('/api/plumbers').then(data => {
+      if (data && data.success && data.data?.length > 0) {
+        setPlumbers(data.data.map(p => ({
+          ...p,
+          activeJobs: p.activeJobs || 1
+        })));
+      }
+    });
 
     // 3. Fetch Products
-    fetch('http://localhost:4000/api/products')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.data?.length > 0) {
-          setProducts(data.data);
-          setZohoSyncMeta(prev => ({
-            ...prev,
-            totalSkus: data.data.length
-          }));
-        }
-      })
-      .catch(() => {});
+    resilientFetch('/api/products').then(data => {
+      if (data && data.success && data.data?.length > 0) {
+        setProducts(data.data);
+        setZohoSyncMeta(prev => ({
+          ...prev,
+          totalSkus: data.data.length
+        }));
+      }
+    });
 
-    // 4. Fetch Orders
-    fetch('http://localhost:4000/api/orders')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.data?.length > 0) {
-          setOrders(data.data);
-        }
-      })
-      .catch(() => {});
+    // 4. Initial Orders Fetch
+    fetchOrders(false);
 
     // 5. Fetch Notifications
-    fetch('http://localhost:4000/api/admin/notifications')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.data?.length > 0) {
-          setNotifications(data.data);
+    resilientFetch('/api/admin/notifications').then(data => {
+      if (data && data.success && data.data?.length > 0) {
+        setNotifications(data.data);
+      }
+    });
+
+    // 6. Fetch Payments
+    resilientFetch('/api/admin/payments').then(data => {
+      if (data && data.success && data.data?.length > 0) {
+        setPayments(data.data);
+      }
+    });
+
+    // --- REAL-TIME LIVE UPDATE LISTENERS ---
+    // (a) Fast polling every 2.5 seconds
+    const pollTimer = setInterval(() => {
+      fetchOrders(false);
+    }, 2500);
+
+    // (b) BroadcastChannel for instant cross-tab order notification
+    let channel;
+    try {
+      channel = new BroadcastChannel('plumbmart_orders');
+      channel.onmessage = (event) => {
+        if (event.data && (event.data.type === 'NEW_ORDER' || event.data.type === 'ORDER_PLACED')) {
+          fetchOrders(true);
         }
-      })
-      .catch(() => {});
+      };
+    } catch (e) {}
+
+    // (c) Window storage event listener for cross-tab communication
+    const handleStorageEvent = (e) => {
+      if (e.key === 'plumbmart_last_order_broadcast') {
+        fetchOrders(true);
+      }
+    };
+    window.addEventListener('storage', handleStorageEvent);
+
+    // (d) Window custom event listener for in-app order creation
+    const handleCustomOrderEvent = () => fetchOrders(true);
+    window.addEventListener('plumbmart_order_created', handleCustomOrderEvent);
+
+    return () => {
+      clearInterval(pollTimer);
+      if (channel) channel.close();
+      window.removeEventListener('storage', handleStorageEvent);
+      window.removeEventListener('plumbmart_order_created', handleCustomOrderEvent);
+    };
   }, []);
 
   // Sync with Zoho Workbook Trigger
@@ -505,17 +604,74 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
   // Dealer Approval & Credit Management
   const handleUpdateDealer = (dealerId, updates) => {
-    setDealers(prev => prev.map(d => 
-      d.id === dealerId ? { ...d, ...updates } : d
-    ));
+    setDealers(prev => prev.map(d => {
+      if (d.id !== dealerId) return d;
+      const newLimit = updates.creditLimit !== undefined ? updates.creditLimit : d.creditLimit;
+      const due = typeof d.outstandingDue === 'number' ? d.outstandingDue : 160000;
+      const newAvail = updates.availableCredit !== undefined ? updates.availableCredit : Math.max(0, newLimit - due);
+      return {
+        ...d,
+        ...updates,
+        creditLimit: newLimit,
+        availableCredit: newAvail
+      };
+    }));
+
     if (selectedDealer && selectedDealer.id === dealerId) {
-      setSelectedDealer(prev => ({ ...prev, ...updates }));
+      setSelectedDealer(prev => {
+        const newLimit = updates.creditLimit !== undefined ? updates.creditLimit : prev.creditLimit;
+        const due = typeof prev.outstandingDue === 'number' ? prev.outstandingDue : 160000;
+        const newAvail = updates.availableCredit !== undefined ? updates.availableCredit : Math.max(0, newLimit - due);
+        return {
+          ...prev,
+          ...updates,
+          creditLimit: newLimit,
+          availableCredit: newAvail
+        };
+      });
     }
-    fetch(`http://localhost:4000/api/dealers/${dealerId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates)
-    }).catch(() => {});
+
+    // 1. Broadcast immediately across tabs so Dealer portal updates instantly
+    const broadcastPayload = {
+      type: 'DEALER_GOVERNANCE_UPDATED',
+      dealerId,
+      updates,
+      timestamp: Date.now()
+    };
+    try {
+      const ch = new BroadcastChannel('plumbmart_orders');
+      ch.postMessage(broadcastPayload);
+      ch.close();
+    } catch (e) {}
+    try {
+      localStorage.setItem('plumbmart_dealer_governance_broadcast', JSON.stringify(broadcastPayload));
+    } catch (e) {}
+
+    // 2. Resilient PUT request to backend
+    const syncDealer = async () => {
+      try {
+        await fetch(`/api/dealers/${dealerId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+      } catch (e) {}
+      try {
+        await fetch(`http://localhost:5000/api/dealers/${dealerId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+      } catch (e) {}
+      try {
+        await fetch(`http://localhost:4000/api/dealers/${dealerId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+      } catch (e) {}
+    };
+    syncDealer();
   };
 
   // Plumber Verification & Status Toggle
@@ -533,19 +689,60 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     }).catch(() => {});
   };
 
-  // Update Order Status
-  const handleUpdateOrderStatus = (orderId, newStatus) => {
+  // Update Order Status & Broadcast Live Update to Customer Portal
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    // 1. Optimistic UI update in Admin
     setOrders(prev => prev.map(o => 
       o.id === orderId ? { ...o, status: newStatus } : o
     ));
     if (selectedOrder && selectedOrder.id === orderId) {
       setSelectedOrder(prev => ({ ...prev, status: newStatus }));
     }
-    fetch(`http://localhost:4000/api/orders/${orderId}/status`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus })
-    }).catch(() => {});
+
+    // 2. Broadcast immediately across tabs so customer side updates with 0 latency
+    try {
+      const ch = new BroadcastChannel('plumbmart_orders');
+      ch.postMessage({ type: 'STATUS_UPDATED', orderId, status: newStatus });
+      ch.close();
+    } catch (e) {}
+
+    try {
+      localStorage.setItem('plumbmart_status_broadcast', JSON.stringify({ orderId, status: newStatus, time: Date.now() }));
+    } catch (e) {}
+
+    window.dispatchEvent(new CustomEvent('plumbmart_status_updated', { detail: { orderId, status: newStatus } }));
+
+    // 3. Persist to Backend API (with resilient proxy / port fallbacks)
+    try {
+      let res;
+      try {
+        res = await fetch(`/api/orders/${orderId}/status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus })
+        });
+        if (!res.ok) throw new Error('Proxy status: ' + res.status);
+      } catch (e1) {
+        try {
+          res = await fetch(`http://localhost:5000/api/orders/${orderId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+          });
+          if (!res.ok) throw new Error('Port 5000 status: ' + res.status);
+        } catch (e2) {
+          res = await fetch(`http://localhost:4000/api/orders/${orderId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+          });
+        }
+      }
+      setSyncToast(`Order #${orderId} marked as "${newStatus}"! Live customer tracking updated.`);
+      setTimeout(() => setSyncToast(null), 3000);
+    } catch (err) {
+      console.warn('Order status sync error:', err.message);
+    }
   };
 
   // Send Broadcast Notification
@@ -607,6 +804,216 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     { id: 'notifications', label: 'Notifications', icon: Bell, desc: 'Broadcast announcements', count: notifications.length }
   ];
 
+  // ========================================================
+  // DYNAMIC REPORTS & ANALYTICS COMPUTATIONS (REAL-TIME DATA)
+  // ========================================================
+  const now = new Date();
+  const currentFiscalMonth = now.toLocaleString('en-IN', { month: 'short', year: 'numeric' });
+
+  // 1. Dynamic filtering based on user-selected period & channel
+  const analyticsFilteredOrders = orders.filter(order => {
+    // Channel filter: 'all' | 'Dealer' | 'Customer'
+    if (analyticsChannel !== 'all' && order.clientType !== analyticsChannel) {
+      return false;
+    }
+    // Period filter: 'all' | 'month' | 'week' | 'today'
+    if (analyticsPeriod === 'today') {
+      const orderDate = order.createdAt ? new Date(order.createdAt) : null;
+      if (orderDate && orderDate.toDateString() !== now.toDateString()) return false;
+      if (!orderDate && order.date && !order.date.toLowerCase().includes('today')) return false;
+    } else if (analyticsPeriod === 'week') {
+      if (order.createdAt) {
+        const diffMs = now.getTime() - new Date(order.createdAt).getTime();
+        if (diffMs > 7 * 24 * 60 * 60 * 1000) return false;
+      }
+    } else if (analyticsPeriod === 'month') {
+      if (order.createdAt) {
+        const d = new Date(order.createdAt);
+        if (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear()) return false;
+      }
+    }
+    return true;
+  });
+
+  // 2. Real Revenue Metrics calculated dynamically from orders state
+  const dynamicDealerB2BSales = analyticsFilteredOrders
+    .filter(o => o.clientType === 'Dealer' && o.status !== 'Cancelled')
+    .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+  const dynamicCustomerRetailSales = analyticsFilteredOrders
+    .filter(o => o.clientType === 'Customer' && o.status !== 'Cancelled')
+    .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+  const dynamicTotalGrossSales = dynamicDealerB2BSales + dynamicCustomerRetailSales;
+
+  // Real Collections: orders that have been paid or settled
+  const dynamicTotalCollections = analyticsFilteredOrders
+    .filter(o => {
+      const ps = (o.paymentStatus || '').toLowerCase();
+      const cs = (o.creditStatus || '').toLowerCase();
+      return (ps.includes('paid') || ps.includes('settled') || cs.includes('settled')) && o.status !== 'Cancelled';
+    })
+    .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+  // Real Outstanding Credit Receivables
+  const dynamicOutstandingCredit = analyticsFilteredOrders
+    .filter(o => {
+      const ps = (o.paymentStatus || '').toLowerCase();
+      const cs = (o.creditStatus || '').toLowerCase();
+      return (ps.includes('pending') || cs.includes('outstanding')) && o.status !== 'Cancelled';
+    })
+    .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+  // 3. Aggregate Product Sales directly from orders items
+  const productSalesMap = {};
+  orders.forEach(order => {
+    if (order.status === 'Cancelled') return;
+    (order.items || []).forEach(it => {
+      const key = (it.sku || it.id || it.name || '').toLowerCase().trim();
+      const qty = Number(it.qty || it.quantity || 1);
+      const price = Number(it.price || 0);
+      if (!productSalesMap[key]) {
+        productSalesMap[key] = {
+          name: it.name,
+          sku: it.sku,
+          unitsSold: 0,
+          revenue: 0,
+          orderCount: 0
+        };
+      }
+      productSalesMap[key].unitsSold += qty;
+      productSalesMap[key].revenue += (qty * price);
+      productSalesMap[key].orderCount += 1;
+    });
+  });
+
+  // 4. Category Breakdown derived dynamically from products & orders
+  const categoryStatsMap = {};
+  products.forEach(p => {
+    const cat = p.category || 'Pipes & Fittings';
+    if (!categoryStatsMap[cat]) {
+      categoryStatsMap[cat] = {
+        name: cat,
+        productCount: 0,
+        totalStock: 0,
+        unitsSold: 0,
+        revenue: 0
+      };
+    }
+    categoryStatsMap[cat].productCount += 1;
+    categoryStatsMap[cat].totalStock += Number(p.stock || 0);
+
+    const matchSales = productSalesMap[(p.sku || '').toLowerCase()] || 
+                       productSalesMap[(p.id || '').toLowerCase()] || 
+                       productSalesMap[(p.name || '').toLowerCase()];
+    if (matchSales) {
+      categoryStatsMap[cat].unitsSold += matchSales.unitsSold;
+      categoryStatsMap[cat].revenue += matchSales.revenue;
+    }
+  });
+
+  const categoryAnalyticsList = Object.values(categoryStatsMap).sort((a, b) => b.revenue - a.revenue || b.unitsSold - a.unitsSold);
+  const highestCategoryRevenue = Math.max(...categoryAnalyticsList.map(c => c.revenue), 1);
+
+  // 5. Fulfillment status breakdown
+  const fulfillmentStatusCounts = {
+    Delivered: analyticsFilteredOrders.filter(o => o.status === 'Delivered').length,
+    InTransit: analyticsFilteredOrders.filter(o => o.status === 'Shipped' || o.status === 'Out for Delivery').length,
+    Processing: analyticsFilteredOrders.filter(o => o.status === 'Processing' || o.status === 'Confirmed' || o.status === 'Pending').length,
+    Cancelled: analyticsFilteredOrders.filter(o => o.status === 'Cancelled').length
+  };
+
+  // 6. Payment method distribution
+  const paymentMethodSummary = {};
+  analyticsFilteredOrders.forEach(o => {
+    const method = o.paymentMethod || 'Online Payment';
+    if (!paymentMethodSummary[method]) {
+      paymentMethodSummary[method] = { method, count: 0, amount: 0 };
+    }
+    paymentMethodSummary[method].count += 1;
+    paymentMethodSummary[method].amount += (Number(o.total) || 0);
+  });
+  const paymentMethodSummaryList = Object.values(paymentMethodSummary).sort((a, b) => b.amount - a.amount);
+
+  // 7. Dynamic Inventory List with Live Zoho Stock & Order Demand
+  const dynamicProductsInventory = products.map(p => {
+    const sales = productSalesMap[(p.sku || '').toLowerCase()] || 
+                  productSalesMap[(p.id || '').toLowerCase()] || 
+                  productSalesMap[(p.name || '').toLowerCase()] || 
+                  { unitsSold: 0, revenue: 0, orderCount: 0 };
+    
+    const stock = typeof p.stock === 'number' ? p.stock : 50;
+
+    let demandText = 'Optimal Stock';
+    let demandBadgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+
+    if (sales.unitsSold >= 5) {
+      demandText = 'High Demand';
+      demandBadgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+    } else if (sales.unitsSold >= 1) {
+      demandText = 'Active Sales';
+      demandBadgeClass = 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
+    } else if (stock <= 10 && stock > 0) {
+      demandText = 'Low Stock Alert';
+      demandBadgeClass = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+    } else if (stock === 0) {
+      demandText = 'Out of Stock';
+      demandBadgeClass = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+    }
+
+    return {
+      ...p,
+      unitsSold: sales.unitsSold,
+      revenueGenerated: sales.revenue,
+      orderCount: sales.orderCount,
+      demandText,
+      demandBadgeClass
+    };
+  });
+
+  // Filter dynamic inventory items by search & stock filter
+  const filteredAnalyticsProducts = dynamicProductsInventory.filter(p => {
+    const q = analyticsSearch.toLowerCase().trim();
+    if (q) {
+      const match = (p.name || '').toLowerCase().includes(q) ||
+                    (p.sku || '').toLowerCase().includes(q) ||
+                    (p.category || '').toLowerCase().includes(q) ||
+                    (p.brand || '').toLowerCase().includes(q);
+      if (!match) return false;
+    }
+
+    if (analyticsStockFilter === 'low') return (p.stock || 0) <= 15 && (p.stock || 0) > 0;
+    if (analyticsStockFilter === 'out') return (p.stock || 0) === 0;
+    if (analyticsStockFilter === 'optimal') return (p.stock || 0) > 15;
+    if (analyticsStockFilter === 'highDemand') return p.unitsSold > 0;
+    return true;
+  });
+
+  // Export Analytics to CSV handler
+  const handleExportAnalyticsCSV = () => {
+    const headers = ['Order ID', 'Client Name', 'Client Type', 'Date', 'Payment Method', 'Payment Status', 'Fulfillment Status', 'Total Amount (INR)'];
+    const rows = analyticsFilteredOrders.map(o => [
+      `"${o.id || ''}"`,
+      `"${(o.clientName || '').replace(/"/g, '""')}"`,
+      `"${o.clientType || 'Customer'}"`,
+      `"${o.date || ''}"`,
+      `"${(o.paymentMethod || '').replace(/"/g, '""')}"`,
+      `"${o.paymentStatus || ''}"`,
+      `"${o.status || ''}"`,
+      o.total || 0
+    ]);
+    const csvString = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `PlumbMart_Analytics_Audit_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
       
@@ -615,6 +1022,30 @@ export default function AdminDashboard({ currentUser, onLogout }) {
         <div className="fixed top-5 right-5 z-50 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-3 duration-200">
           <CheckCircle2 className="w-5 h-5 shrink-0" />
           <span className="text-xs font-bold">{syncToast}</span>
+        </div>
+      )}
+
+      {/* Real-time New Order Alert Notification */}
+      {newOrderAlert && (
+        <div className="fixed top-18 right-5 z-50 flex items-center gap-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-600 text-white px-4 py-3 rounded-2xl shadow-2xl border border-white/20 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+            <Package className="w-4.5 h-4.5 text-white" />
+          </div>
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-wider text-emerald-200 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping"></span>
+              New Order Received!
+            </div>
+            <div className="text-xs font-bold">
+              Order #{newOrderAlert.id} &bull; {newOrderAlert.clientName} (₹{newOrderAlert.total.toLocaleString('en-IN')})
+            </div>
+          </div>
+          <button 
+            onClick={() => setNewOrderAlert(null)} 
+            className="ml-2 text-white/70 hover:text-white p-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -1374,16 +1805,33 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                   </p>
                 </div>
 
-                {/* Search */}
-                <div className="relative max-w-xs w-full">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    value={orderSearch}
-                    onChange={e => setOrderSearch(e.target.value)}
-                    placeholder="Search by order ID or user..."
-                    className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                  />
+                {/* Right Header Controls: Live Badge, Refresh, Search */}
+                <div className="flex items-center flex-wrap gap-2.5">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>Live Auto-Sync</span>
+                  </div>
+
+                  <button
+                    onClick={() => fetchOrders(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-semibold border border-slate-800 transition"
+                    title="Force refresh orders"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingOrders ? 'animate-spin text-blue-400' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+
+                  {/* Search */}
+                  <div className="relative max-w-xs w-full">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={orderSearch}
+                      onChange={e => setOrderSearch(e.target.value)}
+                      placeholder="Search by order ID or user..."
+                      className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1435,7 +1883,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                         <th className="py-3 px-4">Payment Method</th>
                         <th className="py-3 px-4">Total Amount</th>
                         <th className="py-3 px-4">Fulfillment Status</th>
-                        <th className="py-3 px-4 text-right">Update Status</th>
+                        <th className="py-3 px-4 text-center">Update Status</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/80">
@@ -1448,9 +1897,14 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                           return matchClient && matchStatus && matchSearch;
                         })
                         .map(order => (
-                          <tr key={order.id} className="hover:bg-slate-900/50 transition">
+                          <tr
+                            key={order.id}
+                            onClick={() => setSelectedOrder(order)}
+                            className="hover:bg-slate-900/80 cursor-pointer transition group"
+                            title="Click to view full order details"
+                          >
                             <td className="py-3.5 px-4">
-                              <span className="font-mono font-bold text-white block">{order.id}</span>
+                              <span className="font-mono font-bold text-white group-hover:text-blue-400 transition block">{order.id}</span>
                               <span className="text-[10px] text-slate-500">{order.date || 'Recent'}</span>
                             </td>
                             <td className="py-3.5 px-4">
@@ -1476,10 +1930,14 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                                 {order.status}
                               </span>
                             </td>
-                            <td className="py-3.5 px-4 text-right">
+                            <td className="py-3.5 px-4 text-center">
                               <select
                                 value={order.status}
-                                onChange={e => handleUpdateOrderStatus(order.id, e.target.value)}
+                                onClick={e => e.stopPropagation()}
+                                onChange={e => {
+                                  e.stopPropagation();
+                                  handleUpdateOrderStatus(order.id, e.target.value);
+                                }}
                                 className="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                               >
                                 <option value="Pending">Pending</option>
@@ -1490,6 +1948,18 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                                 <option value="Delivered">Delivered</option>
                                 <option value="Cancelled">Cancelled</option>
                               </select>
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setSelectedOrder(order);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/15 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 transition text-xs font-semibold shadow-sm"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>View</span>
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -1799,69 +2269,385 @@ export default function AdminDashboard({ currentUser, onLogout }) {
           )}
 
           {/* ======================================================== */}
-          {/* 8. REPORTS & ANALYTICS                                   */}
+          {/* 8. REPORTS & ANALYTICS (FULLY DYNAMIC & LIVE ZOHO SYNCED) */}
           {/* ======================================================== */}
           {activeTab === 'reports' && (
             <div className="space-y-6">
               
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* Header with Title & Filter Controls */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div>
                   <h1 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-blue-500" />
                     <span>Reports &amp; Analytics</span>
                   </h1>
                   <p className="text-xs text-slate-400">
-                    Audit performance, product demand summaries, credit recovery, and registration metrics
+                    Live audit performance, sales distribution, Zoho warehouse stock health, and cash collections
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 font-bold">
-                    Fiscal Period: Oct 2026
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  {/* Fiscal Period Dynamic Badge */}
+                  <span className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 font-bold flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                    Fiscal: {currentFiscalMonth}
                   </span>
+
+                  {/* Channel Filter */}
+                  <select
+                    value={analyticsChannel}
+                    onChange={e => setAnalyticsChannel(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="all">All Channels (B2B + Retail)</option>
+                    <option value="Dealer">Dealer B2B Only</option>
+                    <option value="Customer">Customer Retail Only</option>
+                  </select>
+
+                  {/* Period Filter */}
+                  <select
+                    value={analyticsPeriod}
+                    onChange={e => setAnalyticsPeriod(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="all">All Time</option>
+                    <option value="month">This Month ({currentFiscalMonth})</option>
+                    <option value="week">Last 7 Days</option>
+                    <option value="today">Today Only</option>
+                  </select>
+
+                  {/* CSV Export Button */}
+                  <button
+                    onClick={handleExportAnalyticsCSV}
+                    className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1.5 shadow-md shadow-blue-600/20 transition cursor-pointer"
+                    title="Download complete audit data as CSV file"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export CSV</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Top Sales Breakdown Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-2">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Dealer B2B Sales</span>
-                  <span className="text-2xl font-black text-indigo-400">₹1,60,000</span>
-                  <p className="text-[11px] text-slate-400">High-volume pipes and concealed valves</p>
+              {/* 4 Dynamic Key Financial Metrics Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                {/* Dealer B2B Sales */}
+                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-2 relative overflow-hidden group hover:border-slate-700 transition">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Dealer B2B Sales</span>
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                      Wholesale
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-indigo-400 font-mono tracking-tight">
+                    ₹{dynamicDealerB2BSales.toLocaleString('en-IN')}
+                  </div>
+                  <p className="text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>{analyticsFilteredOrders.filter(o => o.clientType === 'Dealer' && o.status !== 'Cancelled').length} B2B orders</span>
+                    <span className="text-indigo-400 font-semibold">Bulk Supply</span>
+                  </p>
                 </div>
 
-                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-2">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Customer Retail Sales</span>
-                  <span className="text-2xl font-black text-blue-400">₹7,170</span>
-                  <p className="text-[11px] text-slate-400">Instant online settlements (UPI/Cards)</p>
+                {/* Customer Retail Sales */}
+                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-2 relative overflow-hidden group hover:border-slate-700 transition">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Customer Retail Sales</span>
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                      Retail
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-blue-400 font-mono tracking-tight">
+                    ₹{dynamicCustomerRetailSales.toLocaleString('en-IN')}
+                  </div>
+                  <p className="text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>{analyticsFilteredOrders.filter(o => o.clientType === 'Customer' && o.status !== 'Cancelled').length} retail orders</span>
+                    <span className="text-blue-400 font-semibold">Instant Online</span>
+                  </p>
                 </div>
 
-                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-2">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Collections</span>
-                  <span className="text-2xl font-black text-emerald-400">₹98,770</span>
-                  <p className="text-[11px] text-slate-400">Fully reconciled with banking gateway</p>
+                {/* Total Collections Reconciled */}
+                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-2 relative overflow-hidden group hover:border-slate-700 transition">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Total Collections</span>
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      Settled
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-emerald-400 font-mono tracking-tight">
+                    ₹{dynamicTotalCollections.toLocaleString('en-IN')}
+                  </div>
+                  <p className="text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>Reconciled in bank</span>
+                    <span className="text-emerald-400 font-semibold">100% Verified</span>
+                  </p>
                 </div>
+
+                {/* Outstanding Credit Receivables */}
+                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-2 relative overflow-hidden group hover:border-slate-700 transition">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Outstanding Credit</span>
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      Receivable
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-amber-400 font-mono tracking-tight">
+                    ₹{dynamicOutstandingCredit.toLocaleString('en-IN')}
+                  </div>
+                  <p className="text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>30D / 90D Dealer ledger</span>
+                    <span className="text-amber-400 font-semibold">Due in Cycles</span>
+                  </p>
+                </div>
+
               </div>
 
-              {/* Product Demand & Stock Health Summary */}
-              <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-3">
-                <h3 className="font-bold text-sm text-white pb-2 border-b border-slate-800">
-                  Product Demand &amp; Warehouse Inventory Health
-                </h3>
-                <div className="divide-y divide-slate-800/80 text-xs">
-                  {products.slice(0, 5).map(p => (
-                    <div key={p.id} className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between">
-                      <div>
-                        <span className="font-bold text-slate-200">{p.name}</span>
-                        <span className="text-[10px] text-slate-500 block font-mono">{p.sku} &bull; {p.category}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-bold text-white block">{p.stock} Units in Zoho</span>
-                        <span className="text-[10px] text-emerald-400">Demand: High</span>
-                      </div>
-                    </div>
+              {/* Middle Section: 3 Deep Analytics Panels */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                
+                {/* Category Revenue Breakdown */}
+                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <h3 className="font-bold text-xs uppercase tracking-wider text-white flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-blue-400" />
+                      Category Sales Share
+                    </h3>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {categoryAnalyticsList.length} Categories
+                    </span>
+                  </div>
+
+                  <div className="space-y-3 text-xs">
+                    {categoryAnalyticsList.length > 0 ? (
+                      categoryAnalyticsList.slice(0, 5).map((cat, i) => {
+                        const sharePercent = dynamicTotalGrossSales > 0 
+                          ? Math.min(100, Math.round((cat.revenue / dynamicTotalGrossSales) * 100))
+                          : 0;
+                        return (
+                          <div key={i} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-semibold text-slate-200">{cat.name}</span>
+                              <span className="font-mono font-bold text-white">
+                                ₹{cat.revenue.toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                              <div 
+                                className="bg-blue-500 h-full rounded-full transition-all duration-500" 
+                                style={{ width: `${Math.max(sharePercent, 4)}%` }} 
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                              <span>{cat.unitsSold} units sold</span>
+                              <span>{sharePercent}% of total</span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-slate-500 text-xs py-3 text-center">No categories recorded yet.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Fulfillment Performance Stepper */}
+                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <h3 className="font-bold text-xs uppercase tracking-wider text-white flex items-center gap-1.5">
+                      <Truck className="w-3.5 h-3.5 text-amber-400" />
+                      Fulfillment Performance
+                    </h3>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {analyticsFilteredOrders.length} Orders
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    {[
+                      { label: 'Delivered Successfully', count: fulfillmentStatusCounts.Delivered, color: 'text-emerald-400', bar: 'bg-emerald-500' },
+                      { label: 'In Transit / Shipped', count: fulfillmentStatusCounts.InTransit, color: 'text-blue-400', bar: 'bg-blue-500' },
+                      { label: 'Confirmed / Processing', count: fulfillmentStatusCounts.Processing, color: 'text-indigo-400', bar: 'bg-indigo-500' },
+                      { label: 'Cancelled / Returned', count: fulfillmentStatusCounts.Cancelled, color: 'text-rose-400', bar: 'bg-rose-500' }
+                    ].map((st, i) => {
+                      const totalCount = analyticsFilteredOrders.length || 1;
+                      const pct = Math.round((st.count / totalCount) * 100);
+                      return (
+                        <div key={i} className="p-2.5 rounded-xl bg-slate-900/50 border border-slate-800/80 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-300 font-medium text-[11px]">{st.label}</span>
+                            <span className={`font-mono font-bold ${st.color}`}>{st.count} ({pct}%)</span>
+                          </div>
+                          <div className="w-full bg-slate-950 rounded-full h-1 overflow-hidden">
+                            <div className={`${st.bar} h-full rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Payment Channels Breakdown */}
+                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <h3 className="font-bold text-xs uppercase tracking-wider text-white flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+                      Payment Channels
+                    </h3>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {paymentMethodSummaryList.length} Methods
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    {paymentMethodSummaryList.length > 0 ? (
+                      paymentMethodSummaryList.map((pm, i) => (
+                        <div key={i} className="p-2.5 rounded-xl bg-slate-900/50 border border-slate-800/80 flex items-center justify-between">
+                          <div>
+                            <span className="font-bold text-white block text-xs">{pm.method}</span>
+                            <span className="text-[10px] text-slate-500">{pm.count} transactions</span>
+                          </div>
+                          <span className="font-mono font-bold text-slate-200">
+                            ₹{pm.amount.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-slate-500 text-xs py-3 text-center">No payment data available.</p>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Product Demand & Warehouse Inventory Health (Fully Dynamic Live Zoho Engine) */}
+              <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                  <div>
+                    <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                      <Package className="w-4 h-4 text-blue-400" />
+                      <span>Product Demand &amp; Warehouse Inventory Health</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Live stock levels from Zoho Inventory synced against verified customer &amp; dealer purchase orders
+                    </p>
+                  </div>
+
+                  {/* Search inside inventory */}
+                  <div className="relative w-full md:w-64">
+                    <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search SKU or Product..."
+                      value={analyticsSearch}
+                      onChange={e => setAnalyticsSearch(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 text-slate-200 pl-8 pr-3 py-1.5 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Filter Pills */}
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  {[
+                    { id: 'all', label: `All Products (${dynamicProductsInventory.length})` },
+                    { id: 'highDemand', label: `High Demand (${dynamicProductsInventory.filter(p => p.unitsSold > 0).length})` },
+                    { id: 'optimal', label: `Optimal Stock (${dynamicProductsInventory.filter(p => (p.stock || 0) > 15).length})` },
+                    { id: 'low', label: `Low Stock Alert (${dynamicProductsInventory.filter(p => (p.stock || 0) <= 15 && (p.stock || 0) > 0).length})` },
+                    { id: 'out', label: `Out of Stock (${dynamicProductsInventory.filter(p => (p.stock || 0) === 0).length})` }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setAnalyticsStockFilter(tab.id)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        analyticsStockFilter === tab.id
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
                   ))}
                 </div>
+
+                {/* Dynamic Product Inventory List */}
+                <div className="divide-y divide-slate-800/80 text-xs">
+                  {filteredAnalyticsProducts.length > 0 ? (
+                    filteredAnalyticsProducts.slice(0, analyticsDisplayCount).map(p => (
+                      <div key={p.id} className="py-3 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-900/40 px-2 rounded-xl transition">
+                        <div className="flex items-center gap-3">
+                          {p.image ? (
+                            <img 
+                              src={p.image} 
+                              alt={p.name} 
+                              className="w-10 h-10 rounded-lg object-cover bg-slate-900 border border-slate-800 shrink-0" 
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0 text-blue-400">
+                              <Package className="w-5 h-5" />
+                            </div>
+                          )}
+                          <div>
+                            <span className="font-bold text-slate-200 block">{p.name}</span>
+                            <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500 font-mono">
+                              <span className="text-slate-400">{p.sku}</span>
+                              <span>&bull;</span>
+                              <span>{p.category}</span>
+                              {p.unitsSold > 0 && (
+                                <>
+                                  <span>&bull;</span>
+                                  <span className="text-emerald-400 font-bold">{p.unitsSold} units ordered</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-left sm:text-right shrink-0 flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2">
+                          <div>
+                            <span className="font-bold text-white font-mono block">
+                              {p.stock} Units in Zoho
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              MRP: ₹{(p.price || p.dealerPrice || 0).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${p.demandBadgeClass}`}>
+                            {p.demandText}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-8 text-center text-slate-500 text-xs">
+                      No products matched the selected filters.
+                    </div>
+                  )}
+                </div>
+
+                {/* Show More / Show Less Controls */}
+                {filteredAnalyticsProducts.length > 10 && (
+                  <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                    <span>
+                      Showing {Math.min(analyticsDisplayCount, filteredAnalyticsProducts.length)} of {filteredAnalyticsProducts.length} items
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {analyticsDisplayCount < filteredAnalyticsProducts.length ? (
+                        <button
+                          onClick={() => setAnalyticsDisplayCount(prev => prev + 15)}
+                          className="px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold border border-slate-700 transition cursor-pointer"
+                        >
+                          Load More (+15)
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setAnalyticsDisplayCount(10)}
+                          className="px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold border border-slate-700 transition cursor-pointer"
+                        >
+                          Show Less
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
               </div>
 
             </div>
@@ -2241,6 +3027,309 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 5: COMPLETE ORDER DETAILS & FULFILLMENT BREAKDOWN  */}
+      {/* ======================================================== */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-slate-900 rounded-3xl max-w-3xl w-full border border-slate-800 shadow-2xl relative my-8 overflow-hidden">
+            {/* Header */}
+            <div className="p-6 border-b border-slate-800 bg-slate-950/60 flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                    selectedOrder.clientType === 'Dealer'
+                      ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                      : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                  }`}>
+                    {selectedOrder.clientType || 'Customer'} Order
+                  </span>
+                  {selectedOrder.zohoSalesOrder && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20 font-mono">
+                      Zoho: {selectedOrder.zohoSalesOrder}
+                    </span>
+                  )}
+                  {selectedOrder.poNumber && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 font-mono">
+                      PO: {selectedOrder.poNumber}
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-xl font-mono font-bold text-white flex items-center gap-2">
+                  <span>{selectedOrder.id}</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Placed: <span className="text-slate-300 font-medium">{selectedOrder.date || 'Recent'}</span>
+                  {selectedOrder.createdAt && (
+                    <span className="text-slate-500 ml-2">({new Date(selectedOrder.createdAt).toLocaleString('en-IN')})</span>
+                  )}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                  title="Print Order Invoice"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Print</span>
+                </button>
+                <button
+                  onClick={() => setSelectedOrder(null)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6 max-h-[calc(85vh-160px)] overflow-y-auto">
+              
+              {/* Quick Status Bar & Controls */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-semibold text-slate-400">Current Status:</span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                    selectedOrder.status === 'Delivered'
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : selectedOrder.status === 'Cancelled'
+                      ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                      : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                  }`}>
+                    {selectedOrder.status}
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">Update Status:</span>
+                  <select
+                    value={selectedOrder.status}
+                    onChange={e => handleUpdateOrderStatus(selectedOrder.id, e.target.value)}
+                    className="bg-slate-900 border border-slate-700 text-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Pending">Pending</option>
+                    <option value="Confirmed">Confirmed</option>
+                    <option value="Processing">Processing</option>
+                    <option value="Shipped">Shipped</option>
+                    <option value="Out for Delivery">Out for Delivery</option>
+                    <option value="Delivered">Delivered</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 3 Information Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                {/* Client Info */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="flex items-center gap-1.5 text-blue-400 font-bold uppercase text-[10px] tracking-wider">
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Customer / Client</span>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">{selectedOrder.clientName}</h4>
+                    <p className="text-slate-400 mt-0.5 flex items-center gap-1 font-mono text-[11px]">
+                      <Phone className="w-3 h-3 text-slate-500" />
+                      +91 {selectedOrder.clientMobile}
+                    </p>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Account Type: <span className="text-slate-300 font-semibold">{selectedOrder.clientType || 'Customer'}</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Delivery Info */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold uppercase text-[10px] tracking-wider">
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span>Delivery Address</span>
+                  </div>
+                  <p className="text-slate-200 text-xs leading-relaxed">
+                    {selectedOrder.deliveryAddress || 'Standard Warehouse / Store Address'}
+                  </p>
+                  {selectedOrder.expectedDate && (
+                    <p className="text-[10px] text-slate-400">
+                      ETA: <span className="text-emerald-400 font-semibold">{selectedOrder.expectedDate}</span>
+                    </p>
+                  )}
+                </div>
+
+                {/* Payment Info */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="flex items-center gap-1.5 text-indigo-400 font-bold uppercase text-[10px] tracking-wider">
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Payment &amp; Terms</span>
+                  </div>
+                  <div>
+                    <p className="font-mono font-bold text-white text-xs">{selectedOrder.paymentMethod}</p>
+                    <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                      selectedOrder.paymentStatus === 'Paid' || selectedOrder.creditStatus === 'Settled'
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                    }`}>
+                      {selectedOrder.paymentStatus || 'Settled'}
+                    </span>
+                    {selectedOrder.creditDueDate && (
+                      <p className="text-[10px] text-slate-400 mt-1.5">
+                        Due Date: <span className="text-amber-300 font-mono font-semibold">{selectedOrder.creditDueDate}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Order Items Table */}
+              <div className="rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden">
+                <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                    <Package className="w-4 h-4 text-blue-400" />
+                    Items Ordered ({selectedOrder.items?.length || selectedOrder.itemsCount || 0})
+                  </span>
+                  <span className="text-xs font-mono font-bold text-slate-400">
+                    Order Total: <span className="text-white">₹{(selectedOrder.total || 0).toLocaleString('en-IN')}</span>
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-950/80 border-b border-slate-800/80 text-slate-400 font-semibold uppercase text-[10px]">
+                      <tr>
+                        <th className="py-2.5 px-4">#</th>
+                        <th className="py-2.5 px-4">Product Name &amp; SKU</th>
+                        <th className="py-2.5 px-4 text-center">Qty</th>
+                        <th className="py-2.5 px-4 text-right">Unit Price</th>
+                        <th className="py-2.5 px-4 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {selectedOrder.items && selectedOrder.items.length > 0 ? (
+                        selectedOrder.items.map((item, idx) => {
+                          const unitPrice = item.price || (selectedOrder.total / (item.qty || 1));
+                          const lineTotal = (item.qty || 1) * unitPrice;
+                          return (
+                            <tr key={idx} className="hover:bg-slate-900/40">
+                              <td className="py-2.5 px-4 text-slate-500 font-mono text-[11px]">{idx + 1}</td>
+                              <td className="py-2.5 px-4">
+                                <span className="font-bold text-slate-100 block">{item.name}</span>
+                                {item.sku && (
+                                  <span className="text-[10px] text-slate-400 font-mono">{item.sku}</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-4 text-center font-bold font-mono text-slate-200">
+                                {item.qty}
+                              </td>
+                              <td className="py-2.5 px-4 text-right font-mono text-slate-300">
+                                ₹{(unitPrice || 0).toLocaleString('en-IN')}
+                              </td>
+                              <td className="py-2.5 px-4 text-right font-mono font-bold text-white">
+                                ₹{(lineTotal || 0).toLocaleString('en-IN')}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="py-4 px-4 text-center text-slate-400">
+                            {selectedOrder.itemsCount || 1} Plumbing Item(s) included &bull; ₹{(selectedOrder.total || 0).toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                    <tfoot className="bg-slate-900/60 border-t border-slate-800 font-semibold">
+                      <tr>
+                        <td colSpan={3} className="py-2.5 px-4 text-slate-400 text-right">Subtotal:</td>
+                        <td colSpan={2} className="py-2.5 px-4 text-right font-mono text-slate-300">
+                          ₹{(selectedOrder.total || 0).toLocaleString('en-IN')}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colSpan={3} className="py-2 px-4 text-slate-400 text-right">GST / Taxes:</td>
+                        <td colSpan={2} className="py-2 px-4 text-right font-mono text-emerald-400 text-[11px]">
+                          Inclusive (18% GST)
+                        </td>
+                      </tr>
+                      <tr className="border-t border-slate-700/80 text-sm">
+                        <td colSpan={3} className="py-3 px-4 font-bold text-white text-right">Grand Total:</td>
+                        <td colSpan={2} className="py-3 px-4 text-right font-mono font-bold text-blue-400 text-base">
+                          ₹{(selectedOrder.total || 0).toLocaleString('en-IN')}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              {/* Zoho Fulfillment & Dispatch Stepper */}
+              <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-amber-400" />
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                      Live Zoho Fulfillment &amp; Dispatch Pipeline
+                    </h4>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    Synced with Zoho Inventory API
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                  {[
+                    { step: 1, label: 'Order Confirmed', statusMatch: ['Confirmed', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered'] },
+                    { step: 2, label: 'Zoho Inventory Reserved', statusMatch: ['Confirmed', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered'] },
+                    { step: 3, label: 'Packed & Invoiced', statusMatch: ['Processing', 'Shipped', 'Out for Delivery', 'Delivered'] },
+                    { step: 4, label: 'Dispatched / In Transit', statusMatch: ['Shipped', 'Out for Delivery', 'Delivered'] },
+                    { step: 5, label: 'Delivered', statusMatch: ['Delivered'] }
+                  ].map((st, i) => {
+                    const isCompleted = st.statusMatch.includes(selectedOrder.status);
+                    return (
+                      <div
+                        key={i}
+                        className={`p-3 rounded-xl border flex flex-col items-center text-center transition ${
+                          isCompleted
+                            ? 'bg-blue-950/30 border-blue-600/40 text-blue-200'
+                            : 'bg-slate-900/40 border-slate-800 text-slate-500'
+                        }`}
+                      >
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs mb-1.5 ${
+                          isCompleted
+                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                            : 'bg-slate-800 text-slate-500'
+                        }`}>
+                          {isCompleted ? <Check className="w-4 h-4" /> : st.step}
+                        </div>
+                        <span className={`text-[11px] font-bold leading-tight ${isCompleted ? 'text-white' : 'text-slate-400'}`}>
+                          {st.label}
+                        </span>
+                        <span className="text-[9px] mt-1 text-slate-400">
+                          {isCompleted ? 'Completed' : 'Pending'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                Order <span className="font-mono font-bold text-slate-200">{selectedOrder.id}</span>
+              </span>
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -19,6 +19,75 @@ import {
   AlertCircle
 } from 'lucide-react';
 
+function getStatusBadge(status) {
+  const norm = (status || '').toLowerCase().trim();
+  switch (norm) {
+    case 'delivered':
+      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    case 'out for delivery':
+    case 'shipped':
+    case 'in transit':
+      return 'bg-blue-50 text-blue-700 border-blue-200';
+    case 'processing':
+    case 'packed':
+    case 'packed at hub':
+      return 'bg-purple-50 text-purple-700 border-purple-200';
+    case 'confirmed':
+    case 'order confirmed':
+      return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+    case 'pending':
+      return 'bg-amber-50 text-amber-700 border-amber-200';
+    case 'cancelled':
+      return 'bg-rose-50 text-rose-700 border-rose-200';
+    default:
+      return 'bg-slate-100 text-slate-700 border-slate-200';
+  }
+}
+
+function getDynamicTrackingSteps(status) {
+  const norm = (status || '').toLowerCase().trim();
+  const isCancelled = norm === 'cancelled';
+  const isDelivered = norm === 'delivered';
+  const isOutForDelivery = norm === 'out for delivery' || norm === 'shipped' || norm === 'in transit';
+  const isPacked = norm === 'processing' || norm === 'packed' || norm === 'packed at hub';
+  const isPending = norm === 'pending';
+
+  return [
+    {
+      step: 1,
+      title: 'Order Placed',
+      desc: isCancelled ? 'Order was cancelled' : 'Payment cleared & verified',
+      done: !isCancelled,
+      current: isPending,
+      failed: isCancelled
+    },
+    {
+      step: 2,
+      title: 'Packed at Hub',
+      desc: (isPacked || isOutForDelivery || isDelivered) ? 'Boxed & quality sealed' : 'Awaiting hub packaging',
+      done: (isPacked || isOutForDelivery || isDelivered) && !isCancelled,
+      current: isPacked,
+      failed: isCancelled
+    },
+    {
+      step: 3,
+      title: 'Out for Delivery',
+      desc: (isOutForDelivery || isDelivered) ? 'Assigned to courier van' : 'Logistics partner pending',
+      done: (isOutForDelivery || isDelivered) && !isCancelled,
+      current: isOutForDelivery && !isDelivered,
+      failed: isCancelled
+    },
+    {
+      step: 4,
+      title: 'Delivered',
+      desc: isDelivered ? 'Doorstep drop completed' : 'Expected today/tomorrow',
+      done: isDelivered && !isCancelled,
+      current: isDelivered,
+      failed: isCancelled
+    }
+  ];
+}
+
 export default function CustomerOrdersPage({ currentUser, onLogout }) {
   const [searchParams] = useSearchParams();
   const { orderId: paramOrderId } = useParams();
@@ -30,79 +99,110 @@ export default function CustomerOrdersPage({ currentUser, onLogout }) {
   const [searchQuery, setSearchQuery] = useState(paramOrderId || placedOrderId || '');
   const [expandedOrderId, setExpandedOrderId] = useState(paramOrderId || placedOrderId || null);
 
+  const [statusUpdateToast, setStatusUpdateToast] = useState(null);
+
   const customer = currentUser && currentUser.role === 'Customer' ? currentUser : {
     id: 'CUST-01',
     name: 'Rahul Sharma',
     mobile: '9876543210'
   };
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (isBackground = false) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/orders?clientType=Customer`);
+      let res;
+      try {
+        res = await fetch('/api/orders?clientType=Customer');
+        if (!res.ok) throw new Error('Proxy status: ' + res.status);
+      } catch (e1) {
+        try {
+          res = await fetch('http://localhost:5000/api/orders?clientType=Customer');
+          if (!res.ok) throw new Error('Port 5000 status: ' + res.status);
+        } catch (e2) {
+          res = await fetch('http://localhost:4000/api/orders?clientType=Customer');
+        }
+      }
       const data = await res.json();
       if (data && data.success && Array.isArray(data.data) && data.data.length > 0) {
-        setOrders(data.data);
-      } else {
-        // Default customer demo orders
-        setOrders([
-          {
-            id: 'PM-928410',
-            clientType: 'Customer',
-            clientName: customer.name,
-            clientMobile: customer.mobile,
-            total: 3360,
-            paymentMethod: 'Online Payment (UPI / QR)',
-            paymentStatus: 'Paid',
-            status: 'Out for Delivery',
-            expectedDate: 'Today by 04:00 PM',
-            deliveryAddress: 'Flat 402, Green Glen Heights, Outer Ring Road, Bellandur, Bengaluru - 560103',
-            createdAt: new Date().toISOString(),
-            items: [
-              { name: 'Astral CPVC Pro High Pressure Pipe (1 Inch, 3m)', qty: 4, price: 480 },
-              { name: 'Ashirvad Brass Concealed Stop Cock (15mm Heavy)', qty: 2, price: 720 }
-            ],
-            tracking: [
-              { step: 1, title: 'Order Confirmed', description: 'Payment verified and order generated', completed: true, time: 'Today 07:15 AM' },
-              { step: 2, title: 'Regional Warehouse Packed', description: 'Quality inspected and safely boxed', completed: true, time: 'Today 09:30 AM' },
-              { step: 3, title: 'Dispatched / In Transit', description: 'Assigned to courier van KA-03-AA-9102', completed: true, time: 'Today 11:45 AM' },
-              { step: 4, title: 'Out for Delivery', description: 'Delivery agent en route to your doorstep', completed: true, time: 'Today 01:20 PM' },
-              { step: 5, title: 'Delivered', description: 'Delivered with OTP confirmation', completed: false, time: 'Expected by 04:00 PM' }
-            ]
-          },
-          {
-            id: 'PM-817294',
-            clientType: 'Customer',
-            clientName: customer.name,
-            clientMobile: customer.mobile,
-            total: 3810,
-            paymentMethod: 'Online Payment (Debit/Credit Card)',
-            paymentStatus: 'Paid',
-            status: 'Delivered',
-            expectedDate: 'Delivered on 11 Oct 2026',
-            deliveryAddress: 'Flat 402, Green Glen Heights, Outer Ring Road, Bellandur, Bengaluru - 560103',
-            createdAt: '2026-10-10T09:30:00.000Z',
-            items: [
-              { name: 'Jaquar Alive Single Lever Basin Mixer Tap (Chrome)', qty: 1, price: 3450 },
-              { name: 'Pidilite M-Seal Sanitary & Plumbing Epoxy Putty', qty: 2, price: 180 }
-            ],
-            tracking: [
-              { step: 1, title: 'Order Confirmed', description: 'Payment verified', completed: true, time: '10 Oct 09:30 AM' },
-              { step: 2, title: 'Warehouse Packed', description: 'Packed & dispatched', completed: true, time: '10 Oct 02:00 PM' },
-              { step: 3, title: 'In Transit', description: 'Hub arrival', completed: true, time: '11 Oct 08:30 AM' },
-              { step: 4, title: 'Delivered', description: 'Package handed over to customer', completed: true, time: '11 Oct 03:45 PM' }
-            ]
-          }
-        ]);
+        if (isBackground) {
+          setOrders(prev => {
+            data.data.forEach(updatedOrder => {
+              const old = prev.find(o => o.id === updatedOrder.id);
+              if (old && old.status !== updatedOrder.status) {
+                setStatusUpdateToast({
+                  id: updatedOrder.id,
+                  status: updatedOrder.status
+                });
+                setTimeout(() => setStatusUpdateToast(null), 5000);
+              }
+            });
+            return data.data;
+          });
+        } else {
+          setOrders(data.data);
+        }
       }
     } catch (err) {
-      console.error('Failed to fetch customer orders:', err);
+      console.warn('Customer orders fetch error:', err.message);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchOrders();
+    fetchOrders(false);
+
+    // Live polling every 2.5s for instant updates from Admin Portal
+    const timer = setInterval(() => {
+      fetchOrders(true);
+    }, 2500);
+
+    // BroadcastChannel listener from Admin Dashboard
+    let channel;
+    try {
+      channel = new BroadcastChannel('plumbmart_orders');
+      channel.onmessage = (event) => {
+        if (event.data) {
+          if (event.data.type === 'STATUS_UPDATED') {
+            setOrders(prev => prev.map(o => 
+              o.id === event.data.orderId ? { ...o, status: event.data.status } : o
+            ));
+            setStatusUpdateToast({
+              id: event.data.orderId,
+              status: event.data.status
+            });
+            setTimeout(() => setStatusUpdateToast(null), 5000);
+          } else if (event.data.type === 'NEW_ORDER') {
+            fetchOrders(true);
+          }
+        }
+      };
+    } catch (e) {}
+
+    // Storage event for cross-tab status update
+    const handleStorage = (e) => {
+      if (e.key === 'plumbmart_status_broadcast') {
+        try {
+          const payload = JSON.parse(e.newValue);
+          if (payload && payload.orderId) {
+            setOrders(prev => prev.map(o => 
+              o.id === payload.orderId ? { ...o, status: payload.status } : o
+            ));
+            setStatusUpdateToast({
+              id: payload.orderId,
+              status: payload.status
+            });
+            setTimeout(() => setStatusUpdateToast(null), 5000);
+          }
+        } catch (err) {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      clearInterval(timer);
+      if (channel) channel.close();
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
 
   const filteredOrders = orders.filter(order => {
@@ -124,6 +224,32 @@ export default function CustomerOrdersPage({ currentUser, onLogout }) {
     <CustomerLayout currentUser={currentUser} onLogout={onLogout}>
       <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
         
+        {/* Real-time Order Status Update Alert Toast */}
+        {statusUpdateToast && (
+          <div className="mb-6 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-4 text-white shadow-xl flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-3 duration-300">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center font-bold">
+                <Truck className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-200 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                  Live Status Update
+                </span>
+                <p className="text-xs font-bold">
+                  Order #{statusUpdateToast.id} status is now <span className="underline font-black text-amber-200">"{statusUpdateToast.status}"</span>!
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setStatusUpdateToast(null)}
+              className="p-1 rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition text-xs font-bold px-2 py-1"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Placed Order Success Banner */}
         {placedOrderId && (
           <div className="mb-6 bg-gradient-to-r from-emerald-600 to-teal-600 rounded-3xl p-5 text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
@@ -245,12 +371,8 @@ export default function CustomerOrdersPage({ currentUser, onLogout }) {
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono font-bold text-slate-900 text-sm">#{order.id}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            isDelivered
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-blue-50 text-blue-700 border border-blue-200'
-                          }`}>
-                            {order.status || 'Processing'}
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadge(order.status)}`}>
+                            {order.status || 'Confirmed'}
                           </span>
                         </div>
 
@@ -285,28 +407,36 @@ export default function CustomerOrdersPage({ currentUser, onLogout }) {
                       
                       {/* Tracking Stepper */}
                       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs">
-                        <h4 className="text-xs font-bold text-slate-900 mb-3 flex items-center gap-1.5">
-                          <Truck className="w-4 h-4 text-blue-600" />
-                          <span>Delivery Journey &amp; Status</span>
-                        </h4>
+                        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                          <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                            <Truck className="w-4 h-4 text-blue-600" />
+                            <span>Delivery Journey &amp; Status</span>
+                          </h4>
+                          <div className="flex items-center gap-2">
+                            <span className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                              Live Tracking
+                            </span>
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadge(order.status)}`}>
+                              {order.status || 'Confirmed'}
+                            </span>
+                          </div>
+                        </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 relative">
-                          {[
-                            { step: 1, title: 'Order Placed', desc: 'Online Payment Cleared', done: true },
-                            { step: 2, title: 'Packed at Hub', desc: 'Boxed & Sealed', done: true },
-                            { step: 3, title: 'Out for Delivery', desc: 'Assigned to Agent', done: !isDelivered },
-                            { step: 4, title: 'Delivered', desc: 'Doorstep Drop', done: isDelivered }
-                          ].map((st, i) => (
+                          {getDynamicTrackingSteps(order.status).map((st, i) => (
                             <div key={i} className="flex items-start gap-2.5">
-                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 transition-colors ${
                                 st.done
-                                  ? 'bg-emerald-600 text-white'
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : st.current
+                                  ? 'bg-blue-600 text-white ring-2 ring-blue-300 animate-pulse'
                                   : 'bg-slate-200 text-slate-500'
                               }`}>
                                 {st.done ? '✓' : i + 1}
                               </div>
                               <div>
-                                <h5 className={`text-xs font-bold ${st.done ? 'text-slate-900' : 'text-slate-400'}`}>
+                                <h5 className={`text-xs font-bold ${st.done || st.current ? 'text-slate-900' : 'text-slate-400'}`}>
                                   {st.title}
                                 </h5>
                                 <p className="text-[10px] text-slate-500">{st.desc}</p>

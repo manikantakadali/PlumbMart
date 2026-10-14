@@ -64,7 +64,19 @@ export default function CustomerProductsPage({ currentUser, onLogout }) {
 
   const fetchProducts = async () => {
     try {
-      const res = await fetch('http://localhost:4000/api/products');
+      let res;
+      try {
+        res = await fetch('/api/products');
+        if (!res.ok) throw new Error('Proxy status: ' + res.status);
+      } catch (e1) {
+        try {
+          res = await fetch('http://localhost:5000/api/products');
+          if (!res.ok) throw new Error('Port 5000 status: ' + res.status);
+        } catch (e2) {
+          res = await fetch('http://localhost:4000/api/products');
+        }
+      }
+
       const data = await res.json();
       if (data && data.success && Array.isArray(data.data)) {
         setProducts(data.data);
@@ -130,7 +142,7 @@ export default function CustomerProductsPage({ currentUser, onLogout }) {
         
         {/* Toast when added to cart */}
         {addedNotice && (
-          <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200">
             <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
               <Check className="w-4 h-4" />
             </div>
@@ -149,14 +161,14 @@ export default function CustomerProductsPage({ currentUser, onLogout }) {
 
         {/* Search & Category Filter Header Bar */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 mb-6">
-          <div className="relative flex-1 max-w-md">
+          <div className="relative flex-1 w-full md:max-w-md">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search pipes, fittings, faucets, pumps, tools..."
-              className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
+              className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
             />
             {searchQuery && (
               <button
@@ -168,12 +180,12 @@ export default function CustomerProductsPage({ currentUser, onLogout }) {
             )}
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-none no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
             {CATEGORIES.map(cat => (
               <button
                 key={cat}
                 onClick={() => handleSelectCategory(cat)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition shrink-0 ${
                   selectedCategory === cat
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
@@ -185,9 +197,9 @@ export default function CustomerProductsPage({ currentUser, onLogout }) {
           </div>
         </div>
 
-        {/* Product Cards Grid (4 Columns, Compact) */}
+        {/* Product Cards Grid (Responsive Columns, Compact) */}
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-4">
             {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
               <div key={i} className="bg-white rounded-2xl border border-slate-200 p-3.5 animate-pulse space-y-3">
                 <div className="h-36 bg-slate-200 rounded-xl" />
@@ -204,7 +216,7 @@ export default function CustomerProductsPage({ currentUser, onLogout }) {
             <p className="text-xs text-slate-400 mt-1">Try tweaking your search query or select another category</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-4">
             {filteredProducts.map(product => {
               const qty = quantities[product.id] || 1;
               const discountPercent = product.mrp && product.price
@@ -218,15 +230,15 @@ export default function CustomerProductsPage({ currentUser, onLogout }) {
                 >
                   <div>
                     {/* Compact Image */}
-                    <div className="relative h-36 w-full rounded-xl overflow-hidden bg-slate-100 mb-2.5">
+                    <div className="relative h-36 w-full rounded-xl overflow-hidden bg-white mb-2.5 border border-slate-100 flex items-center justify-center">
                       <img 
-                        src={product.image} 
+                        src={product.image || product.imageUrl || '/products/PLB-PIPE-051.jpg'} 
                         alt={product.name}
                         onError={(e) => {
                           e.currentTarget.onerror = null;
-                          e.currentTarget.src = 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=600&q=80';
+                          e.currentTarget.src = '/products/PLB-PIPE-051.jpg';
                         }}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
                       />
                       <div className="absolute top-2 left-2 flex items-center gap-1">
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white/95 text-blue-700 shadow-xs backdrop-blur-xs">
@@ -361,7 +373,7 @@ export default function CustomerProductsPage({ currentUser, onLogout }) {
         {/* Product Details Modal */}
         {selectedProductDetails && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-            <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-slate-200 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 border border-slate-200 shadow-2xl animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
               <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-100">
                 <div>
                   <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">
@@ -382,9 +394,9 @@ export default function CustomerProductsPage({ currentUser, onLogout }) {
               <div className="py-4 space-y-4">
                 <div className="flex gap-4 items-center">
                   <img
-                    src={selectedProductDetails.image}
+                    src={selectedProductDetails.image || selectedProductDetails.imageUrl || '/products/PLB-PIPE-051.jpg'}
                     alt={selectedProductDetails.name}
-                    className="w-20 h-20 rounded-2xl object-cover bg-slate-100 border border-slate-200 shrink-0"
+                    className="w-20 h-20 rounded-2xl object-contain p-1 bg-white border border-slate-200 shrink-0"
                   />
                   <div>
                     <div className="flex items-baseline gap-2">

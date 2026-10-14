@@ -21,12 +21,15 @@ if (process.env.DATABASE_URL) {
   });
 }
 
-// Direct query wrapper for Supabase
+// Direct query wrapper for Supabase with 8s timeout guarantee
 async function query(text, params) {
   if (!pool) {
     throw new Error('Supabase database connection pool not initialized.');
   }
-  return pool.query(text, params);
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Supabase query timed out')), 8000)
+  );
+  return Promise.race([pool.query(text, params), timeoutPromise]);
 }
 
 // Health check function
@@ -74,6 +77,128 @@ function saveDb(data) {
 // ========================================================
 // DYNAMIC SUPABASE CUSTOMER CRUD METHODS
 // ========================================================
+
+/**
+ * Find customer strictly without auto-creation (used for auth check)
+ */
+async function findCustomerByMobile(mobile) {
+  const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
+  if (!cleanMobile) return null;
+
+  // Fast local lookup
+  const local = getDb();
+  const cached = (local.customers || []).find(c => c.mobile === cleanMobile);
+  if (cached) return cached;
+
+  try {
+    const res = await query('SELECT * FROM customers WHERE mobile = $1', [cleanMobile]);
+    if (res.rows.length > 0) {
+      return res.rows[0];
+    }
+  } catch (err) {
+    console.warn('[Supabase Fallback] findCustomerByMobile error:', err.message);
+  }
+
+  return null;
+}
+
+/**
+ * Find customer by email in Supabase or local cache
+ */
+async function findCustomerByEmail(email) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail) return null;
+
+  // Fast local lookup
+  const local = getDb();
+  const cached = (local.customers || []).find(c => (c.email || '').toLowerCase() === cleanEmail);
+  if (cached) return cached;
+
+  try {
+    const res = await query('SELECT * FROM customers WHERE LOWER(email) = $1', [cleanEmail]);
+    if (res.rows.length > 0) {
+      return res.rows[0];
+    }
+  } catch (err) {
+    console.warn('[Supabase Fallback] findCustomerByEmail error:', err.message);
+  }
+
+  return null;
+}
+
+
+/**
+ * Register and persist new customer in Supabase and local cache
+ */
+async function createCustomerRecord(data) {
+  const cleanMobile = String(data.mobile || '').replace(/\D/g, '').slice(-10);
+  if (!cleanMobile || cleanMobile.length !== 10) {
+    throw new Error('Valid 10-digit mobile number is required');
+  }
+
+  const name = String(data.name || '').trim();
+  const email = data.email ? String(data.email).trim() : `customer_${cleanMobile}@plumbmart.com`;
+  const city = data.city ? String(data.city).trim() : 'Bengaluru';
+  const newId = 'CUST-' + Date.now().toString().slice(-4);
+  const addresses = [
+    {
+      id: 'ADDR-' + Date.now(),
+      title: 'Primary Delivery Address',
+      address: city ? `Main Site Address, ${city}` : 'Main Site Address, Bengaluru',
+      phone: cleanMobile,
+      pincode: '560103',
+      isDefault: true
+    }
+  ];
+
+  let customer = null;
+  try {
+    const insertRes = await query(`
+      INSERT INTO customers (id, name, mobile, email, addresses, reward_points, total_saved, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5::jsonb, 100, 0.00, NOW(), NOW())
+      ON CONFLICT (mobile) DO UPDATE SET
+        name = EXCLUDED.name,
+        email = EXCLUDED.email,
+        updated_at = NOW()
+      RETURNING *;
+    `, [
+      newId,
+      name,
+      cleanMobile,
+      email,
+      JSON.stringify(addresses)
+    ]);
+    customer = insertRes.rows[0];
+  } catch (err) {
+    console.warn('[Supabase Insert Error in createCustomerRecord]:', err.message);
+  }
+
+  // Also sync to local database cache
+  const local = getDb();
+  if (!local.customers) local.customers = [];
+  const existingIdx = local.customers.findIndex(c => c.mobile === cleanMobile);
+  const localRecord = {
+    id: customer ? customer.id : newId,
+    name,
+    mobile: cleanMobile,
+    email,
+    password: data.password || '123456',
+    role: 'Customer',
+    rewardPoints: 100,
+    addresses,
+    city,
+    createdAt: new Date().toISOString()
+  };
+
+  if (existingIdx >= 0) {
+    local.customers[existingIdx] = { ...local.customers[existingIdx], ...localRecord };
+  } else {
+    local.customers.push(localRecord);
+  }
+  saveDb(local);
+
+  return customer || localRecord;
+}
 
 /**
  * Fetch or auto-create customer in Supabase
@@ -363,16 +488,376 @@ async function deleteCustomerAddress(mobile, addressId) {
   return addresses;
 }
 
+/**
+ * Update Customer Profile (name, email, address, etc.) dynamically
+ */
+async function updateCustomerProfile(mobile, updates) {
+  const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
+  if (!cleanMobile) throw new Error('Valid 10-digit mobile number is required.');
+
+  const local = getDb();
+  if (!local.customers) local.customers = [];
+  
+  let custIndex = local.customers.findIndex(c => c.mobile === cleanMobile);
+  if (custIndex === -1) {
+    const newCust = {
+      id: 'CUST-' + Date.now().toString().slice(-6),
+      name: updates.name || 'Valued Customer',
+      mobile: cleanMobile,
+      email: updates.email || `customer_${cleanMobile}@plumbmart.com`,
+      role: 'Customer',
+      addresses: updates.address ? [{
+        id: 'ADDR-' + Date.now(),
+        title: 'Delivery Address',
+        address: updates.address,
+        phone: cleanMobile,
+        isDefault: true
+      }] : [],
+      createdAt: new Date().toISOString()
+    };
+    local.customers.push(newCust);
+    custIndex = local.customers.length - 1;
+  }
+
+  const current = local.customers[custIndex];
+  const updatedName = updates.name !== undefined ? String(updates.name).trim() : current.name;
+  const updatedEmail = updates.email !== undefined ? String(updates.email).trim() : current.email;
+  const updatedAddress = updates.address !== undefined ? String(updates.address).trim() : (current.address || (current.addresses?.[0]?.address || ''));
+
+  let addresses = current.addresses || [];
+  if (updates.address) {
+    if (addresses.length > 0) {
+      addresses[0] = { ...addresses[0], address: updatedAddress };
+    } else {
+      addresses = [{
+        id: 'ADDR-' + Date.now(),
+        title: 'Delivery Address',
+        address: updatedAddress,
+        phone: cleanMobile,
+        isDefault: true
+      }];
+    }
+  }
+
+  local.customers[custIndex] = {
+    ...current,
+    name: updatedName,
+    email: updatedEmail,
+    address: updatedAddress,
+    addresses: addresses,
+    updatedAt: new Date().toISOString()
+  };
+
+  saveDb(local);
+
+  try {
+    await query(`
+      UPDATE customers 
+      SET name = $1, email = $2, addresses = $3::jsonb, updated_at = NOW()
+      WHERE mobile = $4
+    `, [updatedName, updatedEmail, JSON.stringify(addresses), cleanMobile]);
+  } catch (err) {
+    console.warn('[Supabase Fallback] updateCustomerProfile error:', err.message);
+  }
+
+  return local.customers[custIndex];
+}
+
+// ========================================================
+// DYNAMIC SUPABASE PLUMBER PROFILE CRUD METHODS
+// ========================================================
+
+function formatPlumberRow(r) {
+  if (!r) return null;
+  let skills = r.skills || [];
+  if (typeof skills === 'string') {
+    try { skills = JSON.parse(skills); } catch { skills = []; }
+  }
+  return {
+    id: r.id,
+    name: r.name || 'Ramesh Kumar',
+    mobile: r.mobile,
+    email: r.email || `plumber_${r.mobile}@plumbmart.com`,
+    avatar: r.avatar,
+    license: r.license_no || 'PLUMB-KA-2024-884',
+    status: r.status || r.verification_status || 'VERIFIED',
+    verificationStatus: r.verification_status || 'VERIFIED',
+    experience: parseInt(r.experience_years ?? 8, 10),
+    specialization: r.specialization || 'CPVC/UPVC Piping, Concealed Valves & Pump Automation',
+    skills: Array.isArray(skills) ? skills : [
+      'CPVC High Pressure Solvent Welding',
+      'UPVC Ball Valve Installation',
+      'Basin & Shower Mixer Cartridges',
+      'Kirloskar Pump Servicing',
+      'Sanitary Hydrostatic Leak Testing'
+    ],
+    serviceArea: r.service_area || 'Bengaluru East & South Zones',
+    address: r.address || '#42, 5th Main, 7th Cross, HSR Layout Sector 2, Bengaluru, Karnataka, 560102',
+    rating: parseFloat(r.rating ?? 4.9),
+    completedJobs: parseInt(r.completed_jobs ?? 48, 10),
+    rewardPoints: parseInt(r.reward_points ?? 650, 10),
+    walletBalance: parseInt(r.wallet_balance ?? 4850, 10),
+    city: r.city || 'Bengaluru (East & South Zones)',
+    createdAt: r.created_at,
+    updatedAt: r.updated_at
+  };
+}
+
+/**
+ * Fetch or auto-create plumber in Supabase
+ */
+async function getPlumberByMobile(mobile) {
+  const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
+  if (!cleanMobile) return null;
+
+  try {
+    const res = await query('SELECT * FROM plumbers WHERE mobile = $1', [cleanMobile]);
+    if (res.rows.length > 0) {
+      return formatPlumberRow(res.rows[0]);
+    }
+
+    // Auto-create plumber profile in Supabase if not found
+    const newId = 'PLM-' + Date.now().toString().slice(-4);
+    const insertRes = await query(`
+      INSERT INTO plumbers (
+        id, name, mobile, email, license_no, verification_status, status,
+        experience_years, specialization, skills, service_area, address,
+        rating, completed_jobs, reward_points, wallet_balance, city,
+        created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, 'VERIFIED', 'VERIFIED',
+        8, 'CPVC/UPVC Piping, Concealed Valves & Pump Automation',
+        $6::jsonb, 'Bengaluru East & South Zones',
+        '#42, 5th Main, 7th Cross, HSR Layout Sector 2, Bengaluru, Karnataka, 560102',
+        4.9, 48, 650, 4850, 'Bengaluru (East & South Zones)',
+        NOW(), NOW()
+      )
+      RETURNING *;
+    `, [
+      newId,
+      'Ramesh Kumar',
+      cleanMobile,
+      `plumber_${cleanMobile}@plumbmart-demo.com`,
+      `PLUMB-KA-2024-${cleanMobile.slice(-3)}`,
+      JSON.stringify([
+        'CPVC High Pressure Solvent Welding',
+        'UPVC Ball Valve Installation',
+        'Basin & Shower Mixer Cartridges',
+        'Kirloskar Pump Servicing',
+        'Sanitary Hydrostatic Leak Testing'
+      ])
+    ]);
+    return formatPlumberRow(insertRes.rows[0]);
+  } catch (err) {
+    console.warn('[Supabase Fallback] getPlumberByMobile error:', err.message);
+    const local = getDb();
+    const match = (local.plumbers || []).find(p => p.mobile === cleanMobile);
+    return formatPlumberRow(match || (local.plumbers ? local.plumbers[0] : null));
+  }
+}
+
+/**
+ * Update Plumber Profile in Supabase
+ */
+async function updatePlumberProfile(mobile, updateData) {
+  const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
+  if (!cleanMobile) throw new Error('Valid mobile number is required');
+
+  try {
+    const res = await query(`
+      UPDATE plumbers SET
+        name = COALESCE($1, name),
+        email = COALESCE($2, email),
+        license_no = COALESCE($3, license_no),
+        specialization = COALESCE($4, specialization),
+        skills = COALESCE($5::jsonb, skills),
+        service_area = COALESCE($6, service_area),
+        address = COALESCE($7, address),
+        city = COALESCE($8, city),
+        experience_years = COALESCE($9, experience_years),
+        updated_at = NOW()
+      WHERE mobile = $10
+      RETURNING *;
+    `, [
+      updateData.name || null,
+      updateData.email || null,
+      updateData.license || updateData.license_no || null,
+      updateData.specialization || null,
+      updateData.skills ? JSON.stringify(updateData.skills) : null,
+      updateData.serviceArea || updateData.service_area || null,
+      updateData.address || null,
+      updateData.city || null,
+      updateData.experience ? parseInt(updateData.experience, 10) : null,
+      cleanMobile
+    ]);
+
+    if (res.rows.length === 0) {
+      // If row did not exist yet, create it
+      return await getPlumberByMobile(cleanMobile);
+    }
+
+    const updated = formatPlumberRow(res.rows[0]);
+
+    // Sync to local json cache
+    const local = getDb();
+    if (!local.plumbers) local.plumbers = [];
+    const idx = local.plumbers.findIndex(p => p.mobile === cleanMobile);
+    if (idx !== -1) {
+      local.plumbers[idx] = { ...local.plumbers[idx], ...updated };
+    } else {
+      local.plumbers.push(updated);
+    }
+    saveDb(local);
+
+    return updated;
+  } catch (err) {
+    console.warn('[Supabase Fallback] updatePlumberProfile error:', err.message);
+    const local = getDb();
+    if (!local.plumbers) local.plumbers = [];
+    let idx = local.plumbers.findIndex(p => p.mobile === cleanMobile);
+    if (idx !== -1) {
+      local.plumbers[idx] = { ...local.plumbers[idx], ...updateData };
+    } else {
+      local.plumbers.push({ mobile: cleanMobile, ...updateData });
+      idx = local.plumbers.length - 1;
+    }
+    saveDb(local);
+    return formatPlumberRow(local.plumbers[idx]);
+  }
+}
+
+/**
+ * Create Plumber Profile in Supabase
+ */
+async function createPlumberProfile(payload) {
+  const cleanMobile = String(payload.mobile || '').replace(/\D/g, '').slice(-10);
+  const newId = payload.id || ('PLM-' + Date.now().toString().slice(-4));
+  const skills = Array.isArray(payload.skills) ? payload.skills : [
+    'CPVC High Pressure Solvent Welding',
+    'UPVC Ball Valve Installation',
+    'Basin & Shower Mixer Cartridges'
+  ];
+
+  try {
+    const res = await query(`
+      INSERT INTO plumbers (
+        id, name, mobile, email, license_no, verification_status, status,
+        experience_years, specialization, skills, service_area, address,
+        rating, completed_jobs, reward_points, wallet_balance, city,
+        created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10::jsonb, $11, $12,
+        $13, $14, $15, $16, $17,
+        NOW(), NOW()
+      )
+      ON CONFLICT (mobile) DO UPDATE SET
+        name = EXCLUDED.name,
+        email = EXCLUDED.email,
+        address = EXCLUDED.address,
+        specialization = EXCLUDED.specialization,
+        updated_at = NOW()
+      RETURNING *;
+    `, [
+      newId,
+      payload.name || 'Ramesh Kumar',
+      cleanMobile,
+      payload.email || `plumber_${cleanMobile}@plumbmart.com`,
+      payload.license || payload.license_no || 'PLUMB-KA-2024-884',
+      payload.verificationStatus || 'VERIFIED',
+      payload.status || 'VERIFIED',
+      parseInt(payload.experience || 8, 10),
+      payload.specialization || 'CPVC/UPVC Piping & Valves',
+      JSON.stringify(skills),
+      payload.serviceArea || 'Bengaluru East & South Zones',
+      payload.address || 'Registered Address, Bengaluru',
+      parseFloat(payload.rating || 4.9),
+      parseInt(payload.completedJobs || 48, 10),
+      parseInt(payload.rewardPoints || 650, 10),
+      parseInt(payload.walletBalance || 4850, 10),
+      payload.city || 'Bengaluru'
+    ]);
+
+    return formatPlumberRow(res.rows[0]);
+  } catch (err) {
+    console.warn('[Supabase Fallback] createPlumberProfile error:', err.message);
+    const local = getDb();
+    if (!local.plumbers) local.plumbers = [];
+    const item = { id: newId, mobile: cleanMobile, ...payload };
+    local.plumbers.push(item);
+    saveDb(local);
+    return formatPlumberRow(item);
+  }
+}
+
+// ========================================================
+// DYNAMIC PRODUCTS CRUD METHODS
+// ========================================================
+
+function formatProductRow(r) {
+  if (!r) return null;
+  return {
+    id: r.id,
+    sku: r.sku,
+    name: r.name,
+    description: r.description,
+    category: r.category,
+    brand: r.brand,
+    price: parseFloat(r.price || 0),
+    mrp: parseFloat(r.mrp || 0),
+    dealerPrice: parseFloat(r.dealer_price || 0),
+    stock: parseInt(r.stock ?? r.stock_quantity ?? 0, 10),
+    stockQuantity: parseInt(r.stock_quantity ?? r.stock ?? 0, 10),
+    unit: r.unit || 'piece',
+    currency: r.currency || 'INR',
+    image: r.image,
+    rating: parseFloat(r.rating || 4.7),
+    reviews: parseInt(r.reviews || 50, 10),
+    tag: r.tag,
+    inStock: (parseInt(r.stock ?? r.stock_quantity ?? 0, 10)) > 0,
+    isAvailable: r.is_available !== false,
+    zohoWorkbook: typeof r.zoho_workbook === 'string' ? JSON.parse(r.zoho_workbook) : (r.zoho_workbook || {}),
+    specs: typeof r.specs === 'string' ? JSON.parse(r.specs) : (r.specs || {})
+  };
+}
+
+async function getProductsList() {
+  const local = getDb();
+  if (local.products && local.products.length > 0) {
+    return local.products.map(formatProductRow);
+  }
+  try {
+    const res = await query('SELECT * FROM products ORDER BY id ASC');
+    if (res.rows && res.rows.length > 0) {
+      return res.rows.map(formatProductRow);
+    }
+  } catch (err) {
+    console.warn('[Supabase Fallback] getProductsList error:', err.message);
+  }
+  return [];
+}
+
 module.exports = {
   pool,
   query,
   checkConnection,
   getDb,
   saveDb,
+  findCustomerByMobile,
+  findCustomerByEmail,
+  createCustomerRecord,
   getCustomerByMobile,
   getCustomerOrders,
   createCustomerOrder,
   addCustomerAddress,
   setDefaultCustomerAddress,
-  deleteCustomerAddress
+  deleteCustomerAddress,
+  updateCustomerProfile,
+  getPlumberByMobile,
+  updatePlumberProfile,
+  createPlumberProfile,
+  getProductsList,
+  formatProductRow
 };
+
+

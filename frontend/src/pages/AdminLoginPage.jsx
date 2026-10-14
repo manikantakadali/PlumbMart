@@ -29,15 +29,37 @@ export default function AdminLoginPage({ onAdminLoginSuccess }) {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:4000/api/auth/admin-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim(),
-          password: password.trim(),
-          pin: securityPin
-        })
-      });
+      const payload = {
+        email: email.trim(),
+        password: password.trim(),
+        pin: securityPin
+      };
+
+      let response;
+      try {
+        response = await fetch('/api/auth/admin-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok && response.status !== 401 && response.status !== 400) {
+          throw new Error('Proxy failed');
+        }
+      } catch {
+        try {
+          response = await fetch('http://localhost:5000/api/auth/admin-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        } catch {
+          response = await fetch('http://localhost:4000/api/auth/admin-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+      }
 
       const data = await response.json();
       if (!response.ok || !data.success) {

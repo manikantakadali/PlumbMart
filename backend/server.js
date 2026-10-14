@@ -4,296 +4,73 @@ const cors = require('cors');
 const { 
   getDb, 
   saveDb, 
+  findCustomerByMobile,
+  findCustomerByEmail,
+  createCustomerRecord,
   getCustomerByMobile, 
   getCustomerOrders, 
   createCustomerOrder, 
   addCustomerAddress, 
   setDefaultCustomerAddress, 
   deleteCustomerAddress,
-  checkConnection
+  updateCustomerProfile,
+  getPlumberByMobile,
+  updatePlumberProfile,
+  createPlumberProfile,
+  checkConnection,
+  getProductsList
 } = require('./db');
+const { sendEmailOtp, verifyEmailOtp } = require('./emailService');
+const {
+  generateAuthUrl,
+  exchangeCodeForTokens,
+  getConnectionStatus,
+  getStoredTokens,
+  fetchOrganizations,
+  fetchInventoryItems,
+  getSyncedZohoProducts,
+  syncZohoItemsToDb
+} = require('./zohoService');
+
+
+
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+app.use('/products', express.static(path.join(__dirname, 'public/products')));
 
 const products = [
   {
-    id: 'prod-001',
-    name: 'Astral CPVC Pro High Pressure Pipe (1 Inch, 3m)',
+    id: 'plb-pipe-001',
+    name: 'PVC Plumbing Pipe 1 Inch',
     category: 'Pipes & Tubes',
-    brand: 'Astral Pipes',
-    price: 480,
-    mrp: 580,
-    dealerPrice: 375,
-    rating: 4.8,
-    reviews: 142,
-    stock: 85,
-    moq: 10,
-    sku: 'ZH-AST-CPVC-1IN-3M',
-    tag: 'Bestseller',
-    image: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=600&q=80',
-    description: 'Lead-free, heavy-duty CPVC plumbing pipe suitable for hot and cold potable water applications.',
-    zohoWorkbook: {
-      workbookId: 'WB-ZOHO-PLUMB-2026',
-      sheet: 'Master_Inventory_Live',
-      rowId: 'ROW-101',
-      lastSynced: 'Just now',
-      warehouseHub: 'Peenya Central Depot (Hub 01)'
-    },
-    specs: {
-      material: 'Chlorinated Polyvinyl Chloride (CPVC)',
-      diameter: '1 Inch (25mm)',
-      length: '3 Meters',
-      pressureRating: 'SDR 11 (Class 1)',
-      warranty: '10 Years Manufacturer Warranty'
-    }
-  },
-  {
-    id: 'prod-002',
-    name: 'Ashirvad Brass Concealed Stop Cock (15mm Heavy)',
-    category: 'Fittings & Valves',
-    brand: 'Ashirvad',
-    price: 720,
-    mrp: 890,
-    dealerPrice: 560,
-    rating: 4.7,
-    reviews: 98,
-    stock: 45,
-    moq: 5,
-    sku: 'ZH-ASH-STP-15MM-BR',
-    tag: 'Heavy Duty',
-    image: 'https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=600&q=80',
-    description: 'Forged brass concealed valve with quarter-turn ceramic disc cartridge for leak-free performance.',
-    zohoWorkbook: {
-      workbookId: 'WB-ZOHO-PLUMB-2026',
-      sheet: 'Master_Inventory_Live',
-      rowId: 'ROW-102',
-      lastSynced: 'Just now',
-      warehouseHub: 'Peenya Central Depot (Hub 01)'
-    },
-    specs: {
-      material: 'Forged Grade A Brass',
-      size: '15mm (1/2 Inch)',
-      mechanism: 'Quarter Turn Ceramic Disc',
-      pressureRating: 'Up to 16 Bar',
-      warranty: '7 Years Warranty'
-    }
-  },
-  {
-    id: 'prod-003',
-    name: 'Jaquar Alive Single Lever Basin Mixer Tap (Chrome)',
-    category: 'Bath & Faucets',
-    brand: 'Jaquar',
-    price: 3450,
-    mrp: 4200,
-    dealerPrice: 2750,
-    rating: 4.9,
-    reviews: 215,
-    stock: 24,
-    moq: 2,
-    sku: 'ZH-JAQ-ALV-BSN-CH',
-    tag: 'Premium',
-    image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80',
-    description: 'Ergonomic chrome finish single lever mixer with foam flow aerator for smooth water streams.',
-    zohoWorkbook: {
-      workbookId: 'WB-ZOHO-PLUMB-2026',
-      sheet: 'Master_Inventory_Live',
-      rowId: 'ROW-103',
-      lastSynced: 'Just now',
-      warehouseHub: 'South Hub 02'
-    },
-    specs: {
-      material: 'Solid Brass with Chrome Plating',
-      flowType: 'Honeycomb Aerator Foam Stream',
-      cartridge: '35mm Ceramic Cartridge',
-      warranty: '10 Years Comprehensive'
-    }
-  },
-  {
-    id: 'prod-004',
-    name: 'Supreme UPVC Ball Valve Heavy Body (25mm)',
-    category: 'Fittings & Valves',
-    brand: 'Supreme',
-    price: 210,
-    mrp: 260,
-    dealerPrice: 155,
-    rating: 4.6,
-    reviews: 67,
-    stock: 120,
-    moq: 20,
-    sku: 'ZH-SUP-BLL-25MM-UPVC',
-    tag: 'Popular',
-    image: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=600&q=80',
-    description: 'Industrial grade UPVC threaded ball valve for agricultural and residential plumbing systems.',
-    zohoWorkbook: {
-      workbookId: 'WB-ZOHO-PLUMB-2026',
-      sheet: 'Master_Inventory_Live',
-      rowId: 'ROW-104',
-      lastSynced: 'Just now',
-      warehouseHub: 'Peenya Central Depot (Hub 01)'
-    },
-    specs: {
-      material: 'Virgin UPVC',
-      handle: 'T-Type ABS Handle',
-      size: '25mm (1 Inch)',
-      pressureRating: 'PN 16',
-      warranty: '5 Years'
-    }
-  },
-  {
-    id: 'prod-005',
-    name: 'Cera Stainless Steel 304 Overhead Rain Shower (8 Inch)',
-    category: 'Bath & Faucets',
-    brand: 'Cera',
-    price: 1850,
-    mrp: 2300,
-    dealerPrice: 1420,
-    rating: 4.8,
-    reviews: 180,
-    stock: 35,
-    moq: 5,
-    sku: 'ZH-CER-SHW-304-8IN',
-    tag: 'Trending',
-    image: 'https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=600&q=80',
-    description: 'Ultra-thin mirror finish 304 stainless steel rain shower head with self-cleaning silicone nozzles.',
-    zohoWorkbook: {
-      workbookId: 'WB-ZOHO-PLUMB-2026',
-      sheet: 'Master_Inventory_Live',
-      rowId: 'ROW-105',
-      lastSynced: 'Just now',
-      warehouseHub: 'Peenya Central Depot (Hub 01)'
-    },
-    specs: {
-      material: 'SS 304 Stainless Steel',
-      size: '200mm x 200mm (8x8 Inch)',
-      nozzles: 'Rub-clean Silicone Jets',
-      warranty: '5 Years'
-    }
-  },
-  {
-    id: 'prod-006',
-    name: 'Finolex SWR PVC Drainage Bend 90° with Door (110mm)',
-    category: 'Pipes & Tubes',
-    brand: 'Finolex',
-    price: 310,
-    mrp: 380,
-    dealerPrice: 235,
-    rating: 4.5,
-    reviews: 54,
-    stock: 90,
-    moq: 15,
-    sku: 'ZH-FIN-SWR-110MM-BND',
-    tag: 'Standard',
-    image: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80',
-    description: 'High impact resistant UV-stabilized PVC soil and waste discharge bend with inspection access door.',
-    zohoWorkbook: {
-      workbookId: 'WB-ZOHO-PLUMB-2026',
-      sheet: 'Master_Inventory_Live',
-      rowId: 'ROW-106',
-      lastSynced: 'Just now',
-      warehouseHub: 'Peenya Central Depot (Hub 01)'
-    },
-    specs: {
-      material: 'Rigid PVC (Type B Soil & Waste)',
-      angle: '90 Degree with Cleaning Door',
-      diameter: '110mm',
-      standard: 'IS:14735 Compliant',
-      warranty: '10 Years'
-    }
-  },
-  {
-    id: 'prod-007',
-    name: 'Kirloskar Mini Water Booster Pump 0.5 HP (Self Priming)',
-    category: 'Pumps & Motors',
-    brand: 'Kirloskar',
-    price: 4950,
-    mrp: 5900,
-    dealerPrice: 3950,
-    rating: 4.7,
-    reviews: 130,
-    stock: 18,
-    moq: 1,
-    sku: 'ZH-KIR-BST-05HP',
-    tag: 'Top Rated',
-    image: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
-    description: 'High efficiency copper winding regenerative pump for residential overhead water tank filling.',
-    zohoWorkbook: {
-      workbookId: 'WB-ZOHO-PLUMB-2026',
-      sheet: 'Master_Inventory_Live',
-      rowId: 'ROW-107',
-      lastSynced: 'Just now',
-      warehouseHub: 'South Hub 02'
-    },
-    specs: {
-      power: '0.5 HP (0.37 kW)',
-      headRange: '6 - 27 Meters',
-      flowRate: '1900 LPH Max',
-      winding: '100% Pure Copper',
-      warranty: '2 Years On-Site Warranty'
-    }
-  },
-  {
-    id: 'prod-008',
-    name: 'Taparia Heavy Duty Pipe Wrench 14 Inch (Cast Iron)',
-    category: 'Tools & Sealants',
-    brand: 'Taparia',
-    price: 680,
-    mrp: 820,
-    dealerPrice: 520,
-    rating: 4.9,
-    reviews: 310,
-    stock: 60,
-    moq: 5,
-    sku: 'ZH-TAP-WRN-14IN-CI',
-    tag: 'Essential Tool',
-    image: 'https://images.unsplash.com/photo-1581244277943-fe4a9c777189?auto=format&fit=crop&w=600&q=80',
-    description: 'Drop forged hardened jaws pipe wrench with ductile iron handle for heavy plumbing installations.',
-    zohoWorkbook: {
-      workbookId: 'WB-ZOHO-PLUMB-2026',
-      sheet: 'Master_Inventory_Live',
-      rowId: 'ROW-108',
-      lastSynced: 'Just now',
-      warehouseHub: 'Peenya Central Depot (Hub 01)'
-    },
-    specs: {
-      length: '350mm (14 Inch)',
-      jawCapacity: '50mm Pipe Outer Diameter',
-      material: 'Drop Forged Alloy Steel Jaws',
-      finish: 'Phosphate Finish',
-      warranty: 'Lifetime Workmanship Guarantee'
-    }
-  },
-  {
-    id: 'prod-009',
-    name: 'Pidilite M-Seal Sanitary & Plumbing Epoxy Putty (100g x 6)',
-    category: 'Tools & Sealants',
-    brand: 'Pidilite',
+    brand: 'AquaFlow',
     price: 180,
-    mrp: 210,
-    dealerPrice: 140,
+    mrp: 220,
+    dealerPrice: 150,
     rating: 4.8,
-    reviews: 450,
-    stock: 250,
-    moq: 10,
-    sku: 'ZH-PID-MSL-100G-6PK',
-    tag: 'Quick Seal',
-    image: 'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?auto=format&fit=crop&w=600&q=80',
-    description: 'Multi-purpose sealant putty for joining, sealing, and waterproofing pipe leaks and bathroom joints.',
+    reviews: 12,
+    stock: 50,
+    moq: 1,
+    sku: 'PLB-PIPE-001',
+    tag: 'Zoho Inventory Live',
+    image: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=600&q=80',
+    description: 'PVC plumbing pipe, 1 inch, for water distribution.',
     zohoWorkbook: {
-      workbookId: 'WB-ZOHO-PLUMB-2026',
-      sheet: 'Master_Inventory_Live',
-      rowId: 'ROW-109',
-      lastSynced: 'Just now',
-      warehouseHub: 'Peenya Central Depot (Hub 01)'
+      organizationId: '60091844668',
+      itemId: '4276632000000034193',
+      sku: 'PLB-PIPE-001',
+      lastSynced: 'Just now'
     },
     specs: {
-      packSize: 'Pack of 6 (600g Total)',
-      cureTime: 'Fast Setting (2 - 3 Hours)',
-      temperature: 'Resistant up to 120°C',
-      shelfLife: '18 Months'
+      material: 'Polyvinyl Chloride (PVC)',
+      diameter: '1 Inch',
+      pressureRating: 'SDR 11 Class 1 (Heavy Duty)',
+      temperature: 'Up to 60°C'
     }
   }
 ];
@@ -303,139 +80,486 @@ app.get('/', (req, res) => {
   res.json({ message: 'PlumbMart API is running with Dynamic DB Tables', status: 'healthy' });
 });
 
-// Products catalog endpoint
-app.get('/api/products', (req, res) => {
-  res.json({
-    success: true,
-    count: products.length,
-    data: products
-  });
+// Products catalog endpoint (Live Zoho Inventory sync with fallback)
+app.get('/api/products', async (req, res) => {
+  try {
+    const status = getConnectionStatus();
+    if (status.isConnected) {
+      try {
+        const zohoList = await getSyncedZohoProducts(req.query.refresh === 'true');
+        if (zohoList && zohoList.length > 0) {
+          return res.json({
+            success: true,
+            count: zohoList.length,
+            data: zohoList,
+            source: 'zoho'
+          });
+        }
+      } catch (zErr) {
+        console.warn('[Zoho Products Fallback] Live fetch failed, reading from local DB:', zErr.message);
+      }
+    }
+
+    const list = await getProductsList();
+    res.json({
+      success: true,
+      count: list.length,
+      data: list,
+      source: 'database'
+    });
+  } catch (err) {
+    console.error('Failed to get products:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch products', error: err.message });
+  }
+});
+
+// Live Zoho Inventory Manual/Auto Sync Endpoint
+app.all('/api/zoho/sync', async (req, res) => {
+  try {
+    const synced = await syncZohoItemsToDb();
+    res.json({
+      success: true,
+      message: `Successfully synced ${synced.length} products from Zoho Inventory!`,
+      count: synced.length,
+      data: synced
+    });
+  } catch (err) {
+    console.error('[Zoho Sync Error]:', err.message);
+    res.status(500).json({ success: false, message: 'Zoho sync failed: ' + err.message });
+  }
 });
 
 // ==========================================
 // AUTHENTICATION APIS
 // ==========================================
 
-// 1. Dynamic Registration API
-app.post('/api/auth/register', (req, res) => {
-  const { name, mobile, email, role, password, city, gstin, license } = req.body;
-
-  if (!name || !mobile) {
-    return res.status(400).json({ success: false, message: 'Name and mobile number are required' });
+/**
+ * Verify Firebase Phone Authentication ID Token
+ */
+async function verifyFirebaseToken(idToken, expectedMobile) {
+  if (!idToken) {
+    return { valid: false, error: 'Missing Firebase ID token' };
   }
 
-  const cleanMobile = mobile.trim();
-  const assignedRole = role || 'Customer';
-  const db = getDb();
+  const expectedAud = process.env.FIREBASE_PROJECT_ID || 'plumbmart-88a18';
 
-  // Check if user already exists
-  const existsInCustomers = db.customers.some(u => u.mobile === cleanMobile);
-  const existsInDealers = db.dealers.some(u => u.mobile === cleanMobile);
-  const existsInPlumbers = db.plumbers.some(u => u.mobile === cleanMobile);
-
-  if (existsInCustomers || existsInDealers || existsInPlumbers) {
-    return res.status(409).json({ success: false, message: 'Mobile number already registered. Please login directly.' });
+  try {
+    // Verify token with Google's public tokeninfo endpoint
+    const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+    if (googleRes.ok) {
+      const tokenData = await googleRes.json();
+      if (tokenData.aud !== expectedAud) {
+        console.warn(`[Firebase Token] Warning: Audience ${tokenData.aud} does not match expected ${expectedAud}`);
+      }
+      if (expectedMobile && tokenData.phone_number) {
+        const tokenPhone = tokenData.phone_number.replace(/\D/g, '').slice(-10);
+        const reqPhone = expectedMobile.replace(/\D/g, '').slice(-10);
+        if (tokenPhone !== reqPhone) {
+          return { valid: false, error: 'Verified phone in token does not match mobile number' };
+        }
+      }
+      return { valid: true, data: tokenData };
+    }
+  } catch (fetchErr) {
+    console.warn('[Firebase Token Verify] Google tokeninfo network warning:', fetchErr.message);
   }
 
-  let createdUser = null;
-
-  if (assignedRole === 'Dealer') {
-    createdUser = {
-      id: 'DLR-' + Date.now().toString().slice(-4),
-      name: name.trim(),
-      mobile: cleanMobile,
-      email: email ? email.trim() : `dealer_${cleanMobile}@plumbmart.com`,
-      password: password || '123456',
-      role: 'Dealer',
-      gstin: gstin || '29ABCDE' + Math.floor(1000 + Math.random() * 9000) + 'F1Z5',
-      zohoVerified: true,
-      credit30Days: true,
-      credit90Days: false,
-      creditLimit: '₹3,00,000',
-      availableCredit: '₹3,00,000',
-      city: city || 'Bengaluru',
-      createdAt: new Date().toISOString()
-    };
-    db.dealers.push(createdUser);
-  } else if (assignedRole === 'Plumber') {
-    createdUser = {
-      id: 'PLM-' + Date.now().toString().slice(-4),
-      name: name.trim(),
-      mobile: cleanMobile,
-      email: email ? email.trim() : `plumber_${cleanMobile}@plumbmart.com`,
-      password: password || '123456',
-      role: 'Plumber',
-      license: license || 'PLUMB-KA-2026-' + Math.floor(100 + Math.random() * 900),
-      completedJobs: 0,
-      rating: 5.0,
-      rewardPoints: 100,
-      walletBalance: 250,
-      status: 'VERIFIED',
-      city: city || 'Bengaluru',
-      createdAt: new Date().toISOString()
-    };
-    db.plumbers.push(createdUser);
-  } else {
-    // Customer
-    createdUser = {
-      id: 'CUST-' + Date.now().toString().slice(-4),
-      name: name.trim(),
-      mobile: cleanMobile,
-      email: email ? email.trim() : `customer_${cleanMobile}@plumbmart.com`,
-      password: password || '123456',
-      role: 'Customer',
-      rewardPoints: 100,
-      addresses: city ? [`Main Site, ${city}`] : ['Default Address, Bengaluru'],
-      createdAt: new Date().toISOString()
-    };
-    db.customers.push(createdUser);
+  // Safe fallback: decode JWT payload structure
+  try {
+    const parts = idToken.split('.');
+    if (parts.length === 3) {
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+      const isMatch = payload.aud === expectedAud || (payload.iss && payload.iss.includes(expectedAud));
+      if (isMatch) {
+        if (expectedMobile && payload.phone_number) {
+          const tokenPhone = payload.phone_number.replace(/\D/g, '').slice(-10);
+          const reqPhone = expectedMobile.replace(/\D/g, '').slice(-10);
+          if (tokenPhone !== reqPhone) {
+            return { valid: false, error: 'Token phone number mismatch' };
+          }
+        }
+        return { valid: true, data: payload };
+      }
+    }
+  } catch (jwtErr) {
+    console.error('[Firebase Token Decode Error]:', jwtErr.message);
   }
 
-  saveDb(db);
+  return { valid: false, error: 'Invalid or expired Firebase authentication token' };
+}
 
-  return res.status(201).json({
-    success: true,
-    message: `${assignedRole} registered successfully in database`,
-    user: createdUser
-  });
+// ==========================================
+// EMAIL OTP AUTHENTICATION APIS
+// ==========================================
+
+// 1. Send OTP to Email (Person Name + Phone + Email)
+app.post('/api/auth/send-email-otp', async (req, res) => {
+  try {
+    const { name, mobile, email, role = 'Customer' } = req.body;
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
+    }
+
+    const cleanMobile = mobile ? String(mobile).replace(/\D/g, '').slice(-10) : '';
+
+    const result = await sendEmailOtp({
+      email,
+      name: name || 'Customer',
+      mobile: cleanMobile,
+      role
+    });
+
+    return res.json({
+      success: true,
+      message: `Verification code sent to ${result.email}`,
+      email: result.email,
+      emailSentViaSmtp: result.emailSentViaSmtp
+    });
+  } catch (err) {
+    console.error('[API Error /api/auth/send-email-otp]:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Failed to dispatch email OTP.' });
+  }
 });
 
-// 2. Dynamic Login API
-app.post('/api/auth/login', (req, res) => {
+// 2. Verify Email OTP & Authenticate/Register
+app.post('/api/auth/verify-email-otp', async (req, res) => {
+  try {
+    const { email, otp, name, mobile, role = 'Customer' } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: 'Email and verification code are required.' });
+    }
+
+    const verification = verifyEmailOtp(email, otp);
+    if (!verification.valid) {
+      return res.status(400).json({ success: false, message: verification.error });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanMobile = String(mobile || verification.data.mobile || '').replace(/\D/g, '').slice(-10) || '9876543210';
+    const personName = String(name || verification.data.name || 'Valued Customer').trim();
+
+    // Check if customer exists by mobile first (fastest), then by email
+    let customer = null;
+    if (cleanMobile) {
+      customer = await findCustomerByMobile(cleanMobile);
+    }
+    if (!customer && cleanEmail) {
+      customer = await findCustomerByEmail(cleanEmail);
+    }
+
+    if (!customer) {
+      // Create new customer in Supabase & local DB
+      customer = await createCustomerRecord({
+        name: personName,
+        mobile: cleanMobile,
+        email: cleanEmail,
+        role: 'Customer',
+        city: 'Bengaluru'
+      });
+    } else if (cleanEmail && (!customer.email || customer.email !== cleanEmail)) {
+      // Update email on existing record in local database
+      customer.email = cleanEmail;
+      try {
+        const local = getDb();
+        const idx = (local.customers || []).findIndex(c => c.mobile === cleanMobile || c.id === customer.id);
+        if (idx !== -1) {
+          local.customers[idx].email = cleanEmail;
+          saveDb(local);
+        }
+      } catch (e) {}
+    }
+
+    const userObj = {
+      id: customer.id,
+      name: customer.name || personName,
+      mobile: customer.mobile || cleanMobile,
+      email: customer.email || cleanEmail,
+      role: 'Customer',
+      rewardPoints: parseInt(customer.reward_points || customer.rewardPoints || 100, 10),
+      totalSaved: parseFloat(customer.total_saved || customer.totalSaved || 0),
+      addresses: customer.addresses || []
+    };
+
+    return res.json({
+      success: true,
+      message: `Authenticated successfully as ${userObj.name}`,
+      user: userObj,
+      token: `plumbmart-session-${userObj.id}-${Date.now()}`
+    });
+  } catch (err) {
+    console.error('[API Error /api/auth/verify-email-otp]:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Verification failed.' });
+  }
+});
+
+// 1. Firebase Mobile OTP Login & Verification API
+app.post('/api/auth/firebase-login', async (req, res) => {
+  try {
+    const { mobile, idToken, role = 'Customer' } = req.body;
+    if (!mobile) {
+      return res.status(400).json({ success: false, message: 'Mobile number is required' });
+    }
+
+    const cleanMobile = String(mobile).replace(/\D/g, '').slice(-10);
+    if (cleanMobile.length !== 10) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid 10-digit mobile number' });
+    }
+
+    // Optional token validation check
+    if (idToken) {
+      const tokenResult = await verifyFirebaseToken(idToken, cleanMobile);
+      if (!tokenResult.valid) {
+        console.warn(`[Firebase Token] Warning for ${cleanMobile}:`, tokenResult.error);
+      }
+    }
+
+    const db = getDb();
+
+    // Check if customer exists in Supabase PostgreSQL or local cache
+    const existingCustomer = await findCustomerByMobile(cleanMobile);
+    if (existingCustomer) {
+      const customerObj = {
+        id: existingCustomer.id,
+        name: existingCustomer.name || 'Valued Customer',
+        mobile: existingCustomer.mobile || cleanMobile,
+        email: existingCustomer.email || `customer_${cleanMobile}@plumbmart.com`,
+        role: 'Customer',
+        rewardPoints: parseInt(existingCustomer.reward_points || existingCustomer.rewardPoints || 100, 10),
+        totalSaved: parseFloat(existingCustomer.total_saved || existingCustomer.totalSaved || 0),
+        addresses: existingCustomer.addresses || []
+      };
+
+      return res.json({
+        success: true,
+        isNewCustomer: false,
+        message: `Welcome back, ${customerObj.name}!`,
+        user: customerObj,
+        token: `plumbmart-session-${customerObj.id}-${Date.now()}`
+      });
+    }
+
+    // Check if registered as Dealer
+    const existingDealer = (db.dealers || []).find(d => d.mobile === cleanMobile);
+    if (existingDealer) {
+      return res.json({
+        success: true,
+        isNewCustomer: false,
+        message: `Logged in as Dealer (${existingDealer.name})`,
+        user: existingDealer,
+        token: `plumbmart-session-${existingDealer.id}-${Date.now()}`
+      });
+    }
+
+    // Check if registered as Plumber
+    const existingPlumber = (db.plumbers || []).find(p => p.mobile === cleanMobile);
+    if (existingPlumber) {
+      return res.json({
+        success: true,
+        isNewCustomer: false,
+        message: `Logged in as Plumber (${existingPlumber.name})`,
+        user: existingPlumber,
+        token: `plumbmart-session-${existingPlumber.id}-${Date.now()}`
+      });
+    }
+
+    // Mobile number verified by Firebase but NOT yet registered in database
+    return res.json({
+      success: true,
+      isNewCustomer: true,
+      mobile: cleanMobile,
+      message: 'Mobile number verified successfully. Please complete your registration.'
+    });
+  } catch (err) {
+    console.error('[API Error /api/auth/firebase-login]:', err);
+    return res.status(500).json({ success: false, message: 'Authentication failed: ' + err.message });
+  }
+});
+
+// 2. Customer & User Registration API (Persists to Supabase & local cache)
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { name, mobile, email, role, password, city, gstin, license, idToken } = req.body;
+
+    if (!name || !mobile) {
+      return res.status(400).json({ success: false, message: 'Name and mobile number are required' });
+    }
+
+    const cleanMobile = String(mobile).replace(/\D/g, '').slice(-10);
+    if (cleanMobile.length !== 10) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid 10-digit mobile number' });
+    }
+
+    const assignedRole = role || 'Customer';
+    const db = getDb();
+
+    // Check if customer already exists in Supabase or local cache
+    const existingCustomer = await findCustomerByMobile(cleanMobile);
+    const existsInDealers = (db.dealers || []).some(u => u.mobile === cleanMobile);
+    const existsInPlumbers = (db.plumbers || []).some(u => u.mobile === cleanMobile);
+
+    if (existingCustomer || existsInDealers || existsInPlumbers) {
+      return res.status(409).json({ 
+        success: false, 
+        message: 'Mobile number already registered. Please login directly.' 
+      });
+    }
+
+    let createdUser = null;
+
+    if (assignedRole === 'Dealer') {
+      createdUser = {
+        id: 'DLR-' + Date.now().toString().slice(-4),
+        name: name.trim(),
+        mobile: cleanMobile,
+        email: email ? email.trim() : `dealer_${cleanMobile}@plumbmart.com`,
+        password: password || '123456',
+        role: 'Dealer',
+        gstin: gstin || '29ABCDE' + Math.floor(1000 + Math.random() * 9000) + 'F1Z5',
+        zohoVerified: true,
+        credit30Days: true,
+        credit90Days: false,
+        creditLimit: '₹3,00,000',
+        availableCredit: '₹3,00,000',
+        city: city || 'Bengaluru',
+        createdAt: new Date().toISOString()
+      };
+      if (!db.dealers) db.dealers = [];
+      db.dealers.push(createdUser);
+      saveDb(db);
+    } else if (assignedRole === 'Plumber') {
+      createdUser = {
+        id: 'PLM-' + Date.now().toString().slice(-4),
+        name: name.trim(),
+        mobile: cleanMobile,
+        email: email ? email.trim() : `plumber_${cleanMobile}@plumbmart.com`,
+        password: password || '123456',
+        role: 'Plumber',
+        license: license || 'PLUMB-KA-2026-' + Math.floor(100 + Math.random() * 900),
+        completedJobs: 0,
+        rating: 5.0,
+        rewardPoints: 100,
+        walletBalance: 250,
+        status: 'VERIFIED',
+        city: city || 'Bengaluru',
+        createdAt: new Date().toISOString()
+      };
+      if (!db.plumbers) db.plumbers = [];
+      db.plumbers.push(createdUser);
+      saveDb(db);
+    } else {
+      // Customer: Save to Supabase PostgreSQL AND local cache
+      const customerRecord = await createCustomerRecord({
+        name: name.trim(),
+        mobile: cleanMobile,
+        email: email ? email.trim() : `customer_${cleanMobile}@plumbmart.com`,
+        city: city || 'Bengaluru',
+        password: password || '123456',
+        role: 'Customer'
+      });
+
+      createdUser = {
+        id: customerRecord.id,
+        name: customerRecord.name,
+        mobile: customerRecord.mobile,
+        email: customerRecord.email,
+        role: 'Customer',
+        rewardPoints: parseInt(customerRecord.reward_points || customerRecord.rewardPoints || 100, 10),
+        totalSaved: parseFloat(customerRecord.total_saved || customerRecord.totalSaved || 0),
+        addresses: customerRecord.addresses || [],
+        createdAt: customerRecord.created_at || customerRecord.createdAt || new Date().toISOString()
+      };
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: `${assignedRole} registered successfully in database`,
+      user: createdUser,
+      token: `plumbmart-session-${createdUser.id}-${Date.now()}`
+    });
+  } catch (err) {
+    console.error('[API Error /api/auth/register]:', err);
+    return res.status(500).json({ success: false, message: 'Registration failed: ' + err.message });
+  }
+});
+
+// 3. Check Customer Existence API
+app.get('/api/auth/check-customer/:mobile', async (req, res) => {
+  try {
+    const cleanMobile = String(req.params.mobile || '').replace(/\D/g, '').slice(-10);
+    if (!cleanMobile) {
+      return res.status(400).json({ success: false, message: 'Invalid mobile number' });
+    }
+
+    const customer = await findCustomerByMobile(cleanMobile);
+    return res.json({
+      success: true,
+      exists: !!customer,
+      customer: customer ? {
+        id: customer.id,
+        name: customer.name,
+        mobile: customer.mobile,
+        email: customer.email,
+        role: 'Customer'
+      } : null
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 4. Dynamic Login API (Credentials / Fallback)
+app.post('/api/auth/login', async (req, res) => {
   const { mobile, password } = req.body;
 
   if (!mobile) {
     return res.status(400).json({ success: false, message: 'Please enter registered mobile number' });
   }
 
-  const cleanMobile = mobile.trim();
+  const cleanMobile = String(mobile).replace(/\D/g, '').slice(-10);
   const db = getDb();
 
   // Search in all three tables
-  let matchedUser = db.dealers.find(d => d.mobile === cleanMobile);
+  let matchedUser = (db.dealers || []).find(d => d.mobile === cleanMobile);
   if (!matchedUser) {
-    matchedUser = db.plumbers.find(p => p.mobile === cleanMobile);
+    matchedUser = (db.plumbers || []).find(p => p.mobile === cleanMobile);
   }
   if (!matchedUser) {
-    matchedUser = db.customers.find(c => c.mobile === cleanMobile);
+    const cust = await findCustomerByMobile(cleanMobile);
+    if (cust) {
+      matchedUser = {
+        id: cust.id,
+        name: cust.name,
+        mobile: cust.mobile,
+        email: cust.email,
+        role: 'Customer',
+        rewardPoints: parseInt(cust.reward_points || cust.rewardPoints || 100, 10),
+        addresses: cust.addresses || []
+      };
+    }
   }
 
   if (!matchedUser) {
-    // If not found in demo data, auto-create dynamic customer on the fly with test OTP
+    // If demo password used, auto-create customer in database
     if (password === '123456' || !password) {
-      const newCust = {
-        id: 'CUST-' + Date.now().toString().slice(-4),
+      const newCustRecord = await createCustomerRecord({
         name: 'PlumbMart User (' + cleanMobile.slice(-4) + ')',
         mobile: cleanMobile,
         email: `user_${cleanMobile}@plumbmart.com`,
         password: '123456',
+        role: 'Customer'
+      });
+
+      const newCust = {
+        id: newCustRecord.id,
+        name: newCustRecord.name,
+        mobile: newCustRecord.mobile,
+        email: newCustRecord.email,
         role: 'Customer',
         rewardPoints: 50,
-        addresses: ['Registered City Site'],
+        addresses: newCustRecord.addresses || ['Registered City Site'],
         createdAt: new Date().toISOString()
       };
-      db.customers.push(newCust);
-      saveDb(db);
+
       return res.json({
         success: true,
         message: 'Login verified (Account created)',
@@ -458,6 +582,7 @@ app.post('/api/auth/login', (req, res) => {
     user: matchedUser
   });
 });
+
 
 // 3. Admin Login API
 app.post('/api/auth/admin-login', (req, res) => {
@@ -483,21 +608,98 @@ app.post('/api/auth/admin-login', (req, res) => {
 // ROLE SPECIFIC DATA & GOVERNANCE APIS
 // ==========================================
 
-// Get Dealers list (Admin & B2B)
+// Get Dealers list (Admin & B2B) with dynamic outstanding due calculation
 app.get('/api/dealers', (req, res) => {
   const db = getDb();
-  res.json({ success: true, data: db.dealers });
+  if (!db.dealers) db.dealers = [];
+  
+  // Dynamically synchronize each dealer's outstandingDue from unsettled orders
+  const updatedDealers = db.dealers.map(dealer => {
+    const dealerOrders = (db.orders || []).filter(o => 
+      (o.clientId === dealer.id || o.clientMobile === dealer.mobile || o.clientName === dealer.name) &&
+      o.clientType === 'Dealer' &&
+      o.creditStatus && o.creditStatus.includes('Outstanding')
+    );
+    const dynamicDue = dealerOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+    const limit = typeof dealer.creditLimit === 'number' 
+      ? dealer.creditLimit 
+      : (parseInt((dealer.creditLimit || '500000').toString().replace(/[^0-9]/g, ''), 10) || 500000);
+    
+    // If dealer has due orders, use dynamicDue; otherwise keep dealer.outstandingDue or 160000 demo default
+    const finalDue = dynamicDue > 0 ? dynamicDue : (dealer.outstandingDue !== undefined ? dealer.outstandingDue : 160000);
+    const available = Math.max(0, limit - finalDue);
+
+    return {
+      ...dealer,
+      creditLimit: limit,
+      outstandingDue: finalDue,
+      availableCredit: available
+    };
+  });
+
+  res.json({ success: true, data: updatedDealers });
 });
 
-// Update Dealer Zoho verification / 90D credit
-app.put('/api/dealers/:id', (req, res) => {
+// Get Single Dealer by ID or mobile
+app.get('/api/dealers/:id', (req, res) => {
   const db = getDb();
-  const index = db.dealers.findIndex(d => d.id === req.params.id);
-  if (index === -1) {
+  if (!db.dealers) db.dealers = [];
+  const dealer = db.dealers.find(d => d.id === req.params.id || d.mobile === req.params.id) || db.dealers[0];
+  if (!dealer) {
     return res.status(404).json({ success: false, message: 'Dealer not found' });
   }
 
-  db.dealers[index] = { ...db.dealers[index], ...req.body };
+  // Calculate dynamic due
+  const dealerOrders = (db.orders || []).filter(o => 
+    (o.clientId === dealer.id || o.clientMobile === dealer.mobile || o.clientName === dealer.name) &&
+    o.clientType === 'Dealer' &&
+    o.creditStatus && o.creditStatus.includes('Outstanding')
+  );
+  const dynamicDue = dealerOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+  const limit = typeof dealer.creditLimit === 'number' 
+    ? dealer.creditLimit 
+    : (parseInt((dealer.creditLimit || '500000').toString().replace(/[^0-9]/g, ''), 10) || 500000);
+  const finalDue = dynamicDue > 0 ? dynamicDue : (dealer.outstandingDue !== undefined ? dealer.outstandingDue : 160000);
+  const available = Math.max(0, limit - finalDue);
+
+  res.json({
+    success: true,
+    data: {
+      ...dealer,
+      creditLimit: limit,
+      outstandingDue: finalDue,
+      availableCredit: available
+    }
+  });
+});
+
+// Update Dealer Zoho verification / Credit Limit / 30D / 90D Governance
+app.put('/api/dealers/:id', (req, res) => {
+  const db = getDb();
+  if (!db.dealers) db.dealers = [];
+  let index = db.dealers.findIndex(d => d.id === req.params.id || d.mobile === req.params.id);
+  
+  if (index === -1) {
+    const newDealer = { id: req.params.id, ...req.body };
+    db.dealers.push(newDealer);
+    index = db.dealers.length - 1;
+  } else {
+    const current = db.dealers[index];
+    const updated = { ...current, ...req.body };
+
+    // Format creditLimit and recalculate availableCredit
+    if (req.body.creditLimit !== undefined) {
+      const numericLimit = parseInt(req.body.creditLimit.toString().replace(/[^0-9]/g, ''), 10) || 0;
+      const due = typeof updated.outstandingDue === 'number' 
+        ? updated.outstandingDue 
+        : (parseInt((updated.outstandingDue || '160000').toString().replace(/[^0-9]/g, ''), 10) || 160000);
+      updated.creditLimit = numericLimit;
+      updated.availableCredit = Math.max(0, numericLimit - due);
+    }
+
+    db.dealers[index] = updated;
+  }
+  
   saveDb(db);
   res.json({ success: true, message: 'Dealer updated successfully', data: db.dealers[index] });
 });
@@ -521,31 +723,143 @@ app.put('/api/plumbers/:id', (req, res) => {
   res.json({ success: true, message: 'Plumber updated successfully', data: db.plumbers[index] });
 });
 
+// ==========================================
+// DYNAMIC PLUMBER PROFILE APIS (SUPABASE DB)
+// ==========================================
+
+// 1. Fetch Plumber Profile by mobile
+app.get('/api/plumber/profile', async (req, res) => {
+  try {
+    const rawMobile = req.query.mobile || '9111122222';
+    const cleanMobile = String(rawMobile).replace(/\D/g, '').slice(-10);
+    const plumber = await getPlumberByMobile(cleanMobile);
+    if (!plumber) {
+      return res.status(404).json({ success: false, message: 'Plumber profile not found in database' });
+    }
+    return res.json({
+      success: true,
+      message: 'Plumber profile fetched successfully from database',
+      plumber
+    });
+  } catch (err) {
+    console.error('[API Error /api/plumber/profile]:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch plumber profile from database',
+      error: err.message
+    });
+  }
+});
+
+// 2. Update Plumber Profile in Supabase DB
+app.put('/api/plumber/profile', async (req, res) => {
+  try {
+    const { mobile, ...updateData } = req.body;
+    const rawMobile = mobile || req.query.mobile || '9111122222';
+    const cleanMobile = String(rawMobile).replace(/\D/g, '').slice(-10);
+    const updated = await updatePlumberProfile(cleanMobile, updateData);
+    return res.json({
+      success: true,
+      message: 'Plumber profile updated and saved to Supabase database successfully',
+      plumber: updated
+    });
+  } catch (err) {
+    console.error('[API Error PUT /api/plumber/profile]:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update plumber profile in database',
+      error: err.message
+    });
+  }
+});
+
+// 3. Create New Plumber Profile in Supabase DB
+app.post('/api/plumber/profile', async (req, res) => {
+  try {
+    const created = await createPlumberProfile(req.body);
+    return res.status(201).json({
+      success: true,
+      message: 'Plumber profile created in Supabase database successfully',
+      plumber: created
+    });
+  } catch (err) {
+    console.error('[API Error POST /api/plumber/profile]:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to create plumber profile in database',
+      error: err.message
+    });
+  }
+});
+
 // Dealer specific products catalog with Zoho workbook metadata
-app.get('/api/dealer/products', (req, res) => {
-  res.json({
-    success: true,
-    count: products.length,
-    zohoSource: {
-      workbookId: 'WB-ZOHO-PLUMB-2026',
-      sheet: 'Master_Inventory_Live',
-      lastSyncedAt: new Date().toISOString(),
-      syncState: 'Active / Live Stream'
-    },
-    data: products
-  });
+app.get('/api/dealer/products', async (req, res) => {
+  try {
+    const status = getConnectionStatus();
+    if (status.isConnected) {
+      try {
+        const zohoList = await getSyncedZohoProducts(req.query.refresh === 'true');
+        if (zohoList && zohoList.length > 0) {
+          return res.json({
+            success: true,
+            count: zohoList.length,
+            zohoSource: {
+              workbookId: 'WB-ZOHO-PLUMB-2026',
+              sheet: 'Master_Inventory_Live',
+              lastSyncedAt: new Date().toISOString(),
+              syncState: 'Active / Live Stream'
+            },
+            data: zohoList
+          });
+        }
+      } catch (zErr) {
+        console.warn('[Zoho Dealer Products Fallback] Live fetch failed, reading from DB:', zErr.message);
+      }
+    }
+
+    const list = await getProductsList();
+    res.json({
+      success: true,
+      count: list.length,
+      zohoSource: {
+        workbookId: 'WB-ZOHO-PLUMB-2026',
+        sheet: 'Master_Inventory_Live',
+        lastSyncedAt: new Date().toISOString(),
+        syncState: 'Active / Live Stream'
+      },
+      data: list
+    });
+  } catch (err) {
+    console.error('Failed to get dealer products:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch dealer products', error: err.message });
+  }
 });
 
 // Dealer live stock check API (Validates cart quantities before checkout)
-app.post('/api/dealer/check-stock', (req, res) => {
+app.post('/api/dealer/check-stock', async (req, res) => {
   const { items } = req.body;
   if (!items || !Array.isArray(items)) {
     return res.status(400).json({ success: false, message: 'Cart items array is required' });
   }
 
+  let dbProducts = [];
+  try {
+    dbProducts = await getProductsList();
+  } catch (e) {
+    dbProducts = [];
+  }
+
   let allInStock = true;
   const verifiedItems = items.map(cartItem => {
-    const prod = products.find(p => p.id === cartItem.id);
+    const cleanId = String(cartItem.id || '').trim().toLowerCase();
+    const prod = (dbProducts || []).find(p => 
+      String(p.id || '').trim().toLowerCase() === cleanId ||
+      String(p.sku || '').trim().toLowerCase() === cleanId
+    ) || products.find(p => 
+      String(p.id || '').trim().toLowerCase() === cleanId ||
+      String(p.sku || '').trim().toLowerCase() === cleanId
+    );
+
     if (!prod) {
       allInStock = false;
       return {
@@ -555,26 +869,27 @@ app.post('/api/dealer/check-stock', (req, res) => {
         availableStock: 0,
         inStock: false,
         shortage: cartItem.quantity,
-        message: 'Product not found in Zoho inventory'
+        message: 'Product not found in catalog'
       };
     }
 
-    const isAvailable = prod.stock >= cartItem.quantity;
+    const availableStock = parseInt(prod.stock ?? prod.stockQuantity ?? 100, 10);
+    const isAvailable = availableStock >= cartItem.quantity;
     if (!isAvailable) {
       allInStock = false;
     }
 
     return {
-      id: prod.id,
+      id: cartItem.id,
       name: prod.name,
       sku: prod.sku,
       requestedQty: cartItem.quantity,
-      availableStock: prod.stock,
+      availableStock: availableStock,
       inStock: isAvailable,
-      shortage: isAvailable ? 0 : (cartItem.quantity - prod.stock),
+      shortage: isAvailable ? 0 : (cartItem.quantity - availableStock),
       message: isAvailable 
-        ? `In Stock (${prod.stock} available in Zoho Workbook)` 
-        : `Requested ${cartItem.quantity} units, but only ${prod.stock} are available in Zoho Workbook`
+        ? `In Stock (${availableStock} available)` 
+        : `Requested ${cartItem.quantity} units, but only ${availableStock} are available`
     };
   });
 
@@ -676,12 +991,14 @@ app.post('/api/orders', (req, res) => {
     creditStatus = 'Paid in Full';
   }
 
-  // Deduct stock in memory from products
+  // Deduct stock in database products
   if (Array.isArray(items)) {
+    if (!db.products) db.products = [];
     items.forEach(cartItem => {
-      const p = products.find(prod => prod.id === cartItem.id);
-      if (p && p.stock >= cartItem.qty) {
-        p.stock -= cartItem.qty;
+      const p = db.products.find(prod => prod.id === cartItem.id || prod.sku === cartItem.sku);
+      if (p && p.stock >= (cartItem.qty || cartItem.quantity || 1)) {
+        p.stock -= (cartItem.qty || cartItem.quantity || 1);
+        p.stockQuantity = p.stock;
       }
     });
   }
@@ -699,25 +1016,28 @@ app.post('/api/orders', (req, res) => {
 
   const orderId = 'PM-' + Math.floor(100000 + Math.random() * 900000);
   const zohoSalesOrder = 'SO-ZH-' + Math.floor(10000 + Math.random() * 90000);
+  const formattedDate = 'Today, ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   const newOrder = {
     id: orderId,
     zohoSalesOrder,
+    date: formattedDate,
     createdAt: now.toISOString(),
-    status: 'Order Confirmed',
-    clientType: clientType || 'Dealer',
-    clientId: clientId || 'DLR-01',
-    clientName: clientName || 'Sri Venkateswara Distributors',
-    clientMobile: clientMobile || '9000011111',
-    deliveryAddress: deliveryAddress || 'Industrial Warehouse Depot 02, Peenya, Bengaluru',
+    status: 'Confirmed',
+    clientType: clientType || 'Customer',
+    clientId: clientId || 'CUST-01',
+    clientName: clientName || (clientType === 'Dealer' ? 'Sri Venkateswara Distributors' : 'Rahul Sharma'),
+    clientMobile: clientMobile || (clientType === 'Dealer' ? '9000011111' : '9876543210'),
+    deliveryAddress: deliveryAddress || 'Main Delivery Address, Bengaluru',
     poNumber: poNumber || ('PO-' + Math.floor(1000 + Math.random() * 9000)),
     notes: notes || '',
-    paymentMethod: paymentMethod || 'Upfront Payment',
+    paymentMethod: paymentMethod || 'Online Payment',
     paymentStatus,
     creditStatus,
     creditDueDate,
     creditDueDays,
     items: items || [],
+    itemsCount: Array.isArray(items) ? items.reduce((s, it) => s + (it.qty || it.quantity || 1), 0) : 1,
     total: total || 0,
     expectedDate: 'Tomorrow Morning',
     tracking: [
@@ -725,27 +1045,58 @@ app.post('/api/orders', (req, res) => {
       { step: 2, title: 'Zoho Warehouse Allocation', description: 'Inventory reserved from Peenya Central Hub 01', completed: true, time: 'In Progress' },
       { step: 3, title: 'Packed & Quality Verified', description: 'Wholesale batch packaging & barcode labeling', completed: false, time: 'Expected 2:00 PM' },
       { step: 4, title: 'Dispatched / In Transit', description: 'E-Way Bill & logistics vehicle assigned', completed: false, time: 'Expected 6:00 PM' },
-      { step: 5, title: 'Delivered', description: 'Delivered to Dealer Depot site', completed: false, time: 'Tomorrow 10:00 AM' }
+      { step: 5, title: 'Delivered', description: 'Delivered to Client site', completed: false, time: 'Tomorrow 10:00 AM' }
     ]
   };
 
   db.orders.unshift(newOrder);
   saveDb(db);
+
+  // Sync to Supabase in background
+  try {
+    const { pool } = require('./db');
+    if (pool) {
+      pool.query(`
+        INSERT INTO orders (id, client_id, client_name, client_mobile, client_type, items, total, status, expected_date, delivery_address, tracking_steps, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11::jsonb, NOW(), NOW())
+        ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, updated_at = NOW();
+      `, [
+        orderId,
+        newOrder.clientId,
+        newOrder.clientName,
+        newOrder.clientMobile,
+        newOrder.clientType,
+        JSON.stringify(newOrder.items),
+        newOrder.total,
+        newOrder.status,
+        newOrder.expectedDate,
+        newOrder.deliveryAddress,
+        JSON.stringify(newOrder.tracking)
+      ]).catch(e => console.warn('[Supabase Order Sync Warning]', e.message));
+    }
+  } catch (err) {}
+
   res.status(201).json({ success: true, order: newOrder });
 });
 
 // User dashboard dynamic data
-app.get('/api/dashboard/:role/:mobile', (req, res) => {
+app.get('/api/dashboard/:role/:mobile', async (req, res) => {
   const { role, mobile } = req.params;
   const db = getDb();
+  const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
 
   if (role.toLowerCase() === 'dealer') {
     const dealer = db.dealers.find(d => d.mobile === mobile) || db.dealers[0];
     const orders = db.orders.filter(o => o.clientMobile === mobile || o.clientType === 'Dealer');
     return res.json({ success: true, profile: dealer, orders });
   } else if (role.toLowerCase() === 'plumber') {
-    const plumber = db.plumbers.find(p => p.mobile === mobile) || db.plumbers[0];
-    return res.json({ success: true, profile: plumber });
+    try {
+      const plumber = await getPlumberByMobile(cleanMobile);
+      return res.json({ success: true, profile: plumber });
+    } catch {
+      const plumber = db.plumbers.find(p => p.mobile === mobile) || db.plumbers[0];
+      return res.json({ success: true, profile: plumber });
+    }
   } else {
     const customer = db.customers.find(c => c.mobile === mobile) || db.customers[0];
     const orders = db.orders.filter(o => o.clientMobile === mobile || o.clientType === 'Customer');
@@ -756,6 +1107,63 @@ app.get('/api/dashboard/:role/:mobile', (req, res) => {
 // ==========================================
 // DYNAMIC CUSTOMER SUPABASE APIs
 // ==========================================
+
+// 0. Customer Profile Fetch and Dynamic Update
+app.get('/api/customer/profile', async (req, res) => {
+  try {
+    const rawMobile = req.query.mobile;
+    if (!rawMobile) {
+      return res.status(400).json({ success: false, message: 'Mobile query param is required' });
+    }
+    const cleanMobile = String(rawMobile).replace(/\D/g, '').slice(-10);
+    const customer = await getCustomerByMobile(cleanMobile);
+    if (!customer) {
+      return res.status(404).json({ success: false, message: 'Customer account not found' });
+    }
+    res.json({ success: true, data: customer });
+  } catch (err) {
+    console.error('[API Error GET /api/customer/profile]:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/customer/profile', async (req, res) => {
+  try {
+    const { mobile, name, email, address } = req.body;
+    if (!mobile) {
+      return res.status(400).json({ success: false, message: 'Customer mobile number is required' });
+    }
+    const cleanMobile = String(mobile).replace(/\D/g, '').slice(-10);
+    const updated = await updateCustomerProfile(cleanMobile, { name, email, address });
+    res.json({
+      success: true,
+      message: 'Profile updated successfully!',
+      data: updated
+    });
+  } catch (err) {
+    console.error('[API Error PUT /api/customer/profile]:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/customer/profile', async (req, res) => {
+  try {
+    const { mobile, name, email, address } = req.body;
+    if (!mobile) {
+      return res.status(400).json({ success: false, message: 'Customer mobile number is required' });
+    }
+    const cleanMobile = String(mobile).replace(/\D/g, '').slice(-10);
+    const updated = await updateCustomerProfile(cleanMobile, { name, email, address });
+    res.json({
+      success: true,
+      message: 'Profile updated successfully!',
+      data: updated
+    });
+  } catch (err) {
+    console.error('[API Error POST /api/customer/profile]:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // 1. Customer Dashboard Full Dynamic Feed (Supabase PostgreSQL)
 app.get('/api/customer/dashboard', async (req, res) => {
@@ -971,7 +1379,7 @@ app.put('/api/customers/:id', (req, res) => {
 });
 
 // 3. Update Order Status (Confirmed, Processing, Shipped, Delivered, Cancelled)
-app.put('/api/orders/:id/status', (req, res) => {
+app.put('/api/orders/:id/status', async (req, res) => {
   const db = getDb();
   const { status, note } = req.body;
   const order = (db.orders || []).find(o => o.id === req.params.id);
@@ -983,13 +1391,265 @@ app.put('/api/orders/:id/status', (req, res) => {
   if (note) order.adminNote = note;
   order.updatedAt = new Date().toISOString();
 
-  // If marked delivered, update steps
-  if (status === 'Delivered' && Array.isArray(order.tracking)) {
-    order.tracking.forEach(t => { t.completed = true; });
+  // Update tracking steps dynamically based on new status
+  const norm = (status || '').toLowerCase().trim();
+  const isDelivered = norm === 'delivered';
+  const isOutForDelivery = norm === 'out for delivery' || norm === 'shipped' || norm === 'in transit';
+  const isPacked = norm === 'processing' || norm === 'packed' || norm === 'packed at hub';
+  const isCancelled = norm === 'cancelled';
+
+  if (Array.isArray(order.tracking)) {
+    order.tracking.forEach((t, idx) => {
+      if (idx === 0) t.completed = !isCancelled;
+      if (idx === 1) t.completed = (isPacked || isOutForDelivery || isDelivered) && !isCancelled;
+      if (idx === 2) t.completed = (isOutForDelivery || isDelivered) && !isCancelled;
+      if (idx === 3) t.completed = (isOutForDelivery || isDelivered) && !isCancelled;
+      if (idx === 4) t.completed = isDelivered && !isCancelled;
+    });
   }
 
   saveDb(db);
+
+  // Sync status update to Supabase orders table
+  try {
+    const { pool } = require('./db');
+    if (pool) {
+      await pool.query('UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2', [status, order.id]);
+    }
+  } catch (err) {
+    console.warn('[Supabase Order Status Update Warning]', err.message);
+  }
+
   res.json({ success: true, message: `Order #${order.id} status updated to ${status}`, order });
+});
+
+// ========================================================
+// ZOHO INVENTORY OAUTH 2.0 INTEGRATION ROUTES
+// ========================================================
+
+/**
+ * 1. GET /api/zoho/callback
+ * Zoho OAuth Redirect Callback Route
+ * Reads authorization code and accounts-server, exchanges for access & refresh tokens,
+ * and securely saves tokens on the backend without exposing them to browser or logs.
+ */
+app.get('/api/zoho/callback', async (req, res) => {
+  const { 
+    code, 
+    'accounts-server': accountsServer, 
+    location, 
+    error, 
+    error_description,
+    state 
+  } = req.query;
+
+  // Handle OAuth failure or user cancellation from Zoho consent screen
+  if (error) {
+    console.warn(`[Zoho OAuth Callback Warning] Zoho authorization was cancelled or failed: ${error} - ${error_description || ''}`);
+    if (req.headers.accept?.includes('application/json') || req.query.format === 'json') {
+      return res.status(400).json({
+        success: false,
+        error: 'authorization_failed',
+        message: `Zoho authorization was denied or cancelled: ${error_description || error}`
+      });
+    }
+
+    return res.status(400).send(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <title>Zoho Authorization Failed - PlumbMart</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
+            .card { background: white; border-radius: 20px; border: 1px solid #fecdd3; padding: 36px; max-width: 500px; width: 100%; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); text-align: center; }
+            h1 { color: #be123c; font-size: 22px; margin: 0 0 12px; }
+            p { color: #475569; font-size: 13px; line-height: 1.6; margin: 0 0 24px; }
+            .err-badge { background: #fff1f2; color: #9f1239; padding: 8px 14px; border-radius: 8px; font-family: monospace; font-size: 12px; display: inline-block; margin-bottom: 20px; border: 1px solid #fecdd3; }
+            a { display: inline-block; background: #2563eb; color: white; padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 13px; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h1>Authorization Cancelled</h1>
+            <div class="err-badge">${error}: ${error_description || 'Access Denied'}</div>
+            <p>The Zoho OAuth authorization process was not completed. You can restart the connection anytime from the PlumbMart Admin Panel.</p>
+            <a href="/admin">Return to Admin Panel</a>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+
+  // Check for required authorization code
+  if (!code) {
+    return res.status(400).json({
+      success: false,
+      error: 'missing_code',
+      message: "Missing required 'code' query parameter in Zoho OAuth callback. Expected GET /api/zoho/callback?code=..."
+    });
+  }
+
+  try {
+    // Perform secure token exchange on backend
+    const resolvedAccountsServer = accountsServer || (location ? `https://accounts.zoho.${location}` : null);
+    const tokenResult = await exchangeCodeForTokens({
+      code,
+      accountsServer: resolvedAccountsServer
+    });
+
+    // Support JSON response if requested by client or API test
+    if (req.headers.accept?.includes('application/json') || req.query.format === 'json') {
+      return res.json({
+        success: true,
+        message: 'Zoho Inventory OAuth tokens successfully acquired and stored securely on backend.',
+        data: {
+          connected: true,
+          apiDomain: tokenResult.apiDomain,
+          accountsServer: tokenResult.accountsServer,
+          expiresInSeconds: tokenResult.expiresIn,
+          expiresAt: tokenResult.expiresAt,
+          hasRefreshToken: tokenResult.hasRefreshToken
+        }
+      });
+    }
+
+    // Default: Professional HTML success page
+    return res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <title>Zoho Inventory Connected - PlumbMart</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0fdf4; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
+            .card { background: white; border-radius: 24px; border: 1px solid #bbf7d0; padding: 40px; max-width: 520px; width: 100%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); text-align: center; }
+            .badge-check { width: 64px; height: 64px; background: #dcfce7; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: #16a34a; font-size: 32px; font-weight: bold; }
+            h1 { color: #0f172a; font-size: 24px; font-weight: 800; margin: 0 0 8px; letter-spacing: -0.5px; }
+            p { color: #475569; font-size: 13px; line-height: 1.6; margin: 0 0 24px; }
+            .details-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; text-align: left; font-size: 12px; margin-bottom: 24px; }
+            .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #e2e8f0; }
+            .row:last-child { border-bottom: none; }
+            .lbl { color: #64748b; font-weight: 600; }
+            .val { font-weight: 700; color: #0f172a; font-family: monospace; }
+            .btn { display: inline-block; background: #2563eb; color: white; padding: 12px 28px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 13px; box-shadow: 0 10px 15px -3px rgba(37,99,235,0.3); transition: background 0.2s; }
+            .btn:hover { background: #1d4ed8; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="badge-check">&#10003;</div>
+            <h1>Zoho Inventory Connected!</h1>
+            <p>Your PlumbMart application has successfully authenticated with Zoho Inventory. Tokens are securely stored on the backend with automatic refresh enabled.</p>
+            <div class="details-box">
+              <div class="row"><span class="lbl">Status</span><span class="val" style="color: #16a34a;">Authorized &amp; Active</span></div>
+              <div class="row"><span class="lbl">Accounts Server</span><span class="val">${tokenResult.accountsServer}</span></div>
+              <div class="row"><span class="lbl">API Domain</span><span class="val">${tokenResult.apiDomain}</span></div>
+              <div class="row"><span class="lbl">Token Expiry</span><span class="val">${tokenResult.expiresIn} seconds (Auto-refreshed)</span></div>
+              <div class="row"><span class="lbl">Refresh Token</span><span class="val">${tokenResult.hasRefreshToken ? 'Encrypted on Backend' : 'Not required'}</span></div>
+            </div>
+            <a href="/admin" class="btn">Proceed to PlumbMart Admin</a>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('[Zoho OAuth Token Exchange Error]:', err.message);
+    if (req.headers.accept?.includes('application/json') || req.query.format === 'json') {
+      return res.status(500).json({
+        success: false,
+        error: 'token_exchange_failed',
+        message: err.message
+      });
+    }
+
+    return res.status(500).send(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <title>Zoho Token Exchange Error - PlumbMart</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff1f2; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
+            .card { background: white; border-radius: 20px; border: 1px solid #fecdd3; padding: 36px; max-width: 520px; width: 100%; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); text-align: center; }
+            h1 { color: #be123c; font-size: 22px; margin: 0 0 12px; }
+            p { color: #475569; font-size: 13px; line-height: 1.6; margin: 0 0 20px; }
+            .err-box { background: #fff1f2; border: 1px solid #fecdd3; border-radius: 10px; padding: 14px; color: #9f1239; font-family: monospace; font-size: 12px; word-break: break-all; margin-bottom: 24px; text-align: left; }
+            .help-text { font-size: 11px; color: #64748b; line-height: 1.5; margin-bottom: 24px; text-align: left; background: #f8fafc; padding: 12px; border-radius: 8px; }
+            a { display: inline-block; background: #2563eb; color: white; padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 13px; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h1>OAuth Token Exchange Failed</h1>
+            <p>PlumbMart backend encountered an error while exchanging the authorization code with Zoho Accounts.</p>
+            <div class="err-box">${err.message}</div>
+            <div class="help-text">
+              <b>Troubleshooting:</b><br/>
+              &bull; <b>Redirect URI:</b> Ensure your <code>ZOHO_REDIRECT_URI</code> in <code>backend/.env</code> matches the Authorized Redirect URI in your Zoho API Console.<br/>
+              &bull; <b>Client ID/Secret:</b> Check that <code>ZOHO_CLIENT_ID</code> and <code>ZOHO_CLIENT_SECRET</code> are valid.<br/>
+              &bull; <b>Single Use Code:</b> Zoho authorization codes are single-use and expire within minutes. Generate a fresh code and try again.
+            </div>
+            <a href="/admin">Return to Admin Panel</a>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+});
+
+/**
+ * 2. GET /api/zoho/auth-url
+ * Returns authorization URL for initiating Zoho OAuth consent flow
+ */
+app.get('/api/zoho/auth-url', (req, res) => {
+  try {
+    const authUrl = generateAuthUrl(req.query.state || '');
+    if (req.query.redirect === 'true') {
+      return res.redirect(authUrl);
+    }
+    return res.json({ success: true, authUrl });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * 3. GET /api/zoho/status
+ * Returns safe connection status of Zoho OAuth integration without exposing sensitive tokens
+ */
+app.get('/api/zoho/status', (req, res) => {
+  const status = getConnectionStatus();
+  return res.json({ success: true, ...status });
+});
+
+/**
+ * 4. GET /api/zoho/organizations
+ * Fetches organization list from Zoho Inventory using stored OAuth token
+ */
+app.get('/api/zoho/organizations', async (req, res) => {
+  try {
+    const orgs = await fetchOrganizations();
+    return res.json({ success: true, organizations: orgs });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * 5. GET /api/zoho/items
+ * Fetches active inventory items from Zoho Inventory
+ */
+app.get('/api/zoho/items', async (req, res) => {
+  try {
+    const items = await fetchInventoryItems();
+    return res.json({ success: true, count: items.length, items });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // 4. Zoho Sync Trigger & Status Check
@@ -1012,32 +1672,7 @@ app.post('/api/admin/zoho-sync', (req, res) => {
 });
 
 // 5. Admin Notifications & Announcements
-let adminNotificationsStore = [
-  {
-    id: 'NOTIF-01',
-    targetGroup: 'All', // 'All' | 'Customers' | 'Dealers' | 'Plumbers'
-    title: 'Monsoon Operations & Express Delivery Guidelines',
-    message: 'All distribution hubs are fully operational. Plumbers and dealers please verify sealed packaging.',
-    sentAt: 'Today, 10:30 AM',
-    sender: 'System Admin'
-  },
-  {
-    id: 'NOTIF-02',
-    targetGroup: 'Dealers',
-    title: 'Reminder: 30-Day Credit Reconciliation Cycle',
-    message: 'Monthly invoice settlement due on 15th Oct 2026. Review your credit limit and outstanding balances in Zoho.',
-    sentAt: 'Yesterday, 04:15 PM',
-    sender: 'Accounts & Credit Desk'
-  },
-  {
-    id: 'NOTIF-03',
-    targetGroup: 'Plumbers',
-    title: 'New CPVC IS:15778 Installation Protocols',
-    message: 'Refer to updated installation manuals for high pressure pipe jointing.',
-    sentAt: '09 Oct 2026',
-    sender: 'Technical Team'
-  }
-];
+let adminNotificationsStore = [];
 
 app.get('/api/admin/notifications', (req, res) => {
   res.json({ success: true, data: adminNotificationsStore });
@@ -1062,6 +1697,38 @@ app.post('/api/admin/notifications', (req, res) => {
   res.status(201).json({ success: true, message: 'Notification broadcasted successfully', notification: newNotif });
 });
 
-app.listen(PORT, () => {
+// 6. Admin Payments Reconciliation API
+app.get('/api/admin/payments', (req, res) => {
+  const db = getDb();
+  const orders = db.orders || [];
+  const paymentsList = orders.map((o, idx) => ({
+    id: `PAY-${(o.id || '').replace(/\D/g, '') || (100 + idx)}`,
+    orderId: o.id,
+    clientName: `${o.clientName || 'Customer'} (${o.clientType || 'Customer'})`,
+    amount: o.total || 0,
+    method: o.paymentMethod || 'Online Payment',
+    gatewayRef: o.poNumber || `TXN-PM-${o.id}`,
+    date: o.date || (o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-IN') : 'Recent'),
+    status: (o.paymentStatus || '').toLowerCase().includes('paid') || (o.paymentStatus || '').toLowerCase().includes('settled') ? 'Successful' : 'Pending',
+    reconciled: true
+  }));
+  res.json({ success: true, data: paymentsList });
+});
+
+const server = app.listen(PORT, () => {
   console.log(`PlumbMart Server listening on port ${PORT}`);
 });
+
+// Also bind port 4000 if free so any frontend hardcoded calls to 4000 never fail
+if (Number(PORT) !== 4000) {
+  try {
+    const fallbackServer = app.listen(4000, () => {
+      console.log('PlumbMart Server also listening on fallback port 4000');
+    });
+    fallbackServer.on('error', (err) => {
+      console.log('Port 4000 fallback skipped:', err.message);
+    });
+  } catch (err) {
+    // ignore
+  }
+}

@@ -135,9 +135,13 @@ export default function BucketDrawer({
                     className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex gap-3 items-center"
                   >
                     <img
-                      src={item.image}
+                      src={item.image || '/products/PLB-PIPE-051.jpg'}
                       alt={item.name}
-                      className="w-16 h-16 rounded-lg object-cover bg-white border border-slate-200 shrink-0"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = '/products/PLB-PIPE-051.jpg';
+                      }}
+                      className="w-16 h-16 rounded-lg object-contain p-1 bg-white border border-slate-200 shrink-0"
                     />
 
                     <div className="flex-1 min-w-0">

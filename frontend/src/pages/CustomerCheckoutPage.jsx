@@ -100,14 +100,47 @@ export default function CustomerCheckoutPage({ currentUser, onLogout }) {
     };
 
     try {
-      const res = await fetch('http://localhost:4000/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      let res;
+      try {
+        res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Proxy status: ' + res.status);
+      } catch (e1) {
+        try {
+          res = await fetch('http://localhost:5000/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (!res.ok) throw new Error('Port 5000 status: ' + res.status);
+        } catch (e2) {
+          res = await fetch('http://localhost:4000/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+      }
+
       const data = await res.json();
 
       if (data && data.success && data.order) {
+        // Broadcast new order to Admin Portal instantly via BroadcastChannel & LocalStorage
+        try {
+          const ch = new BroadcastChannel('plumbmart_orders');
+          ch.postMessage({ type: 'NEW_ORDER', order: data.order });
+          ch.close();
+        } catch (e) {}
+
+        try {
+          localStorage.setItem('plumbmart_last_order_broadcast', JSON.stringify({ id: data.order.id, time: Date.now() }));
+        } catch (e) {}
+
+        window.dispatchEvent(new CustomEvent('plumbmart_order_created', { detail: data.order }));
+
         clearCustomerCart();
         navigate(`/customer/orders?placed=${data.order.id}`);
       } else {
@@ -117,6 +150,11 @@ export default function CustomerCheckoutPage({ currentUser, onLogout }) {
       console.error('Customer order placement failed:', err);
       // Fallback local placement
       const fallbackId = 'PM-' + Math.floor(100000 + Math.random() * 900000);
+      try {
+        const ch = new BroadcastChannel('plumbmart_orders');
+        ch.postMessage({ type: 'NEW_ORDER', order: { id: fallbackId, clientName: payload.clientName, total: payload.total } });
+        ch.close();
+      } catch (e) {}
       clearCustomerCart();
       navigate(`/customer/orders?placed=${fallbackId}`);
     } finally {

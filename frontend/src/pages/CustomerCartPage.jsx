@@ -119,13 +119,13 @@ export default function CustomerCartPage({ currentUser, onLogout }) {
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
                     <img 
-                      src={item.image} 
+                      src={item.image || '/products/PLB-PIPE-051.jpg'} 
                       alt={item.name}
                       onError={(e) => {
                         e.currentTarget.onerror = null;
-                        e.currentTarget.src = 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=600&q=80';
+                        e.currentTarget.src = '/products/PLB-PIPE-051.jpg';
                       }}
-                      className="w-16 h-16 rounded-xl object-cover bg-slate-100 border border-slate-200 shrink-0"
+                      className="w-16 h-16 rounded-xl object-contain p-1 bg-white border border-slate-200 shrink-0"
                     />
                     <div className="min-w-0">
                       <span className="text-[10px] font-mono font-bold text-blue-600 block">

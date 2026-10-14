@@ -7,6 +7,7 @@ import CustomerDashboard from './pages/CustomerDashboard';
 import PlumberDashboard from './pages/PlumberDashboard';
 import AdminLoginPage from './pages/AdminLoginPage';
 import AdminDashboard from './pages/AdminDashboard';
+import DealerDashboard from './pages/DealerDashboard';
 import DealerProductsPage from './pages/DealerProductsPage';
 import DealerCartPage from './pages/DealerCartPage';
 import DealerCheckoutPage from './pages/DealerCheckoutPage';
@@ -19,130 +20,154 @@ import { CheckCircle2 } from 'lucide-react';
 
 const DEFAULT_PRODUCTS = [
   {
-    id: 'prod-001',
-    name: 'Astral CPVC Pro High Pressure Pipe (1 Inch, 3m)',
+    id: 'plb-pipe-001',
+    sku: 'PLB-PIPE-001',
+    name: 'PVC Plumbing Pipe 1 Inch',
     category: 'Pipes & Tubes',
-    brand: 'Astral Pipes',
-    price: 480,
-    mrp: 580,
+    brand: 'AquaFlow',
+    price: 180,
+    mrp: 225,
     rating: 4.8,
     reviews: 142,
-    stock: 85,
+    stock: 120,
     tag: 'Bestseller',
     image: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=600&q=80',
-    description: 'Lead-free, heavy-duty CPVC plumbing pipe suitable for hot and cold potable water applications.'
+    description: 'PVC pipe for general plumbing and water distribution.'
   },
   {
-    id: 'prod-002',
-    name: 'Ashirvad Brass Concealed Stop Cock (15mm Heavy)',
-    category: 'Fittings & Valves',
-    brand: 'Ashirvad',
-    price: 720,
-    mrp: 890,
+    id: 'plb-pipe-002',
+    sku: 'PLB-PIPE-002',
+    name: 'CPVC Pipe 3/4 Inch',
+    category: 'Pipes & Tubes',
+    brand: 'FlowLine',
+    price: 240,
+    mrp: 300,
     rating: 4.7,
-    reviews: 98,
+    reviews: 88,
+    stock: 85,
+    tag: 'Top Grade',
+    image: 'https://images.unsplash.com/photo-1542013936693-884638332954?auto=format&fit=crop&w=600&q=80',
+    description: 'CPVC pipe suitable for hot and cold water plumbing systems.'
+  },
+  {
+    id: 'plb-fit-001',
+    sku: 'PLB-FIT-001',
+    name: 'PVC Elbow Connector 1 Inch',
+    category: 'Fittings & Valves',
+    brand: 'AquaFlow',
+    price: 25,
+    mrp: 35,
+    rating: 4.6,
+    reviews: 210,
+    stock: 250,
+    tag: 'Essential',
+    image: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80',
+    description: 'Elbow connector for changing the direction of PVC pipe runs.'
+  },
+  {
+    id: 'plb-fit-002',
+    sku: 'PLB-FIT-002',
+    name: 'Brass Ball Valve 1 Inch',
+    category: 'Fittings & Valves',
+    brand: 'ValvePro',
+    price: 320,
+    mrp: 400,
+    rating: 4.9,
+    reviews: 165,
     stock: 45,
     tag: 'Heavy Duty',
-    image: 'https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=600&q=80',
-    description: 'Forged brass concealed valve with quarter-turn ceramic disc cartridge for leak-free performance.'
-  },
-  {
-    id: 'prod-003',
-    name: 'Jaquar Alive Single Lever Basin Mixer Tap (Chrome)',
-    category: 'Bath & Faucets',
-    brand: 'Jaquar',
-    price: 3450,
-    mrp: 4200,
-    rating: 4.9,
-    reviews: 215,
-    stock: 24,
-    tag: 'Premium',
-    image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80',
-    description: 'Ergonomic chrome finish single lever mixer with foam flow aerator for smooth water streams.'
-  },
-  {
-    id: 'prod-004',
-    name: 'Supreme UPVC Ball Valve Heavy Body (25mm)',
-    category: 'Fittings & Valves',
-    brand: 'Supreme',
-    price: 210,
-    mrp: 260,
-    rating: 4.6,
-    reviews: 67,
-    stock: 120,
-    tag: 'Popular',
     image: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=600&q=80',
-    description: 'Industrial grade UPVC threaded ball valve for agricultural and residential plumbing systems.'
+    description: 'Manual shut-off valve for compatible plumbing installations.'
   },
   {
-    id: 'prod-005',
-    name: 'Cera Stainless Steel 304 Overhead Rain Shower (8 Inch)',
+    id: 'plb-bath-001',
+    sku: 'PLB-BATH-001',
+    name: 'Chrome Basin Tap',
     category: 'Bath & Faucets',
-    brand: 'Cera',
-    price: 1850,
-    mrp: 2300,
+    brand: 'BathEase',
+    price: 650,
+    mrp: 820,
     rating: 4.8,
-    reviews: 180,
+    reviews: 195,
     stock: 35,
-    tag: 'Trending',
-    image: 'https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=600&q=80',
-    description: 'Ultra-thin mirror finish 304 stainless steel rain shower head with self-cleaning silicone nozzles.'
+    tag: 'Premium Chrome',
+    image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80',
+    description: 'Chrome-finish tap for bathroom wash basins.'
   },
   {
-    id: 'prod-006',
-    name: 'Finolex SWR PVC Drainage Bend 90° with Door (110mm)',
-    category: 'Pipes & Tubes',
-    brand: 'Finolex',
-    price: 310,
-    mrp: 380,
-    rating: 4.5,
-    reviews: 54,
-    stock: 90,
-    tag: 'Standard',
-    image: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80',
-    description: 'High impact resistant UV-stabilized PVC soil and waste discharge bend with inspection access door.'
-  },
-  {
-    id: 'prod-007',
-    name: 'Kirloskar Mini Water Booster Pump 0.5 HP (Self Priming)',
-    category: 'Pumps & Motors',
-    brand: 'Kirloskar',
-    price: 4950,
-    mrp: 5900,
+    id: 'plb-bath-002',
+    sku: 'PLB-BATH-002',
+    name: 'Handheld Shower Set',
+    category: 'Bath & Faucets',
+    brand: 'BathEase',
+    price: 890,
+    mrp: 1100,
     rating: 4.7,
     reviews: 130,
-    stock: 18,
-    tag: 'Top Rated',
-    image: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
-    description: 'High efficiency copper winding regenerative pump for residential overhead water tank filling.'
+    stock: 22,
+    tag: 'Trending',
+    image: 'https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=600&q=80',
+    description: 'Handheld shower set for standard compatible bathroom fittings.'
   },
   {
-    id: 'prod-008',
-    name: 'Taparia Heavy Duty Pipe Wrench 14 Inch (Cast Iron)',
-    category: 'Tools & Sealants',
-    brand: 'Taparia',
-    price: 680,
-    mrp: 820,
+    id: 'plb-pump-001',
+    sku: 'PLB-PUMP-001',
+    name: 'Domestic Water Pump 0.5 HP',
+    category: 'Pumps & Motors',
+    brand: 'AquaDrive',
+    price: 3200,
+    mrp: 4000,
     rating: 4.9,
-    reviews: 310,
-    stock: 60,
-    tag: 'Essential Tool',
-    image: 'https://images.unsplash.com/photo-1581244277943-fe4a9c777189?auto=format&fit=crop&w=600&q=80',
-    description: 'Drop forged hardened jaws pipe wrench with ductile iron handle for heavy plumbing installations.'
+    reviews: 84,
+    stock: 12,
+    tag: 'High Flow',
+    image: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
+    description: 'Sample domestic water pump listing; verify specifications before purchase.'
   },
   {
-    id: 'prod-009',
-    name: 'Pidilite M-Seal Sanitary & Plumbing Epoxy Putty (100g x 6)',
+    id: 'plb-tool-001',
+    sku: 'PLB-TOOL-001',
+    name: 'Heavy-Duty Pipe Wrench 14 Inch',
     category: 'Tools & Sealants',
-    brand: 'Pidilite',
-    price: 180,
-    mrp: 210,
+    brand: 'FixMate',
+    price: 480,
+    mrp: 600,
     rating: 4.8,
+    reviews: 312,
+    stock: 28,
+    tag: 'Forged Steel',
+    image: 'https://images.unsplash.com/photo-1581244277943-fe4a9c777189?auto=format&fit=crop&w=600&q=80',
+    description: 'Adjustable wrench for plumbing pipe installation and maintenance.'
+  },
+  {
+    id: 'plb-tool-002',
+    sku: 'PLB-TOOL-002',
+    name: 'PTFE Thread Seal Tape',
+    category: 'Tools & Sealants',
+    brand: 'SealPro',
+    price: 35,
+    mrp: 45,
+    rating: 4.6,
     reviews: 450,
-    stock: 250,
-    tag: 'Quick Seal',
+    stock: 300,
+    tag: 'Leak-Proof',
     image: 'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?auto=format&fit=crop&w=600&q=80',
-    description: 'Multi-purpose sealant putty for joining, sealing, and waterproofing pipe leaks and bathroom joints.'
+    description: 'Thread sealing tape for compatible threaded plumbing joints.'
+  },
+  {
+    id: 'plb-tool-003',
+    sku: 'PLB-TOOL-003',
+    name: 'PVC Solvent Cement 100 ml',
+    category: 'Tools & Sealants',
+    brand: 'SealPro',
+    price: 95,
+    mrp: 120,
+    rating: 4.7,
+    reviews: 270,
+    stock: 60,
+    tag: 'Fast Bonding',
+    image: 'https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=600&q=80',
+    description: 'Solvent cement for compatible PVC pipe and fitting joints; follow product instructions.'
   }
 ];
 
@@ -177,16 +202,25 @@ export default function App() {
 
   // Attempt to fetch from backend API
   useEffect(() => {
-    fetch('http://localhost:4000/api/products')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.success && Array.isArray(data.data) && data.data.length > 0) {
-          setProducts(data.data);
+    const loadProducts = async () => {
+      let res;
+      try {
+        res = await fetch('/api/products');
+        if (!res.ok) throw new Error('Proxy status: ' + res.status);
+      } catch (e1) {
+        try {
+          res = await fetch('http://localhost:5000/api/products');
+          if (!res.ok) throw new Error('Port 5000 status: ' + res.status);
+        } catch (e2) {
+          res = await fetch('http://localhost:4000/api/products');
         }
-      })
-      .catch(() => {
-        // Fallback pre-loaded
-      });
+      }
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.data) && data.data.length > 0) {
+        setProducts(data.data);
+      }
+    };
+    loadProducts().catch(() => {});
   }, []);
 
   // Cart operations
@@ -323,6 +357,11 @@ export default function App() {
           path="/dashboard/customer"
           element={<Navigate to="/customer/products" replace />}
         />
+        <Route
+          path="/customer/dashboard"
+          element={<CustomerDashboard currentUser={currentUser} onLogout={handleLogout} />}
+        />
+
 
         {/* 1. View products and prices (stock quantity hidden) at '/customer/products' */}
         <Route
@@ -356,14 +395,18 @@ export default function App() {
           element={<CustomerOrdersPage currentUser={currentUser} onLogout={handleLogout} />}
         />
 
-        {/* Dealer routes redirect directly to dedicated Step 1 workflow page */}
+        {/* Dedicated Dealer Dashboard for Live Stock & Order Tracking */}
         <Route
           path="/dealer"
-          element={<Navigate to="/dealer/products" replace />}
+          element={<DealerDashboard currentUser={currentUser} onLogout={handleLogout} />}
         />
         <Route
           path="/dashboard/dealer"
-          element={<Navigate to="/dealer/products" replace />}
+          element={<DealerDashboard currentUser={currentUser} onLogout={handleLogout} />}
+        />
+        <Route
+          path="/dealer/dashboard"
+          element={<DealerDashboard currentUser={currentUser} onLogout={handleLogout} />}
         />
 
         {/* 1. View products, prices and stock at '/dealer/products' */}

@@ -51,16 +51,44 @@ export default function PlumberLayout({
     }
   }, [isCollapsed]);
 
-  const plumber = currentUser && currentUser.role === 'Plumber' ? currentUser : {
+  const activeMobile = (currentUser && currentUser.mobile) || '9111122222';
+  const [plumber, setPlumber] = useState(currentUser && currentUser.role === 'Plumber' ? currentUser : {
     id: 'PLM-01',
     name: 'Ramesh Kumar',
-    mobile: '9111122222',
+    mobile: activeMobile,
     email: 'plumber@plumbmart-demo.com',
     role: 'Plumber',
     license: 'PLUMB-KA-2024-884',
     rating: 4.9,
-    status: 'VERIFIED'
-  };
+    status: 'VERIFIED',
+    city: 'Bengaluru (East & South Zones)',
+    specialization: 'CPVC/UPVC Piping, Concealed Valves & Pump Automation'
+  });
+
+  // Fetch live plumber profile from Supabase
+  useEffect(() => {
+    let isMounted = true;
+    fetch(`/api/plumber/profile?mobile=${encodeURIComponent(activeMobile)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (isMounted && data.success && data.plumber) {
+          setPlumber(prev => ({ ...prev, ...data.plumber }));
+        }
+      })
+      .catch(err => console.warn('Could not fetch plumber profile for layout:', err));
+
+    const handleProfileSync = (e) => {
+      if (e.detail) {
+        setPlumber(prev => ({ ...prev, ...e.detail }));
+      }
+    };
+    window.addEventListener('plumber_profile_updated', handleProfileSync);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('plumber_profile_updated', handleProfileSync);
+    };
+  }, [activeMobile]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -230,8 +258,8 @@ export default function PlumberLayout({
       {/* Main Body with Sidebar + Tab Content */}
       <div className="flex-1 flex w-full relative">
         
-        {/* Plumber Sidebar */}
-        <aside className={`${isCollapsed ? 'w-16 sm:w-18 p-2' : 'w-56 sm:w-60 p-3.5'} shrink-0 bg-white border-r border-slate-200 flex flex-col justify-between transition-all duration-200 min-h-[calc(100vh-65px)]`}>
+        {/* Plumber Sidebar - Desktop */}
+        <aside className={`${isCollapsed ? 'w-16 sm:w-18 p-2' : 'w-56 sm:w-60 p-3.5'} hidden md:flex shrink-0 bg-white border-r border-slate-200 flex-col justify-between transition-all duration-200 min-h-[calc(100vh-65px)]`}>
           <div>
             {/* Sidebar Corner Toggle Button */}
             <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-end'} pb-2 mb-2 border-b border-slate-100`}>
@@ -303,16 +331,52 @@ export default function PlumberLayout({
         </aside>
 
         {/* Content Page Area */}
-        <div className="flex-1 overflow-x-hidden min-w-0">
+        <div className="flex-1 overflow-x-hidden min-w-0 pb-20 md:pb-0">
           {children}
         </div>
 
       </div>
 
+      {/* Mobile Bottom Navigation Bar with Sidebar Navigation Icons */}
+      <nav 
+        aria-label="Plumber Navigation"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-1 py-1.5 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] flex items-center justify-around"
+      >
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isSelected = activeTab === item.id;
+
+          return (
+            <button
+              key={item.id}
+              onClick={() => onSelectTab && onSelectTab(item.id)}
+              title={item.name}
+              className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition active:scale-95 ${
+                isSelected
+                  ? 'text-amber-700 font-bold bg-amber-50/80 shadow-2xs'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <div className="relative">
+                <Icon className={`w-5 h-5 ${isSelected ? 'text-amber-600 stroke-[2.25]' : 'text-slate-500 stroke-[1.75]'}`} />
+                {item.badge && (
+                  <span className="absolute -top-1 -right-2 text-[8px] px-1 rounded-full font-mono font-bold leading-none py-0.5 bg-amber-500 text-white">
+                    {item.badge.includes(' ') ? item.badge.split(' ')[0] : item.badge}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] mt-0.5 truncate max-w-[64px] text-center leading-tight">
+                {item.name.replace('My ', '').replace('Product ', '')}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
+
       {/* Quick Profile Modal */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 border border-slate-200 shadow-2xl relative">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 border border-slate-200 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setIsProfileModalOpen(false)}
               className="absolute top-4 right-4 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition"
@@ -342,6 +406,16 @@ export default function PlumberLayout({
                 <strong className="text-slate-900 font-mono">+91 {plumber.mobile}</strong>
               </div>
 
+              {plumber.email && (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <User className="w-4 h-4 text-slate-400" />
+                    <span>Registered Email:</span>
+                  </div>
+                  <strong className="text-slate-900 font-mono text-[11px] truncate max-w-[190px]">{plumber.email}</strong>
+                </div>
+              )}
+
               <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
                 <div className="flex items-center gap-2 text-slate-600">
                   <ShieldCheck className="w-4 h-4 text-slate-400" />
@@ -349,6 +423,13 @@ export default function PlumberLayout({
                 </div>
                 <strong className="text-slate-900 font-mono">{plumber.license || 'PLUMB-KA-2024-884'}</strong>
               </div>
+
+              {plumber.city && (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-slate-600">Operating City:</span>
+                  <strong className="text-slate-900 text-right">{plumber.city}</strong>
+                </div>
+              )}
 
               <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50/70 border border-amber-200 text-amber-900">
                 <span>Verification Status:</span>

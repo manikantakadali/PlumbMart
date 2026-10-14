@@ -142,7 +142,7 @@ export default function DealerProductsPage({ currentUser, onLogout }) {
   const cartTotals = getDealerCartTotals();
 
   return (
-    <DealerLayout currentUser={currentUser} onLogout={onLogout}>
+    <DealerLayout currentUser={currentUser} onLogout={onLogout} products={products}>
       {/* Notice Pill */}
       {addedNotice && (
         <div className="fixed top-20 right-5 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl shadow-xl text-xs font-semibold animate-in fade-in slide-in-from-top-2 duration-200">
@@ -211,15 +211,15 @@ export default function DealerProductsPage({ currentUser, onLogout }) {
                 >
                   <div>
                     {/* Image & Badges */}
-                    <div className="relative rounded-xl overflow-hidden bg-slate-100 h-36 mb-2.5 border border-slate-100">
+                    <div className="relative rounded-xl overflow-hidden bg-white h-36 mb-2.5 border border-slate-100 flex items-center justify-center">
                       <img
-                        src={product.image}
+                        src={product.image || '/products/PLB-PIPE-051.jpg'}
                         alt={product.name}
                         onError={(e) => {
                           e.currentTarget.onerror = null;
-                          e.currentTarget.src = 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=600&q=80';
+                          e.currentTarget.src = '/products/PLB-PIPE-051.jpg';
                         }}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
                       />
                       <div className="absolute top-2 left-2 flex items-center gap-1">
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white/95 text-indigo-700 shadow-xs backdrop-blur-xs">
