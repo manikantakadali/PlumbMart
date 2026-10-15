@@ -78,8 +78,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
         if (parsed && (parsed.role === 'Admin' || parsed.accessLevel)) {
           return {
             id: parsed.id || 'ADM-01',
-            name: parsed.name || 'System Administrator',
-            email: parsed.email || 'admin@plumbmart.com',
+            name: parsed.name || 'Super Administrator',
+            email: parsed.email || 'kadalimanikanta2003@gmail.com',
             mobile: parsed.mobile || '+91 98765 43210',
             role: parsed.role || 'Admin',
             accessLevel: parsed.accessLevel || 'SuperAdmin'
@@ -91,8 +91,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     }
     return {
       id: currentUser?.id || 'ADM-01',
-      name: currentUser?.name || 'System Administrator',
-      email: currentUser?.email || 'admin@plumbmart.com',
+      name: currentUser?.name || 'Super Administrator',
+      email: currentUser?.email || 'kadalimanikanta2003@gmail.com',
       mobile: currentUser?.mobile || '+91 98765 43210',
       role: currentUser?.role || 'Admin',
       accessLevel: currentUser?.accessLevel || 'SuperAdmin'
@@ -178,6 +178,17 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   const [dealerNoticeText, setDealerNoticeText] = useState('');
   const [isSendingDealerNotice, setIsSendingDealerNotice] = useState(false);
   const [quickLimitInput, setQuickLimitInput] = useState('');
+
+  // Dealer Action Modals (Modern replacement for browser alerts/prompts)
+  const [rejectModalDealer, setRejectModalDealer] = useState(null);
+  const [rejectionReasonText, setRejectionReasonText] = useState('Incomplete or unverified business documentation.');
+  const [isSubmittingReject, setIsSubmittingReject] = useState(false);
+  
+  const [approveModalDealer, setApproveModalDealer] = useState(null);
+  const [isSubmittingApprove, setIsSubmittingApprove] = useState(false);
+
+  const [zohoRequiredModalDealer, setZohoRequiredModalDealer] = useState(null);
+  const [isLinkingZohoInModal, setIsLinkingZohoInModal] = useState(false);
 
   // Sync URL route parameter /admin/dealers/:dealerId with viewingDealer
   useEffect(() => {
@@ -503,8 +514,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     updates.adminRole = admin?.accessLevel || admin?.role || 'SuperAdmin';
     if (updates.status === 'Suspended') {
       updates.suspendedBy = {
-        name: admin?.name || 'System Administrator',
-        email: admin?.email || 'admin@plumbmart.com',
+        name: admin?.name || 'Super Administrator',
+        email: admin?.email || 'kadalimanikanta2003@gmail.com',
         role: admin?.accessLevel || admin?.role || 'SuperAdmin',
         phone: '+91 8000 123 456',
         department: 'Corporate Credit Governance & Compliance Desk',
@@ -514,8 +525,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     } else if (updates.status === 'Approved' || updates.status === 'ACTIVE') {
       updates.status = 'ACTIVE';
       updates.approvedBy = {
-        name: admin?.name || 'System Administrator',
-        email: admin?.email || 'admin@plumbmart.com',
+        name: admin?.name || 'Super Administrator',
+        email: admin?.email || 'kadalimanikanta2003@gmail.com',
         role: admin?.accessLevel || admin?.role || 'SuperAdmin',
         phone: '+91 8000 123 456',
         department: 'Corporate Credit Governance & Compliance Desk',
@@ -739,26 +750,31 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     }
   };
 
-  const handleApproveDealer = async (dealer) => {
+  const handleApproveDealer = (dealer) => {
     playClickSound();
     if (!dealer.zohoVerified) {
       playWarningSound();
-      alert(`Cannot activate dealer "${dealer.name}".\n\nRequirement: Customer record must be verified and linked in Zoho Inventory first.\n\nPlease click "Create / Link in Zoho" to link or create the customer record before activating.`);
+      setZohoRequiredModalDealer(dealer);
       return;
     }
-    const confirmApprove = window.confirm(`Approve and activate "${dealer.name}" as an ACTIVE Dealer?\n\nThis will grant access to the Dealer Dashboard and send an approval confirmation email.`);
-    if (!confirmApprove) return;
+    setApproveModalDealer(dealer);
+  };
+
+  const handleConfirmApproveDealer = async () => {
+    if (!approveModalDealer) return;
+    setIsSubmittingApprove(true);
+    playClickSound();
 
     try {
-      const res = await fetch(`/api/dealers/${dealer.id}`, {
+      const res = await fetch(`/api/dealers/${approveModalDealer.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'ACTIVE',
           adminRole: admin?.accessLevel || admin?.role || 'SuperAdmin',
           approvedBy: {
-            name: admin?.name || 'System Administrator',
-            email: admin?.email || 'admin@plumbmart.com',
+            name: admin?.name || 'Super Administrator',
+            email: admin?.email || 'kadalimanikanta2003@gmail.com',
             role: admin?.accessLevel || admin?.role || 'SuperAdmin'
           }
         })
@@ -766,56 +782,82 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       const data = await res.json();
       if (res.ok && data.success) {
         playSuccessSound();
-        setSyncToast(`✓ Dealer "${dealer.name}" approved & activated! Email sent.`);
-        setDealers(prev => prev.map(d => d.id === dealer.id ? { ...d, status: 'ACTIVE', zohoVerified: true } : d));
-        if (viewingDealer && viewingDealer.id === dealer.id) {
+        setSyncToast(`✓ Dealer "${approveModalDealer.name}" approved & activated! Email sent.`);
+        setDealers(prev => prev.map(d => d.id === approveModalDealer.id ? { ...d, status: 'ACTIVE', zohoVerified: true } : d));
+        if (viewingDealer && viewingDealer.id === approveModalDealer.id) {
           setViewingDealer(prev => ({ ...prev, status: 'ACTIVE', zohoVerified: true }));
         }
+        setApproveModalDealer(null);
         setTimeout(() => setSyncToast(null), 4500);
       } else {
         playWarningSound();
-        alert('Approval failed: ' + (data.message || 'Verification failed'));
+        setSyncToast('⚠️ Approval failed: ' + (data.message || 'Verification failed'));
       }
     } catch (err) {
       setSyncToast('Error approving dealer: ' + err.message);
+    } finally {
+      setIsSubmittingApprove(false);
     }
   };
 
-  const handleRejectDealer = async (dealer) => {
+  const handleRejectDealer = (dealer) => {
     playClickSound();
-    const reason = window.prompt(`Reject registration for "${dealer.name}"?\nPlease specify a rejection reason:`, 'Incomplete or unverified business documentation.');
-    if (reason === null) return;
+    setRejectionReasonText('Incomplete or unverified business documentation.');
+    setRejectModalDealer(dealer);
+  };
+
+  const handleConfirmRejectDealer = async () => {
+    if (!rejectModalDealer) return;
+    setIsSubmittingReject(true);
+    playClickSound();
+
+    const reason = rejectionReasonText.trim() || 'Application rejected by Super Admin during review.';
 
     try {
-      const res = await fetch(`/api/dealers/${dealer.id}`, {
+      const res = await fetch(`/api/dealers/${rejectModalDealer.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'REJECTED',
           adminRole: admin?.accessLevel || admin?.role || 'SuperAdmin',
-          reason: reason || 'Application rejected by Super Admin during review.',
+          reason: reason,
           rejectedBy: {
-            name: admin?.name || 'System Administrator',
-            email: admin?.email || 'admin@plumbmart.com',
+            name: admin?.name || 'Super Administrator',
+            email: admin?.email || 'kadalimanikanta2003@gmail.com',
             role: admin?.accessLevel || admin?.role || 'SuperAdmin',
-            reason: reason || 'Application rejected by Super Admin'
+            reason: reason
           }
         })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         playWarningSound();
-        setSyncToast(`Dealer "${dealer.name}" application REJECTED.`);
-        setDealers(prev => prev.map(d => d.id === dealer.id ? { ...d, status: 'REJECTED' } : d));
-        if (viewingDealer && viewingDealer.id === dealer.id) {
+        setSyncToast(`Dealer "${rejectModalDealer.name}" application REJECTED.`);
+        setDealers(prev => prev.map(d => d.id === rejectModalDealer.id ? { ...d, status: 'REJECTED' } : d));
+        if (viewingDealer && viewingDealer.id === rejectModalDealer.id) {
           setViewingDealer(prev => ({ ...prev, status: 'REJECTED' }));
         }
+        setRejectModalDealer(null);
         setTimeout(() => setSyncToast(null), 4500);
       } else {
-        alert('Rejection failed: ' + (data.message || 'Error'));
+        setSyncToast('⚠️ Rejection failed: ' + (data.message || 'Error'));
       }
     } catch (err) {
       setSyncToast('Error rejecting dealer: ' + err.message);
+    } finally {
+      setIsSubmittingReject(false);
+    }
+  };
+
+  const handleLinkZohoFromModal = async () => {
+    if (!zohoRequiredModalDealer) return;
+    setIsLinkingZohoInModal(true);
+    await handleCreateZohoCustomer(zohoRequiredModalDealer.id);
+    setIsLinkingZohoInModal(false);
+    const updated = dealers.find(d => d.id === zohoRequiredModalDealer.id);
+    setZohoRequiredModalDealer(null);
+    if (updated) {
+      setApproveModalDealer({ ...updated, zohoVerified: true });
     }
   };
 
@@ -2350,19 +2392,98 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                       />
                       <button
                         onClick={async () => {
-                          if (!dealerNoticeText.trim()) return;
+                          const text = dealerNoticeText.trim();
+                          if (!text) return;
                           setIsSendingDealerNotice(true);
                           playClickSound();
                           try {
+                            const senderName = (currentUser && currentUser.name) ? `${currentUser.name} (SuperAdmin)` : 'Super Administrator (Executive Desk)';
+                            let savedNotice = null;
+
+                            // 1. Persist to Backend API
+                            const endpoint = `/api/dealers/${viewingDealer.id}/notice`;
+                            try {
+                              let res = await fetch(endpoint, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  title: 'Official Directive from SuperAdmin',
+                                  message: text,
+                                  sender: senderName,
+                                  priority: 'HIGH'
+                                })
+                              });
+                              if (!res.ok) {
+                                res = await fetch(`http://localhost:5000${endpoint}`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    title: 'Official Directive from SuperAdmin',
+                                    message: text,
+                                    sender: senderName,
+                                    priority: 'HIGH'
+                                  })
+                                });
+                              }
+                              const data = await res.json();
+                              if (data && data.success) {
+                                savedNotice = data.notice;
+                                if (data.dealer) {
+                                  setViewingDealer(prev => ({ ...prev, ...data.dealer }));
+                                }
+                              }
+                            } catch (apiErr) {
+                              console.warn('[Admin Notice API Error]:', apiErr);
+                            }
+
+                            const noticePayload = savedNotice || {
+                              id: 'DLR-NOTIF-' + Date.now(),
+                              dealerId: viewingDealer.id,
+                              dealerName: viewingDealer.name,
+                              title: 'Official Directive from SuperAdmin',
+                              message: text,
+                              sender: senderName,
+                              sentAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                              timestamp: Date.now(),
+                              status: 'ACTIVE',
+                              priority: 'HIGH'
+                            };
+
+                            // 2. Real-time BroadcastChannel sync
+                            try {
+                              const dCh = new BroadcastChannel('plumbmart_dealers');
+                              dCh.postMessage({
+                                type: 'SUPERADMIN_NOTICE',
+                                dealerId: viewingDealer.id,
+                                notice: noticePayload
+                              });
+                              dCh.close();
+                            } catch (e) {}
+
+                            // 3. Cross-tab LocalStorage sync
+                            try {
+                              localStorage.setItem('plumbmart_dealer_notice_broadcast', JSON.stringify({
+                                dealerId: viewingDealer.id,
+                                notice: noticePayload,
+                                timestamp: Date.now()
+                              }));
+                            } catch (e) {}
+
+                            // 4. In-App Notification Dispatcher
                             dispatchInAppNotification({
+                              targetGroup: 'Dealers',
                               targetRole: 'Dealer',
                               targetId: viewingDealer.id,
-                              title: 'Official Notice from SuperAdmin',
-                              message: dealerNoticeText.trim(),
-                              type: 'account'
+                              dealerId: viewingDealer.id,
+                              title: 'Official Directive from SuperAdmin',
+                              message: text,
+                              sender: senderName,
+                              priority: 'urgent',
+                              type: 'DEALER_UPDATE'
                             });
+
                             playSuccessSound();
-                            setSyncToast(`✓ Priority notice sent to ${viewingDealer.name}!`);
+                            setSyncToast(`✓ Priority notice successfully sent to ${viewingDealer.name}!`);
                             setDealerNoticeText('');
                             setTimeout(() => setSyncToast(null), 3500);
                           } catch (e) {
@@ -4873,6 +4994,385 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 1. Sleek In-App Modal: Reject Dealer Registration        */}
+      {/* ======================================================== */}
+      {rejectModalDealer && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 relative">
+            {/* Top Red Gradient Accent Bar */}
+            <div className="h-1.5 bg-gradient-to-r from-rose-600 via-red-500 to-amber-500 w-full" />
+
+            {/* Header */}
+            <div className="p-6 pb-4 flex items-start justify-between gap-4 border-b border-slate-800/80">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0 shadow-lg shadow-rose-950/40">
+                  <XCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white tracking-tight">
+                    Reject Dealer Application
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Decline registration &amp; deny wholesale portal access
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setRejectModalDealer(null)}
+                className="w-8 h-8 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4 text-xs">
+              {/* Dealer Profile Summary Pill */}
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800/90 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-[11px] text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                      {rejectModalDealer.id}
+                    </span>
+                    <span className="font-bold text-sm text-white">
+                      {rejectModalDealer.name || 'Quality Plumbing Enterprises'}
+                    </span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    Status: PENDING
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-400 text-[11px] pt-1 border-t border-slate-900">
+                  <span>Contact: <strong className="text-slate-300">{rejectModalDealer.contactPerson || rejectModalDealer.name}</strong></span>
+                  <span>Mobile: <strong className="text-slate-300 font-mono">+91 {rejectModalDealer.mobile}</strong></span>
+                  {rejectModalDealer.gstin && (
+                    <span>GSTIN: <strong className="text-slate-300 font-mono">{rejectModalDealer.gstin}</strong></span>
+                  )}
+                </div>
+              </div>
+
+              {/* Rejection Reason Form */}
+              <div className="space-y-2">
+                <label className="block text-slate-300 text-xs font-bold">
+                  Official Rejection Reason <span className="text-rose-400">*</span>
+                </label>
+                <textarea
+                  value={rejectionReasonText}
+                  onChange={(e) => setRejectionReasonText(e.target.value)}
+                  rows={3}
+                  placeholder="Specify why this registration is being rejected..."
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500/80 focus:ring-2 focus:ring-rose-500/20 transition resize-none"
+                />
+
+                {/* Quick Presets */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
+                    Quick Reason Presets:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      'Incomplete or unverified business documentation.',
+                      'Invalid or unverified GSTIN details.',
+                      'Outside delivery operations territory.',
+                      'Duplicate or already existing dealership account.',
+                      'Failed internal KYC and credit verification.'
+                    ].map((reasonChip, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setRejectionReasonText(reasonChip)}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg border transition cursor-pointer text-left ${
+                          rejectionReasonText === reasonChip
+                            ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-semibold'
+                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                        }`}
+                      >
+                        {reasonChip}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Notice Banner */}
+              <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 flex items-start gap-2.5 text-rose-300 text-[11px] leading-relaxed">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                <span>
+                  <strong>Action Notice:</strong> The dealer status will immediately change to <strong>REJECTED</strong>. All wholesale login access, credit facilities, and ordering portals will remain permanently blocked.
+                </span>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-950/70 border-t border-slate-800/80 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setRejectModalDealer(null)}
+                disabled={isSubmittingReject}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRejectDealer}
+                disabled={isSubmittingReject || !rejectionReasonText.trim()}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-rose-600/25 cursor-pointer disabled:opacity-50"
+              >
+                {isSubmittingReject ? (
+                  <>
+                    <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Rejecting...</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4" />
+                    <span>Confirm Rejection</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 2. Sleek In-App Modal: Approve & Activate Dealer         */}
+      {/* ======================================================== */}
+      {approveModalDealer && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 relative">
+            {/* Top Emerald Gradient Accent Bar */}
+            <div className="h-1.5 bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-500 w-full" />
+
+            {/* Header */}
+            <div className="p-6 pb-4 flex items-start justify-between gap-4 border-b border-slate-800/80">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0 shadow-lg shadow-emerald-950/40">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white tracking-tight">
+                    Approve &amp; Activate Dealer
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Authorize full B2B wholesale ordering &amp; activate credit facility
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setApproveModalDealer(null)}
+                className="w-8 h-8 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4 text-xs">
+              {/* Dealer Profile Summary */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-[11px] text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                      {approveModalDealer.id}
+                    </span>
+                    <span className="font-bold text-sm text-white">
+                      {approveModalDealer.name}
+                    </span>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    ✓ Ready for Activation
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400 pt-2 border-t border-slate-900">
+                  <div>Contact: <strong className="text-slate-200">{approveModalDealer.contactPerson || approveModalDealer.name}</strong></div>
+                  <div>Mobile: <strong className="text-slate-200 font-mono">+91 {approveModalDealer.mobile}</strong></div>
+                  <div>Email: <strong className="text-slate-200 font-mono">{approveModalDealer.email}</strong></div>
+                  <div>Location: <strong className="text-slate-200">{approveModalDealer.city || 'Bengaluru'}</strong></div>
+                </div>
+              </div>
+
+              {/* Governance & Pre-Activation Checklist */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
+                  Activation Governance Checks:
+                </span>
+                <div className="space-y-1.5 text-[11px]">
+                  <div className="flex items-center justify-between text-emerald-400">
+                    <span className="flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Zoho Inventory Customer Record Linked</span>
+                    </span>
+                    <span className="font-mono font-bold text-[10px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      ID: {approveModalDealer.zohoContactId || 'Verified'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-indigo-300">
+                    <span className="flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Approved Wholesale Credit Limit</span>
+                    </span>
+                    <span className="font-mono font-bold text-white">
+                      ₹{(Number(approveModalDealer.creditLimit) || 500000).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Payment Terms</span>
+                    </span>
+                    <span className="font-semibold text-slate-200">
+                      30-Day Pay Later Enabled
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notification Notice */}
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex items-start gap-2.5 text-emerald-300 text-[11px] leading-relaxed">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                <span>
+                  <strong>Confirmation:</strong> Clicking activate will update the dealer status to <strong>ACTIVE</strong>, unlock their Dealer Dashboard, and immediately send an official approval confirmation email to <strong>{approveModalDealer.email}</strong>.
+                </span>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-950/70 border-t border-slate-800/80 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setApproveModalDealer(null)}
+                disabled={isSubmittingApprove}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmApproveDealer}
+                disabled={isSubmittingApprove}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-emerald-600/25 cursor-pointer disabled:opacity-50"
+              >
+                {isSubmittingApprove ? (
+                  <>
+                    <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Activating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Confirm &amp; Activate Dealer</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 3. Sleek In-App Modal: Zoho Inventory Required Alert     */}
+      {/* ======================================================== */}
+      {zohoRequiredModalDealer && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 relative">
+            {/* Top Amber Gradient Accent Bar */}
+            <div className="h-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 w-full" />
+
+            {/* Header */}
+            <div className="p-6 pb-4 flex items-start justify-between gap-4 border-b border-slate-800/80">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 shadow-lg shadow-amber-950/40">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white tracking-tight">
+                    Zoho Linking Required
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Customer record must be linked in Zoho Inventory before activation
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setZohoRequiredModalDealer(null)}
+                className="w-8 h-8 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4 text-xs">
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
+                  Target Dealer:
+                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-white">
+                    {zohoRequiredModalDealer.name}
+                  </span>
+                  <span className="font-mono text-xs text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                    {zohoRequiredModalDealer.id}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Contact: <strong className="text-slate-300">{zohoRequiredModalDealer.contactPerson || zohoRequiredModalDealer.name}</strong> &bull; Mobile: <span className="font-mono text-slate-300">+91 {zohoRequiredModalDealer.mobile}</span>
+                </p>
+              </div>
+
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3.5 space-y-2 text-amber-200 text-xs leading-relaxed">
+                <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                  <ShieldCheck className="w-4 h-4 text-amber-400" />
+                  <span>Compliance Requirement (Clause 6)</span>
+                </div>
+                <p className="text-[11px] text-amber-300/90">
+                  Dealer accounts cannot be activated with <strong>ACTIVE</strong> status until their customer contact record is created or verified in <strong>Zoho Inventory</strong>. This ensures inventory reservations, GST invoicing, and credit accounting remain strictly synchronized.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-950/70 border-t border-slate-800/80 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setZohoRequiredModalDealer(null)}
+                disabled={isLinkingZohoInModal}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+              >
+                Dismiss
+              </button>
+              <button
+                type="button"
+                onClick={handleLinkZohoFromModal}
+                disabled={isLinkingZohoInModal}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-indigo-600/25 cursor-pointer disabled:opacity-50"
+              >
+                {isLinkingZohoInModal ? (
+                  <>
+                    <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Connecting to Zoho...</span>
+                  </>
+                ) : (
+                  <>
+                    <Building2 className="w-4 h-4" />
+                    <span>Create / Link in Zoho Now</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

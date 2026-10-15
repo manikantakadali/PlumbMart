@@ -472,8 +472,8 @@ async function sendOrderReceiptEmail({ order, recipientEmail }) {
  * Send Dealer Account Suspension Appeal Email to Administrator
  * @param {object} params { dealer, adminEmail, adminName, subject, message, ticketId }
  */
-async function sendDealerAppealEmail({ dealer = {}, adminEmail = 'admin@plumbmart.com', adminName = 'System Administrator', subject, message, ticketId }) {
-  const cleanAdminEmail = String(adminEmail || 'admin@plumbmart.com').trim().toLowerCase();
+async function sendDealerAppealEmail({ dealer = {}, adminEmail = (process.env.ADMIN_EMAIL || 'kadalimanikanta2003@gmail.com'), adminName = 'Super Administrator', subject, message, ticketId }) {
+  const cleanAdminEmail = String(adminEmail || process.env.ADMIN_EMAIL || 'kadalimanikanta2003@gmail.com').trim().toLowerCase();
   const appealTicket = ticketId || ('TKT-APP-' + Math.floor(100000 + Math.random() * 900000));
   const dealerName = dealer.name || 'Sri Venkateswara Distributors';
   const dealerMobile = dealer.mobile || '9000011111';
@@ -613,8 +613,8 @@ async function sendDealerSuspensionNotificationEmail({ dealer = {}, adminOfficer
   const dealerId = dealer.id || 'DLR-01';
   const dealerGstin = dealer.gstin || '29ABCDE1234F1Z5';
 
-  const adminName = adminOfficer.name || 'System Administrator';
-  const adminEmail = String(adminOfficer.email || 'admin@plumbmart.com').trim().toLowerCase();
+  const adminName = adminOfficer.name || 'Super Administrator';
+  const adminEmail = String(adminOfficer.email || process.env.ADMIN_EMAIL || 'kadalimanikanta2003@gmail.com').trim().toLowerCase();
   const adminRole = adminOfficer.role || 'SuperAdmin';
   const adminPhone = adminOfficer.phone || '+91 8000 123 456';
   const adminDept = adminOfficer.department || 'Corporate Credit Governance & Compliance Desk';
@@ -791,8 +791,8 @@ async function sendDealerApprovalNotificationEmail({ dealer = {}, adminOfficer =
     ? dealer.creditLimit 
     : (parseInt((dealer.creditLimit || '500000').toString().replace(/[^0-9]/g, ''), 10) || 500000);
 
-  const adminName = adminOfficer.name || 'System Administrator';
-  const adminEmail = String(adminOfficer.email || 'admin@plumbmart.com').trim().toLowerCase();
+  const adminName = adminOfficer.name || 'Super Administrator';
+  const adminEmail = String(adminOfficer.email || process.env.ADMIN_EMAIL || 'kadalimanikanta2003@gmail.com').trim().toLowerCase();
   const adminRole = adminOfficer.role || 'SuperAdmin';
   const adminPhone = adminOfficer.phone || '+91 8000 123 456';
   const adminDept = adminOfficer.department || 'Corporate Credit Governance & Compliance Desk';

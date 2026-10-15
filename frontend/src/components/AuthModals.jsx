@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, User } from 'lucide-react';
+import { X, User, Building2, Wrench, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { clearAuthSession } from '../utils/authSession';
 
@@ -8,7 +8,7 @@ export function ProfileModal({ isOpen, onClose, currentUser, onLogout }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-sm p-6 text-slate-900 shadow-2xl relative">
+      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-sm p-6 text-slate-900 shadow-2xl relative max-h-[92vh] overflow-y-auto">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition"
@@ -44,20 +44,52 @@ export function ProfileModal({ isOpen, onClose, currentUser, onLogout }) {
         {/* Role Logins Quick Links */}
         <div className="mb-4 space-y-1.5">
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Access Portals:</span>
+          
           <Link
-            to="/login"
+            to={currentUser?.role === 'Customer' ? '/customer/products' : '/login?role=Customer&redirect=customer'}
             onClick={onClose}
             className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:text-blue-700 transition"
           >
-            <span>Customer &amp; Partner Sign In</span>
+            <span className="flex items-center gap-2">
+              <User className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <span>Customer Sign In</span>
+            </span>
             <span className="text-[10px] text-blue-600 font-medium">OTP Login &rarr;</span>
           </Link>
+
           <Link
-            to="/admin/login"
+            to={currentUser?.role === 'Dealer' ? '/dealer' : '/login?role=Dealer&redirect=dealer'}
+            onClick={onClose}
+            className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:text-indigo-700 transition"
+          >
+            <span className="flex items-center gap-2">
+              <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span>Dealer B2B Portal</span>
+            </span>
+            <span className="text-[10px] text-indigo-600 font-medium">OTP Login &rarr;</span>
+          </Link>
+
+          <Link
+            to={currentUser?.role === 'Plumber' ? '/plumber' : '/login?role=Plumber&redirect=plumber'}
+            onClick={onClose}
+            className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-amber-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:text-amber-700 transition"
+          >
+            <span className="flex items-center gap-2">
+              <Wrench className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>Plumber Pro Portal</span>
+            </span>
+            <span className="text-[10px] text-amber-600 font-medium">OTP Login &rarr;</span>
+          </Link>
+
+          <Link
+            to={currentUser?.role === 'Admin' ? '/admin' : '/admin/login'}
             onClick={onClose}
             className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-purple-50 border border-slate-200 text-xs font-semibold text-slate-800 hover:text-purple-700 transition"
           >
-            <span className="font-bold">Admin Control Portal</span>
+            <span className="flex items-center gap-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+              <span className="font-bold">Admin Control Portal</span>
+            </span>
             <span className="text-[10px] text-purple-600 font-mono font-medium">Secure Admin &rarr;</span>
           </Link>
         </div>

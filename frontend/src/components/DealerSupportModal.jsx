@@ -23,8 +23,8 @@ export default function DealerSupportModal({ isOpen, onClose, dealerProfile }) {
 
   // Extract or fallback to suspending admin details
   const suspendingOfficer = dealerProfile?.suspendedBy || {
-    name: 'System Administrator',
-    email: 'admin@plumbmart.com',
+    name: 'Super Administrator',
+    email: 'kadalimanikanta2003@gmail.com',
     role: 'SuperAdmin',
     phone: '+91 8000 123 456',
     department: 'Corporate Credit Governance & Compliance Desk',

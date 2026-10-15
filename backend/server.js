@@ -328,7 +328,7 @@ async function resolveUserByRole({ role = 'auto', mobile = '', email = '', name 
 
   // Dynamically auto-detect role if not specified
   let targetRole = String(role || 'auto');
-  if (targetRole === 'auto' || targetRole === 'Customer') {
+  if (targetRole === 'auto' || !['Customer', 'Dealer', 'Plumber'].includes(targetRole)) {
     const isDealer = (db.dealers || []).some(d => 
       (cleanMobile && d.mobile === cleanMobile) || 
       (cleanEmail && d.email && d.email.toLowerCase() === cleanEmail)
@@ -507,7 +507,7 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
 
     // Auto-detect role dynamically if not strictly specified
     let assignedRole = role || 'auto';
-    if (assignedRole === 'auto' || assignedRole === 'Customer') {
+    if (assignedRole === 'auto' || !['Customer', 'Dealer', 'Plumber'].includes(assignedRole)) {
       const isDealer = (db.dealers || []).some(d => 
         (cleanMobile && d.mobile === cleanMobile) || 
         (cleanEmail && d.email && d.email.toLowerCase() === cleanEmail)
@@ -1220,15 +1220,23 @@ app.post('/api/auth/login', async (req, res) => {
 
 // 3. Admin Login API
 app.post('/api/auth/admin-login', (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, pin, passkey } = req.body;
   const db = getDb();
 
-  const admin = db.admins.find(a => 
-    a.email.toLowerCase() === (email || '').trim().toLowerCase()
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const admin = (db.admins || []).find(a => 
+    String(a.email || '').trim().toLowerCase() === cleanEmail
   );
 
-  if (!admin || (password && password !== admin.password && password !== 'admin123')) {
-    return res.status(401).json({ success: false, message: 'Invalid Admin credentials. Use admin@plumbmart.com / admin123' });
+  if (!admin || !password || password !== admin.password) {
+    return res.status(401).json({ success: false, message: 'Invalid Administrator credentials. Please check your email and password.' });
+  }
+
+  // Validate Security PIN / Passkey if configured
+  const expectedPin = String(admin.pin || admin.passkey || '').trim();
+  const providedPin = String(pin || passkey || '').trim();
+  if (expectedPin && providedPin && providedPin !== expectedPin) {
+    return res.status(401).json({ success: false, message: 'Invalid Admin Security PIN / Passkey.' });
   }
 
   return res.json({
@@ -1374,10 +1382,11 @@ app.put('/api/dealers/:id', (req, res) => {
 
     // Automatic Email Dispatch on Status Change (Suspend or Approve)
     if (req.body.status === 'Suspended') {
+      const defaultAdmin = (db.admins || [])[0] || {};
       const adminOfficer = req.body.suspendedBy || {
-        name: 'System Administrator',
-        email: 'admin@plumbmart.com',
-        role: 'SuperAdmin',
+        name: defaultAdmin.name || 'Super Administrator',
+        email: defaultAdmin.email || 'kadalimanikanta2003@gmail.com',
+        role: defaultAdmin.accessLevel || 'SuperAdmin',
         phone: '+91 8000 123 456',
         department: 'Corporate Credit Governance & Compliance Desk',
         suspendedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
@@ -1416,10 +1425,11 @@ app.put('/api/dealers/:id', (req, res) => {
         });
       }
 
+      const defaultAdmin = (db.admins || [])[0] || {};
       const adminOfficer = req.body.approvedBy || {
-        name: 'System Administrator',
-        email: 'admin@plumbmart.com',
-        role: 'SuperAdmin',
+        name: defaultAdmin.name || 'Super Administrator',
+        email: defaultAdmin.email || 'kadalimanikanta2003@gmail.com',
+        role: defaultAdmin.accessLevel || 'SuperAdmin',
         phone: '+91 8000 123 456',
         department: 'Corporate Credit Governance & Compliance Desk',
         approvedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
@@ -1440,11 +1450,12 @@ app.put('/api/dealers/:id', (req, res) => {
         }
       })();
     } else if (req.body.status === 'REJECTED' || req.body.status === 'Rejected') {
+      const defaultAdmin = (db.admins || [])[0] || {};
       updated.status = 'REJECTED';
       updated.rejectedBy = req.body.rejectedBy || {
-        name: 'System Administrator',
-        email: 'admin@plumbmart.com',
-        role: 'SuperAdmin',
+        name: defaultAdmin.name || 'Super Administrator',
+        email: defaultAdmin.email || 'kadalimanikanta2003@gmail.com',
+        role: defaultAdmin.accessLevel || 'SuperAdmin',
         rejectedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
         reason: req.body.reason || 'Dealer registration rejected by Super Admin during review.'
       };
@@ -1552,15 +1563,110 @@ app.post('/api/dealers/:id/create-zoho-customer', async (req, res) => {
   }
 });
 
+// Dispatch Direct Notice from SuperAdmin to Dealer
+app.post(['/api/dealers/:id/notice', '/api/dealers/:id/notices'], (req, res) => {
+  try {
+    const db = getDb();
+    if (!db.dealers) db.dealers = [];
+    const dealerIndex = db.dealers.findIndex(d => d.id === req.params.id || d.mobile === req.params.id);
+    if (dealerIndex === -1) {
+      return res.status(404).json({ success: false, message: 'Dealer not found in database.' });
+    }
+
+    const { title, message, sender, priority } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ success: false, message: 'Notice message is required' });
+    }
+
+    const dealer = db.dealers[dealerIndex];
+    const now = new Date();
+    const noticeObj = {
+      id: 'DLR-NOTICE-' + Date.now(),
+      dealerId: dealer.id,
+      dealerName: dealer.name,
+      title: (title || 'Official Directive from SuperAdmin').trim(),
+      message: message.trim(),
+      sender: sender || 'Super Administrator (Executive Desk)',
+      sentAt: now.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+      timestamp: Date.now(),
+      status: 'ACTIVE',
+      priority: priority || 'HIGH'
+    };
+
+    dealer.adminNotice = noticeObj;
+    if (!Array.isArray(dealer.adminNotices)) dealer.adminNotices = [];
+    dealer.adminNotices.unshift(noticeObj);
+    db.dealers[dealerIndex] = dealer;
+
+    // Push into global in-app notifications
+    if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
+    db.notifications.unshift({
+      id: noticeObj.id,
+      targetGroup: 'Dealers',
+      targetId: dealer.id,
+      dealerId: dealer.id,
+      title: noticeObj.title,
+      message: noticeObj.message,
+      sentAt: noticeObj.sentAt,
+      createdAt: now.toISOString(),
+      sender: noticeObj.sender,
+      priority: 'urgent'
+    });
+
+    saveDb(db);
+    console.log(`[SuperAdmin Notice] Dispatched to dealer ${dealer.id} (${dealer.name}): "${noticeObj.message}"`);
+
+    return res.status(201).json({
+      success: true,
+      message: `Notice successfully dispatched to ${dealer.name}`,
+      notice: noticeObj,
+      dealer: db.dealers[dealerIndex]
+    });
+  } catch (err) {
+    console.error('[API Error POST /api/dealers/:id/notice]:', err.message);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Acknowledge / Dismiss SuperAdmin Notice by Dealer
+app.post(['/api/dealers/:id/notice/:noticeId/acknowledge', '/api/dealers/:id/notice/acknowledge'], (req, res) => {
+  try {
+    const db = getDb();
+    if (!db.dealers) db.dealers = [];
+    const dealerIndex = db.dealers.findIndex(d => d.id === req.params.id || d.mobile === req.params.id);
+    if (dealerIndex === -1) {
+      return res.status(404).json({ success: false, message: 'Dealer not found in database.' });
+    }
+
+    const dealer = db.dealers[dealerIndex];
+    if (dealer.adminNotice) {
+      dealer.adminNotice.status = 'ACKNOWLEDGED';
+      dealer.adminNotice.acknowledgedAt = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    }
+    if (Array.isArray(dealer.adminNotices)) {
+      dealer.adminNotices = dealer.adminNotices.map(n => 
+        (n.id === req.params.noticeId || !req.params.noticeId) ? { ...n, status: 'ACKNOWLEDGED' } : n
+      );
+    }
+    db.dealers[dealerIndex] = dealer;
+    saveDb(db);
+
+    return res.json({ success: true, message: 'Notice acknowledged successfully', dealer: db.dealers[dealerIndex] });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Explicit endpoint: Send Dealer Suspension Email
 app.post('/api/dealers/:id/send-suspension-email', async (req, res) => {
   try {
     const db = getDb();
     const dealer = (db.dealers || []).find(d => d.id === req.params.id || d.mobile === req.params.id) || { id: req.params.id, ...req.body };
+    const defaultAdmin = (db.admins || [])[0] || {};
     const adminOfficer = req.body.adminOfficer || req.body.suspendedBy || {
-      name: 'System Administrator',
-      email: 'admin@plumbmart.com',
-      role: 'SuperAdmin',
+      name: defaultAdmin.name || 'Super Administrator',
+      email: defaultAdmin.email || 'kadalimanikanta2003@gmail.com',
+      role: defaultAdmin.accessLevel || 'SuperAdmin',
       phone: '+91 8000 123 456',
       department: 'Corporate Credit Governance & Compliance Desk',
       suspendedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
@@ -1582,10 +1688,11 @@ app.post('/api/dealers/:id/send-approval-email', async (req, res) => {
   try {
     const db = getDb();
     const dealer = (db.dealers || []).find(d => d.id === req.params.id || d.mobile === req.params.id) || { id: req.params.id, ...req.body };
+    const defaultAdmin = (db.admins || [])[0] || {};
     const adminOfficer = req.body.adminOfficer || req.body.approvedBy || {
-      name: 'System Administrator',
-      email: 'admin@plumbmart.com',
-      role: 'SuperAdmin',
+      name: defaultAdmin.name || 'Super Administrator',
+      email: defaultAdmin.email || 'kadalimanikanta2003@gmail.com',
+      role: defaultAdmin.accessLevel || 'SuperAdmin',
       phone: '+91 8000 123 456',
       department: 'Corporate Credit Governance & Compliance Desk',
       approvedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
@@ -1608,7 +1715,7 @@ app.post('/api/dealers/appeal', async (req, res) => {
       dealerName, 
       dealerMobile, 
       dealerEmail, 
-      dealerGstin,
+      dealerGstin, 
       adminEmail, 
       adminName, 
       subject, 
@@ -1635,8 +1742,9 @@ app.post('/api/dealers/appeal', async (req, res) => {
     };
 
     // Determine admin recipient
-    const targetAdminEmail = adminEmail || existingDealer?.suspendedBy?.email || 'admin@plumbmart.com';
-    const targetAdminName = adminName || existingDealer?.suspendedBy?.name || 'System Administrator';
+    const defaultAdmin = (db.admins || [])[0] || {};
+    const targetAdminEmail = adminEmail || existingDealer?.suspendedBy?.email || defaultAdmin.email || 'kadalimanikanta2003@gmail.com';
+    const targetAdminName = adminName || existingDealer?.suspendedBy?.name || defaultAdmin.name || 'Super Administrator';
     const ticketId = 'TKT-APP-' + Math.floor(100000 + Math.random() * 900000);
     const finalSubject = subject || `[APPEAL] Account Suspension Review - ${finalDealer.name} (${finalDealer.id})`;
 

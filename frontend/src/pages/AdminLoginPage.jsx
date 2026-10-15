@@ -49,7 +49,8 @@ export default function AdminLoginPage({ onAdminLoginSuccess }) {
       const payload = {
         email: email.trim(),
         password: password.trim(),
-        pin: securityPin
+        pin: securityPin.trim(),
+        passkey: securityPin.trim()
       };
 
       let response;
