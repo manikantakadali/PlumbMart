@@ -18,6 +18,7 @@ import {
   MapPin,
   AlertCircle
 } from 'lucide-react';
+import { downloadTaxInvoice } from '../utils/invoiceGenerator';
 
 function getStatusBadge(status) {
   const norm = (status || '').toLowerCase().trim();
@@ -393,7 +394,19 @@ export default function CustomerOrdersPage({ currentUser, onLogout }) {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between md:justify-end gap-5">
+                    <div className="flex items-center justify-between md:justify-end gap-3 sm:gap-4">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadTaxInvoice(order, currentUser || customer);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 text-xs font-semibold transition active:scale-95 shadow-2xs"
+                        title="Download GST Tax Invoice (PDF)"
+                      >
+                        <Download className="w-3.5 h-3.5 text-blue-600" />
+                        <span className="hidden sm:inline">Invoice</span>
+                      </button>
+
                       <div className="text-right">
                         <span className="text-[10px] text-slate-400 block font-semibold uppercase">Total Paid</span>
                         <span className="text-base font-black text-slate-900">
@@ -499,10 +512,11 @@ export default function CustomerOrdersPage({ currentUser, onLogout }) {
 
                           <div className="pt-3 border-t border-slate-100 mt-3 flex items-center justify-between">
                             <button
-                              onClick={() => alert(`Downloading GST Invoice for Order #${order.id}...`)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
+                              onClick={() => downloadTaxInvoice(order, currentUser || customer)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 border border-slate-200 text-slate-700 text-xs font-semibold transition active:scale-95 shadow-2xs cursor-pointer"
+                              title="Download Official GST Tax Invoice"
                             >
-                              <Download className="w-3.5 h-3.5" />
+                              <Download className="w-3.5 h-3.5 text-blue-600" />
                               <span>Download Invoice</span>
                             </button>
 

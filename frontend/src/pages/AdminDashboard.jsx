@@ -59,6 +59,7 @@ import {
   playWarningSound 
 } from '../utils/soundEffects';
 import { clearAuthSession } from '../utils/authSession';
+import { downloadTaxInvoice } from '../utils/invoiceGenerator';
 
 export default function AdminDashboard({ currentUser, onLogout }) {
   const navigate = useNavigate();
@@ -4952,12 +4953,12 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
+                  onClick={() => downloadTaxInvoice(selectedOrder, selectedOrder)}
                   className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-                  title="Print Order Invoice"
+                  title="Print / Download Official GST Tax Invoice"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Print</span>
+                  <Printer className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="hidden sm:inline">Tax Invoice</span>
                 </button>
                 <button
                   onClick={() => handleDeleteOrder(selectedOrder.id)}

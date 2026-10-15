@@ -22,6 +22,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { getDealerHub } from '../utils/hubResolver';
+import { downloadTaxInvoice } from '../utils/invoiceGenerator';
 
 export default function DealerOrdersPage({ currentUser, onLogout }) {
   const [searchParams] = useSearchParams();
@@ -417,7 +418,19 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+                    <div className="flex items-center gap-3 sm:gap-4 w-full md:w-auto justify-between md:justify-end">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadTaxInvoice(order, { name: order.dealerName || order.clientName, gstin: order.dealerGst || order.clientGstin, role: 'Dealer' });
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 text-xs font-semibold transition active:scale-95 shadow-2xs"
+                        title="Download GST Tax Invoice (PDF)"
+                      >
+                        <Download className="w-3.5 h-3.5 text-blue-600" />
+                        <span className="hidden sm:inline">Invoice</span>
+                      </button>
+
                       <div className="text-right">
                         <span className="text-[10px] text-slate-400 block uppercase tracking-wider font-semibold">
                           Total Invoice Value
@@ -597,12 +610,12 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
                       <div className="flex items-center justify-end gap-3 pt-2">
                         <button
                           onClick={() => {
-                            setSettledNotice(`Simulated GST Tax Invoice PDF for ${order.id} generated.`);
-                            setTimeout(() => setSettledNotice(null), 3500);
+                            downloadTaxInvoice(order, { name: order.dealerName || order.clientName, gstin: order.dealerGst || order.clientGstin, role: 'Dealer' });
                           }}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer transition"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 border border-slate-200 text-slate-700 text-xs font-semibold cursor-pointer transition active:scale-95 shadow-2xs"
+                          title="Generate & Download GST Tax Invoice PDF"
                         >
-                          <Download className="w-3.5 h-3.5" />
+                          <Download className="w-3.5 h-3.5 text-blue-600" />
                           <span>Tax Invoice (PDF)</span>
                         </button>
 

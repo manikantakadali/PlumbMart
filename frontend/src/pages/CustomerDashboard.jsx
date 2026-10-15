@@ -25,8 +25,10 @@ import {
   Check,
   X,
   AlertCircle,
-  Loader2
+  Loader2,
+  Download
 } from 'lucide-react';
+import { downloadTaxInvoice } from '../utils/invoiceGenerator';
 
 export default function CustomerDashboard({ currentUser, onLogout }) {
   const navigate = useNavigate();
@@ -655,10 +657,20 @@ export default function CustomerDashboard({ currentUser, onLogout }) {
                       ))}
                     </div>
 
-                    {/* Destination Address */}
-                    <div className="text-[11px] text-slate-500 flex items-start gap-1.5 pt-2 border-t border-slate-100">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                      <span>Delivery to: {order.deliveryAddress}</span>
+                    {/* Destination Address & Invoice Download */}
+                    <div className="text-[11px] text-slate-500 flex items-center justify-between gap-2 pt-2.5 border-t border-slate-100 flex-wrap">
+                      <div className="flex items-start gap-1.5 min-w-0">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                        <span className="truncate">Delivery to: {order.deliveryAddress}</span>
+                      </div>
+                      <button
+                        onClick={() => downloadTaxInvoice(order, currentUser || customer)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 text-xs font-semibold transition active:scale-95 shadow-2xs cursor-pointer shrink-0"
+                        title="Download Official GST Tax Invoice"
+                      >
+                        <Download className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Download Invoice</span>
+                      </button>
                     </div>
                   </div>
                 ))

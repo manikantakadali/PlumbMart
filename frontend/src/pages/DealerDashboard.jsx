@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { addToDealerCart, getDealerCart } from '../utils/dealerCart';
 import { getDealerHub } from '../utils/hubResolver';
+import { downloadTaxInvoice } from '../utils/invoiceGenerator';
 import DealerSuspendedModal from '../components/DealerSuspendedModal';
 import DealerSupportModal from '../components/DealerSupportModal';
 
@@ -2023,16 +2024,26 @@ export default function DealerDashboard({ currentUser, onLogout }) {
                             </span>
                           </td>
                           <td className="py-2.5 text-right">
-                            {isPending ? (
+                            <div className="flex items-center justify-end gap-2">
                               <button
-                                onClick={() => handleSettleInvoice(o.id)}
-                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] sm:text-[11px] font-bold transition active:scale-95"
+                                onClick={() => downloadTaxInvoice(o, { name: dealer.businessName, gstin: dealer.gstin, role: 'Dealer' })}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 text-[10px] sm:text-[11px] font-bold transition active:scale-95 shadow-2xs cursor-pointer"
+                                title="Download GST Tax Invoice (PDF)"
                               >
-                                Settle Now
+                                <Download className="w-3 h-3 text-blue-600" />
+                                <span>Invoice</span>
                               </button>
-                            ) : (
-                              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium">Settled</span>
-                            )}
+                              {isPending ? (
+                                <button
+                                  onClick={() => handleSettleInvoice(o.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] sm:text-[11px] font-bold transition active:scale-95 cursor-pointer"
+                                >
+                                  Settle Now
+                                </button>
+                              ) : (
+                                <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium">Settled</span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
