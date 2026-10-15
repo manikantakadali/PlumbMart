@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, User } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { clearAuthSession } from '../utils/authSession';
 
 export function ProfileModal({ isOpen, onClose, currentUser, onLogout }) {
   if (!isOpen) return null;
@@ -42,44 +43,32 @@ export function ProfileModal({ isOpen, onClose, currentUser, onLogout }) {
 
         {/* Role Logins Quick Links */}
         <div className="mb-4 space-y-1.5">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Access Role Logins:</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Access Portals:</span>
           <Link
-            to="/login?role=Customer"
+            to="/login"
             onClick={onClose}
-            className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:text-blue-700 transition"
+            className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:text-blue-700 transition"
           >
-            <span>Customer Login</span>
-            <span className="text-[10px] text-blue-600 font-normal">/login?role=Customer</span>
-          </Link>
-          <Link
-            to="/login?role=Dealer"
-            onClick={onClose}
-            className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:text-indigo-700 transition"
-          >
-            <span>Dealer Login (B2B)</span>
-            <span className="text-[10px] text-indigo-600 font-normal">/login?role=Dealer</span>
-          </Link>
-          <Link
-            to="/login?role=Plumber"
-            onClick={onClose}
-            className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-emerald-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:text-emerald-700 transition"
-          >
-            <span>Plumber Login</span>
-            <span className="text-[10px] text-emerald-600 font-normal">/login?role=Plumber</span>
+            <span>Customer &amp; Partner Sign In</span>
+            <span className="text-[10px] text-blue-600 font-medium">OTP Login &rarr;</span>
           </Link>
           <Link
             to="/admin/login"
             onClick={onClose}
-            className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-purple-50 border border-slate-200 text-xs font-semibold text-slate-800 hover:text-purple-700 transition"
+            className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-purple-50 border border-slate-200 text-xs font-semibold text-slate-800 hover:text-purple-700 transition"
           >
-            <span className="font-bold">Admin Login Portal</span>
-            <span className="text-[10px] text-purple-600 font-mono font-medium">/admin/login</span>
+            <span className="font-bold">Admin Control Portal</span>
+            <span className="text-[10px] text-purple-600 font-mono font-medium">Secure Admin &rarr;</span>
           </Link>
         </div>
 
         {currentUser ? (
           <button
-            onClick={() => { onLogout(); onClose(); }}
+            onClick={() => {
+              clearAuthSession();
+              if (onLogout) onLogout();
+              onClose();
+            }}
             className="w-full py-2 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-slate-200 hover:border-rose-200 text-xs font-semibold transition"
           >
             Sign Out of Account

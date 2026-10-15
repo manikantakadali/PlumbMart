@@ -27,6 +27,7 @@ import InAppNotificationToast from './InAppNotificationToast';
 import DealerSupportModal from './DealerSupportModal';
 import DealerWelcomeBackModal from './DealerWelcomeBackModal';
 import { getDealerHub } from '../utils/hubResolver';
+import { clearAuthSession } from '../utils/authSession';
 
 const SIDEBAR_CATEGORIES = [
   { name: 'All Categories', query: '', icon: Layers, count: 215 },
@@ -129,6 +130,16 @@ export default function DealerLayout({ children, currentUser, onLogout, products
           const json = await res.json();
           if (json && json.success && json.data) {
             const d = json.data;
+            if (d.status === 'PENDING' || d.status === 'REJECTED' || (d.zohoVerified === false && d.id !== 'DLR-01')) {
+              clearAuthSession();
+              const reason = d.status === 'PENDING'
+                ? 'Your dealer account is currently PENDING review and approval by the Super Admin.'
+                : d.status === 'REJECTED'
+                ? 'Your dealer application was reviewed and rejected by the Super Admin.'
+                : 'Linked Zoho customer record is not verified. Super Admin verification required.';
+              navigate('/login?denied=' + encodeURIComponent(reason));
+              return;
+            }
             setDealer(prev => {
               // Detect approval change
               if (prev.status === 'Suspended' && (d.status === 'Approved' || d.status === 'Active')) {
@@ -402,11 +413,7 @@ export default function DealerLayout({ children, currentUser, onLogout, products
 
   const handleLogoutAction = () => {
     setIsProfileMenuOpen(false);
-    try {
-      localStorage.removeItem('plumbmart_user');
-    } catch {
-      // ignore
-    }
+    clearAuthSession();
     if (onLogout) {
       onLogout();
     }

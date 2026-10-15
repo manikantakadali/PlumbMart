@@ -20,6 +20,7 @@ import {
   Package
 } from 'lucide-react';
 import InAppNotificationToast from './InAppNotificationToast';
+import { clearAuthSession } from '../utils/authSession';
 
 export default function PlumberLayout({ 
   children, 
@@ -140,11 +141,7 @@ export default function PlumberLayout({
 
   const handleLogoutAction = () => {
     setIsProfileMenuOpen(false);
-    try {
-      localStorage.removeItem('plumbmart_user');
-    } catch {
-      // ignore
-    }
+    clearAuthSession();
     if (onLogout) {
       onLogout();
     }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import CustomerLayout from '../components/CustomerLayout';
 import { 
   Box, 
@@ -31,6 +31,7 @@ const CATEGORIES = [
 ];
 
 export default function CustomerProductsPage({ currentUser, onLogout }) {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlCategory = searchParams.get('category');
 
@@ -38,6 +39,13 @@ export default function CustomerProductsPage({ currentUser, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState(urlCategory || 'All Categories');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Auth guard: Require login to access Customer Store / Dashboard
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/login?redirect=customer', { replace: true });
+    }
+  }, [currentUser, navigate]);
 
   useEffect(() => {
     if (urlCategory) {
@@ -126,6 +134,16 @@ export default function CustomerProductsPage({ currentUser, onLogout }) {
     setTimeout(() => {
       setAddedNotice(null);
     }, 2800);
+  };
+
+  const handleBuyNow = (product) => {
+    const qty = quantities[product.id] || 1;
+    addToCustomerCart(product, qty);
+    if (currentUser) {
+      navigate('/customer/checkout');
+    } else {
+      navigate('/login?redirect=checkout');
+    }
   };
 
   const filteredProducts = products.filter(p => {
@@ -357,14 +375,23 @@ export default function CustomerProductsPage({ currentUser, onLogout }) {
                       </button>
                     </div>
 
-                    {/* Add to Cart Button */}
-                    <button
-                      onClick={() => handleAddToCart(product)}
-                      className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold text-xs shadow-xs transition"
-                    >
-                      <ShoppingCart className="w-3.5 h-3.5" />
-                      <span>Add {qty} to Cart</span>
-                    </button>
+                    {/* Add to Cart & Buy Now Buttons */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => handleAddToCart(product)}
+                        className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 active:scale-98 font-bold text-xs transition"
+                        title="Add to Cart"
+                      >
+                        <ShoppingCart className="w-3.5 h-3.5" />
+                        <span>Add {qty}</span>
+                      </button>
+                      <button
+                        onClick={() => handleBuyNow(product)}
+                        className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition active:scale-98"
+                      >
+                        <span>Buy Now</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -435,23 +462,34 @@ export default function CustomerProductsPage({ currentUser, onLogout }) {
                 )}
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                 <button
                   onClick={() => setSelectedProductDetails(null)}
                   className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-semibold"
                 >
                   Close
                 </button>
-                <button
-                  onClick={() => {
-                    handleAddToCart(selectedProductDetails);
-                    setSelectedProductDetails(null);
-                  }}
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-blue-600/25"
-                >
-                  <ShoppingCart className="w-4 h-4" />
-                  <span>Add to Cart</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      handleAddToCart(selectedProductDetails);
+                      setSelectedProductDetails(null);
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs flex items-center gap-1.5 transition"
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                    <span>Add to Cart</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleBuyNow(selectedProductDetails);
+                      setSelectedProductDetails(null);
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-blue-600/25 transition active:scale-98"
+                  >
+                    <span>Buy Now</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import PlumberLayout from '../components/PlumberLayout';
 import { 
   Wrench, 
@@ -197,6 +197,15 @@ const INITIAL_UPDATES = [
 ];
 
 export default function PlumberDashboard({ currentUser, onLogout }) {
+  const navigate = useNavigate();
+
+  // Auth guard: Require Plumber login
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/login?redirect=plumber', { replace: true });
+    }
+  }, [currentUser, navigate]);
+
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = searchParams.get('tab') || 'activities';
   const [activeTab, setActiveTab] = useState(urlTab); // 'activities' | 'dealer-orders' | 'products' | 'updates' | 'profile'

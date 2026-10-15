@@ -1,4 +1,12 @@
 require('dotenv').config();
+
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION]:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED REJECTION]:', reason);
+});
+
 const express = require('express');
 const cors = require('cors');
 const { 
@@ -215,7 +223,7 @@ async function verifyFirebaseToken(idToken, expectedMobile) {
 // 1. Send OTP to Email (Person Name + Phone + Email)
 app.post('/api/auth/send-email-otp', async (req, res) => {
   try {
-    const { name, mobile, email, role = 'Customer' } = req.body;
+    const { name, mobile, email, role = 'auto' } = req.body;
     if (!email || !email.includes('@')) {
       return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
     }
@@ -227,7 +235,28 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
       });
     }
 
-    const assignedRole = role || 'Customer';
+    const cleanMobile = mobile ? String(mobile).replace(/\D/g, '').slice(-10) : '';
+    const cleanEmail = email ? email.trim().toLowerCase() : '';
+    const db = getDb();
+
+    // Dynamically auto-detect role if not explicitly set or if default
+    let assignedRole = role || 'auto';
+    if (assignedRole === 'auto' || assignedRole === 'Customer') {
+      const isDealer = (db.dealers || []).some(d => 
+        (cleanMobile && d.mobile === cleanMobile) || 
+        (cleanEmail && d.email && d.email.toLowerCase() === cleanEmail)
+      );
+      if (isDealer) {
+        assignedRole = 'Dealer';
+      } else {
+        const isPlumber = (db.plumbers || []).some(p => 
+          (cleanMobile && p.mobile === cleanMobile) || 
+          (cleanEmail && p.email && p.email.toLowerCase() === cleanEmail)
+        );
+        assignedRole = isPlumber ? 'Plumber' : 'Customer';
+      }
+    }
+
     if (!['Customer', 'Dealer', 'Plumber'].includes(assignedRole)) {
       return res.status(400).json({
         success: false,
@@ -235,7 +264,39 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
       });
     }
 
-    const cleanMobile = mobile ? String(mobile).replace(/\D/g, '').slice(-10) : '';
+    // If dealer exists and account is PENDING or REJECTED, reject login OTP request early with informative message
+    if (assignedRole === 'Dealer' && !req.body.isRegistration) {
+      const existingDealer = (db.dealers || []).find(d => 
+        (cleanMobile && d.mobile === cleanMobile) || 
+        (cleanEmail && d.email && d.email.toLowerCase() === cleanEmail)
+      );
+      if (existingDealer) {
+        if (existingDealer.status === 'PENDING' || existingDealer.status === 'Pending') {
+          return res.status(403).json({
+            success: false,
+            accessDenied: true,
+            status: 'PENDING',
+            message: 'Access Denied: Your dealer account is currently PENDING review and approval by the Super Admin.'
+          });
+        }
+        if (existingDealer.status === 'REJECTED' || existingDealer.status === 'Rejected') {
+          return res.status(403).json({
+            success: false,
+            accessDenied: true,
+            status: 'REJECTED',
+            message: 'Access Denied: Your dealer application was reviewed and rejected by the Super Admin.'
+          });
+        }
+        if (existingDealer.status === 'Suspended') {
+          return res.status(403).json({
+            success: false,
+            accessDenied: true,
+            status: 'Suspended',
+            message: 'Your wholesale dealer account has been suspended by Corporate Governance.'
+          });
+        }
+      }
+    }
 
     const result = await sendEmailOtp({
       email,
@@ -249,7 +310,8 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
       message: `Verification code sent to ${result.email}`,
       email: result.email,
       emailSentViaSmtp: result.emailSentViaSmtp,
-      devOtp: result.devOtp || '123456'
+      devOtp: result.devOtp || '123456',
+      detectedRole: assignedRole
     });
   } catch (err) {
     console.error('[API Error /api/auth/send-email-otp]:', err);
@@ -258,31 +320,95 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
 });
 
 // Helper function to resolve user by role and identifier
-async function resolveUserByRole({ role = 'Customer', mobile = '', email = '', name = '' }) {
+async function resolveUserByRole({ role = 'auto', mobile = '', email = '', name = '' }) {
   const cleanEmail = String(email || '').trim().toLowerCase();
   const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10) || '9876543210';
   const personName = String(name || 'Valued User').trim();
-  const targetRole = String(role || 'Customer');
   const db = getDb();
 
-  if (targetRole === 'Dealer') {
-    const dealer = (db.dealers || []).find(d => d.mobile === cleanMobile || (cleanEmail && d.email?.toLowerCase() === cleanEmail)) || (db.dealers || [])[0];
-    if (dealer) {
-      return {
-        id: dealer.id,
-        name: dealer.name || personName,
-        mobile: dealer.mobile || cleanMobile,
-        email: dealer.email || cleanEmail,
-        role: 'Dealer',
-        gstin: dealer.gstin || '29ABCDE1234F1Z5',
-        zohoVerified: dealer.zohoVerified !== false,
-        credit30Days: dealer.credit30Days !== false,
-        credit90Days: Boolean(dealer.credit90Days),
-        creditLimit: dealer.creditLimit || '₹5,00,000',
-        availableCredit: dealer.availableCredit || '₹3,40,000',
-        tier: dealer.tier || 'Diamond Partner'
-      };
+  // Dynamically auto-detect role if not specified
+  let targetRole = String(role || 'auto');
+  if (targetRole === 'auto' || targetRole === 'Customer') {
+    const isDealer = (db.dealers || []).some(d => 
+      (cleanMobile && d.mobile === cleanMobile) || 
+      (cleanEmail && d.email && d.email.toLowerCase() === cleanEmail)
+    );
+    if (isDealer) {
+      targetRole = 'Dealer';
+    } else {
+      const isPlumber = (db.plumbers || []).some(p => 
+        (cleanMobile && p.mobile === cleanMobile) || 
+        (cleanEmail && p.email && p.email.toLowerCase() === cleanEmail)
+      );
+      targetRole = isPlumber ? 'Plumber' : 'Customer';
     }
+  }
+
+  if (targetRole === 'Dealer') {
+    const dealer = (db.dealers || []).find(d => 
+      (cleanMobile && d.mobile === cleanMobile) || 
+      (cleanEmail && d.email && d.email.toLowerCase() === cleanEmail)
+    );
+    if (!dealer) {
+      const err = new Error('No registered dealer account found matching this email or mobile. Please complete dealer registration first.');
+      err.status = 404;
+      throw err;
+    }
+
+    if (dealer.status === 'PENDING' || dealer.status === 'Pending') {
+      const err = new Error('Access Denied: Your dealer account is currently PENDING review and approval by the Super Admin.');
+      err.status = 403;
+      err.accessDenied = true;
+      throw err;
+    }
+
+    if (dealer.status === 'REJECTED' || dealer.status === 'Rejected') {
+      const err = new Error('Access Denied: Your dealer application was reviewed and rejected by the Super Admin.');
+      err.status = 403;
+      err.accessDenied = true;
+      throw err;
+    }
+
+    if (dealer.status === 'Suspended') {
+      const err = new Error('Your wholesale dealer account has been suspended by Corporate Governance. Please contact system support.');
+      err.status = 403;
+      err.accessDenied = true;
+      throw err;
+    }
+
+    const isApproved = dealer.status === 'ACTIVE' || dealer.status === 'Approved';
+    if (!isApproved) {
+      const err = new Error('Access Denied: Dealer account is not active. Super Admin review and activation required.');
+      err.status = 403;
+      err.accessDenied = true;
+      throw err;
+    }
+
+    if (!dealer.zohoVerified) {
+      const err = new Error('Access Denied: Dealer record is not verified in Zoho Inventory. Super Admin verification and linking required.');
+      err.status = 403;
+      err.accessDenied = true;
+      throw err;
+    }
+
+    return {
+      id: dealer.id,
+      name: dealer.name || personName,
+      contactPerson: dealer.contactPerson || dealer.name || personName,
+      mobile: dealer.mobile || cleanMobile,
+      email: dealer.email || cleanEmail,
+      role: 'Dealer',
+      status: 'ACTIVE',
+      gstin: dealer.gstin || '29ABCDE1234F1Z5',
+      zohoVerified: true,
+      zohoContactId: dealer.zohoContactId,
+      zohoDetails: dealer.zohoDetails,
+      credit30Days: dealer.credit30Days !== false,
+      credit90Days: Boolean(dealer.credit90Days),
+      creditLimit: dealer.creditLimit || '₹5,00,000',
+      availableCredit: dealer.availableCredit || '₹3,40,000',
+      tier: dealer.tier || 'Diamond Partner'
+    };
   }
 
   if (targetRole === 'Plumber') {
@@ -375,7 +501,28 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
       });
     }
 
-    const assignedRole = role || 'Customer';
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanMobile = String(mobile || (typeof verification !== 'undefined' && verification.data?.mobile) || '').replace(/\D/g, '').slice(-10) || '9876543210';
+    const db = getDb();
+
+    // Auto-detect role dynamically if not strictly specified
+    let assignedRole = role || 'auto';
+    if (assignedRole === 'auto' || assignedRole === 'Customer') {
+      const isDealer = (db.dealers || []).some(d => 
+        (cleanMobile && d.mobile === cleanMobile) || 
+        (cleanEmail && d.email && d.email.toLowerCase() === cleanEmail)
+      );
+      if (isDealer) {
+        assignedRole = 'Dealer';
+      } else {
+        const isPlumber = (db.plumbers || []).some(p => 
+          (cleanMobile && p.mobile === cleanMobile) || 
+          (cleanEmail && p.email && p.email.toLowerCase() === cleanEmail)
+        );
+        assignedRole = isPlumber ? 'Plumber' : 'Customer';
+      }
+    }
+
     if (!['Customer', 'Dealer', 'Plumber'].includes(assignedRole)) {
       return res.status(400).json({
         success: false,
@@ -383,11 +530,7 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
       });
     }
 
-    const cleanEmail = String(email).trim().toLowerCase();
-    const cleanMobile = String(mobile || verification.data?.mobile || '').replace(/\D/g, '').slice(-10) || '9876543210';
-    const personName = String(name || verification.data?.name || assignedRole).trim();
-
-    const db = getDb();
+    const personName = String(name || (typeof verification !== 'undefined' && verification.data?.name) || assignedRole).trim();
     let userObj = null;
 
     if (assignedRole === 'Dealer') {
@@ -476,6 +619,16 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
         });
       }
 
+      // Check if rejected by Super Admin
+      if (dealer.status === 'REJECTED' || dealer.status === 'Rejected') {
+        return res.status(403).json({
+          success: false,
+          accessDenied: true,
+          status: 'REJECTED',
+          message: 'Access Denied: Your dealer application was reviewed and rejected by the Super Admin.'
+        });
+      }
+
       // Check if suspended by governance
       if (dealer.status === 'Suspended') {
         return res.status(403).json({
@@ -483,6 +636,27 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
           accessDenied: true,
           status: 'Suspended',
           message: 'Your wholesale dealer account has been suspended by Corporate Governance. Please contact system support.'
+        });
+      }
+
+      // Check if pending Super Admin approval
+      if (dealer.status === 'PENDING' || dealer.status === 'Pending') {
+        return res.status(403).json({
+          success: false,
+          accessDenied: true,
+          status: 'PENDING',
+          message: 'Access Denied: Your dealer account is currently PENDING review and approval by the Super Admin. You will receive an email confirmation once activated.'
+        });
+      }
+
+      // Must be ACTIVE or Approved in PlumbMart
+      const isApprovedInPlumbMart = dealer.status === 'ACTIVE' || dealer.status === 'Approved';
+      if (!isApprovedInPlumbMart) {
+        return res.status(403).json({
+          success: false,
+          accessDenied: true,
+          status: dealer.status || 'PENDING',
+          message: 'Access Denied: Dealer account is not active. Super Admin review and activation required.'
         });
       }
 
@@ -502,51 +676,19 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
       });
 
       // STEP 5: If Dealer Is Not Found in Zoho or 3-way verification fails:
-      // Deny dashboard access and notify the Super Admin with registration details. Keep dealer status as PENDING.
       if (!zohoCheck.found) {
         console.warn(`[Zoho Verification] ❌ Dealer "${dealer.name}" failed Zoho 3-way match: ${zohoCheck.reason || 'Record not found'}`);
-        dealer.status = 'PENDING';
         dealer.zohoVerified = false;
         saveDb(db);
 
         const failReason = zohoCheck.reason || 'Dealer details (Phone Number, Name, and Email) do not match any active customer record in Zoho Inventory.';
 
-        // Notify Super Admin with dealer's registration details
-        if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
-        db.notifications.unshift({
-          id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
-          targetGroup: 'Admin',
-          type: 'DEALER_NOT_IN_ZOHO',
-          priority: 'urgent',
-          title: `🚨 Dealer Zoho Verification Failed: ${dealer.name}`,
-          message: `Dealer "${dealer.name}" (Mobile: ${dealer.mobile}, Email: ${dealer.email}, GSTIN: ${dealer.gstin || 'N/A'}) attempted login. ${failReason} Super Admin review and Zoho Inventory alignment required.`,
-          sentAt: 'Just now',
-          createdAt: new Date().toISOString(),
-          sender: 'Zoho Verification Gateway',
-          dealerId: dealer.id,
-          dealerName: dealer.name,
-          dealerEmail: dealer.email,
-          dealerMobile: dealer.mobile
-        });
-        saveDb(db);
-
-        (async () => {
-          try {
-            await sendAdminDealerPendingNotificationEmail({
-              dealer,
-              reason: `Dealer attempted login but Zoho Inventory verification failed: ${failReason}. Account status remains PENDING.`
-            });
-          } catch (e) {
-            console.warn('[Admin Notification Email Warning]:', e.message);
-          }
-        })();
-
         return res.status(403).json({
           success: false,
           accessDenied: true,
           zohoVerified: false,
-          status: 'PENDING',
-          message: `Access Denied: ${failReason} All three (Phone Number, Name, and Email) must match your approved Zoho Inventory customer record to access the Dealer Dashboard.`
+          status: dealer.status,
+          message: `Access Denied: ${failReason} Linked Zoho customer record verification is required to access the Dealer Dashboard.`
         });
       }
 
@@ -560,26 +702,7 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
         });
       }
 
-      // IMPORTANT REQUIREMENT: Ensure Zoho record existence alone does not grant access; the dealer must be ACTIVE and approved.
-      const isApprovedInPlumbMart = dealer.status === 'ACTIVE' || dealer.status === 'Approved';
-      if (!isApprovedInPlumbMart) {
-        dealer.zohoVerified = true;
-        if (zohoContact?.contactId) dealer.zohoContactId = zohoContact.contactId;
-        if (zohoContact) dealer.zohoDetails = zohoContact;
-        saveDb(db);
-
-        console.warn(`[Zoho Verification] ⚠️ Dealer "${dealer.name}" found in Zoho Inventory but PlumbMart status is "${dealer.status}". Super Admin approval required.`);
-
-        return res.status(403).json({
-          success: false,
-          accessDenied: true,
-          zohoVerified: true,
-          status: dealer.status || 'PENDING',
-          message: 'Access Denied: Customer record verified in Zoho Inventory, but dealer account status is PENDING. Super Admin approval is required to activate your account.'
-        });
-      }
-
-      // STEP 4 & 8: If Dealer Is Active in Zoho AND Approved/Active in PlumbMart -> Grant dashboard access!
+      // Both PlumbMart and Zoho are ACTIVE!
       dealer.zohoVerified = true;
       if (zohoContact?.contactId) dealer.zohoContactId = zohoContact.contactId;
       if (zohoContact) dealer.zohoDetails = zohoContact;
@@ -682,7 +805,12 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
     });
   } catch (err) {
     console.error('[API Error /api/auth/verify-email-otp]:', err);
-    return res.status(500).json({ success: false, message: err.message || 'Verification failed.' });
+    const statusCode = err.status || err.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      accessDenied: Boolean(err.accessDenied || statusCode === 403),
+      message: err.message || 'Verification failed.'
+    });
   }
 });
 
@@ -699,8 +827,13 @@ app.post('/api/auth/quick-login', async (req, res) => {
       token: `plumbmart-session-${userObj.id}-${Date.now()}`
     });
   } catch (err) {
-    console.error('[API Error /api/auth/quick-login]:', err);
-    return res.status(500).json({ success: false, message: err.message || 'Direct login failed.' });
+    console.error('[API Error /api/auth/quick-login]:', err.message);
+    const statusCode = err.status || err.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      accessDenied: Boolean(err.accessDenied || statusCode === 403),
+      message: err.message || 'Direct login failed.'
+    });
   }
 });
 
@@ -790,7 +923,7 @@ app.post('/api/auth/firebase-login', async (req, res) => {
 // 2. Customer & User Registration API (Persists to Supabase & local cache)
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { name, mobile, email, role, password, city, gstin, license, idToken } = req.body;
+    const { name, mobile, email, role, password, city, address, contactPerson, gstin, license, idToken } = req.body;
 
     if (!name || !mobile) {
       return res.status(400).json({ success: false, message: 'Name and mobile number are required' });
@@ -835,15 +968,18 @@ app.post('/api/auth/register', async (req, res) => {
     let createdUser = null;
 
     if (assignedRole === 'Dealer') {
+      const resolvedAddress = (address || city || 'Bengaluru').trim();
+      const resolvedCity = (city || 'Bengaluru').trim();
+      const resolvedContactPerson = (contactPerson || name).trim();
       createdUser = {
         id: 'DLR-' + Date.now().toString().slice(-4),
         name: name.trim(),
-        contactPerson: name.trim(),
+        contactPerson: resolvedContactPerson,
         mobile: cleanMobile,
         email: email ? email.trim() : `dealer_${cleanMobile}@plumbmart.com`,
         password: password || '123456',
         role: 'Dealer',
-        gstin: gstin || '29ABCDE' + Math.floor(1000 + Math.random() * 9000) + 'F1Z5',
+        gstin: gstin || ('29ABCDE' + Math.floor(1000 + Math.random() * 9000) + 'F1Z5'),
         status: 'PENDING',
         zohoVerified: false,
         credit30Days: false,
@@ -854,28 +990,39 @@ app.post('/api/auth/register', async (req, res) => {
         nextDueDate: 'None',
         totalOrders: 0,
         totalVolume: 0,
-        city: city || 'Bengaluru',
+        city: resolvedCity,
+        address: resolvedAddress,
         createdAt: new Date().toISOString()
       };
       if (!db.dealers) db.dealers = [];
       db.dealers.push(createdUser);
 
-      // Notify Super Admin of new Dealer registration with status PENDING
+      // Notify Super Admin of new Dealer registration with status PENDING and full details
       if (!Array.isArray(db.notifications)) db.notifications = getNotificationsFromDb();
       db.notifications.unshift({
         id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
         targetGroup: 'Admin',
         type: 'DEALER_REGISTRATION_PENDING',
         priority: 'urgent',
-        title: `⚠️ New Dealer Registered (PENDING): ${createdUser.name}`,
-        message: `Dealer "${createdUser.name}" has registered with status PENDING. Contact: ${createdUser.mobile}, Email: ${createdUser.email}, GSTIN: ${createdUser.gstin}. Super Admin review and Zoho Inventory customer verification required.`,
+        title: `⚠️ New Dealer Application (PENDING): ${createdUser.name}`,
+        message: `Business: "${createdUser.name}", Contact: ${createdUser.contactPerson}, Phone: +91 ${createdUser.mobile}, Email: ${createdUser.email}, City/Address: ${createdUser.address}, GSTIN: ${createdUser.gstin}. Application submitted with status PENDING. Super Admin review & Zoho verification required.`,
         sentAt: 'Just now',
         createdAt: new Date().toISOString(),
         sender: 'Registration Service',
         dealerId: createdUser.id,
         dealerName: createdUser.name,
+        dealerContact: createdUser.contactPerson,
+        contactPerson: createdUser.contactPerson,
         dealerEmail: createdUser.email,
-        dealerMobile: createdUser.mobile
+        email: createdUser.email,
+        dealerMobile: createdUser.mobile,
+        mobile: createdUser.mobile,
+        dealerAddress: createdUser.address,
+        address: createdUser.address,
+        dealerCity: createdUser.city,
+        city: createdUser.city,
+        dealerGstin: createdUser.gstin,
+        gstin: createdUser.gstin
       });
       saveDb(db);
 
@@ -889,6 +1036,13 @@ app.post('/api/auth/register', async (req, res) => {
           console.warn('[Admin Notification Email Warning]:', e.message);
         }
       })();
+
+      return res.status(201).json({
+        success: true,
+        message: 'Dealer registration submitted with status PENDING! Your details have been sent to the Super Admin for review and approval.',
+        user: createdUser,
+        status: 'PENDING'
+      });
     } else if (assignedRole === 'Plumber') {
       createdUser = {
         id: 'PLM-' + Date.now().toString().slice(-4),
@@ -1244,6 +1398,24 @@ app.put('/api/dealers/:id', (req, res) => {
         }
       })();
     } else if (req.body.status === 'Approved' || req.body.status === 'ACTIVE') {
+      // Requirement 6: Verify Zoho customer record linking before activation
+      const isZohoVerified = Boolean(updated.zohoVerified && (updated.zohoContactId || updated.zohoDetails));
+      if (!isZohoVerified) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot activate dealer: Customer record must be verified and linked in Zoho Inventory first.'
+        });
+      }
+
+      // Requirement 6: Only authorized Super Admins can activate
+      const adminRole = req.body.adminRole || req.body.approvedBy?.role || req.body.approvedBy?.accessLevel || 'SuperAdmin';
+      if (adminRole !== 'SuperAdmin' && adminRole !== 'Admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Unauthorized: Only authorized Super Admins can approve and activate dealer accounts.'
+        });
+      }
+
       const adminOfficer = req.body.approvedBy || {
         name: 'System Administrator',
         email: 'admin@plumbmart.com',
@@ -1267,6 +1439,15 @@ app.put('/api/dealers/:id', (req, res) => {
           console.warn('[Auto-Email Approval Warning]:', mErr.message);
         }
       })();
+    } else if (req.body.status === 'REJECTED' || req.body.status === 'Rejected') {
+      updated.status = 'REJECTED';
+      updated.rejectedBy = req.body.rejectedBy || {
+        name: 'System Administrator',
+        email: 'admin@plumbmart.com',
+        role: 'SuperAdmin',
+        rejectedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+        reason: req.body.reason || 'Dealer registration rejected by Super Admin during review.'
+      };
     } else if (req.body.status === 'PENDING' || req.body.status === 'Pending') {
       updated.status = 'PENDING';
       updated.zohoVerified = false;

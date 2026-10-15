@@ -61,6 +61,13 @@ export default function DealerDashboard({ currentUser, onLogout }) {
   // Active Main Tab: 'stock' | 'tracking' | 'credit'
   const [activeMainTab, setActiveMainTab] = useState('stock');
 
+  // Auth guard: Require Dealer login
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/login?redirect=dealer', { replace: true });
+    }
+  }, [currentUser, navigate]);
+
   // Dynamic Dealer Profile from Admin Credit Governance
   const [dealerProfile, setDealerProfile] = useState(() => {
     let saved = null;
@@ -182,7 +189,7 @@ export default function DealerDashboard({ currentUser, onLogout }) {
                 isApproved: true
               });
             } else if (d.status === 'PENDING' || d.status === 'Pending') {
-              navigate('/login?role=Dealer', { replace: true });
+              navigate('/login', { replace: true });
             }
           }
           return {
@@ -354,7 +361,7 @@ export default function DealerDashboard({ currentUser, onLogout }) {
     const user = saved || currentUser;
     if (user && (user.role === 'Dealer' || user.companyName)) {
       if (user.status === 'PENDING' || user.status === 'Pending' || user.zohoVerified === false) {
-        navigate('/login?role=Dealer', { replace: true });
+        navigate('/login', { replace: true });
       }
     }
   }, [currentUser, navigate]);

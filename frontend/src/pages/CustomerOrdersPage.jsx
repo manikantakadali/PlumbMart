@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams, useParams, Link } from 'react-router-dom';
+import { useSearchParams, useParams, Link, useNavigate } from 'react-router-dom';
 import CustomerLayout from '../components/CustomerLayout';
 import { 
   Truck, 
@@ -89,6 +89,15 @@ function getDynamicTrackingSteps(status) {
 }
 
 export default function CustomerOrdersPage({ currentUser, onLogout }) {
+  const navigate = useNavigate();
+
+  // Auth guard: Require Customer login
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/login?redirect=customer', { replace: true });
+    }
+  }, [currentUser, navigate]);
+
   const [searchParams] = useSearchParams();
   const { orderId: paramOrderId } = useParams();
   const placedOrderId = searchParams.get('placed');

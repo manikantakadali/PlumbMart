@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { getCustomerCart } from '../utils/customerCart';
 import InAppNotificationToast from './InAppNotificationToast';
+import { clearAuthSession } from '../utils/authSession';
 
 const SIDEBAR_CATEGORIES = [
   { name: 'All Categories', query: '', icon: Layers },
@@ -367,11 +368,7 @@ export default function CustomerLayout({ children, currentUser, onLogout }) {
 
   const handleLogoutAction = () => {
     setIsProfileMenuOpen(false);
-    try {
-      localStorage.removeItem('plumbmart_user');
-    } catch {
-      // ignore
-    }
+    clearAuthSession();
     if (onLogout) {
       onLogout();
     }

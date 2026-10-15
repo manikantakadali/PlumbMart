@@ -14,9 +14,11 @@ import {
   RotateCw, 
   ArrowRight,
   AlertTriangle,
-  Building2
+  Building2,
+  Wrench
 } from 'lucide-react';
 import { cleanMobileNumber } from '../firebase';
+import { setAuthSession } from '../utils/authSession';
 
 export default function LoginPage({ onLoginSuccess }) {
   const navigate = useNavigate();
@@ -42,6 +44,7 @@ export default function LoginPage({ onLoginSuccess }) {
   );
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [isOtpExpired, setIsOtpExpired] = useState(false);
   const [zohoVerifying, setZohoVerifying] = useState(false);
   const [zohoVerifiedData, setZohoVerifiedData] = useState(null);
 
@@ -53,6 +56,7 @@ export default function LoginPage({ onLoginSuccess }) {
         setResendCooldown((prev) => {
           if (prev <= 1) {
             clearInterval(timer);
+            setIsOtpExpired(true);
             return 0;
           }
           return prev - 1;
@@ -64,7 +68,7 @@ export default function LoginPage({ onLoginSuccess }) {
     };
   }, [resendCooldown]);
 
-  // Dynamic role and registration synchronization from URL search params
+  // Dynamic registration synchronization and URL cleaning (ensure role is NEVER displayed in URL bar)
   useEffect(() => {
     const urlRole = searchParams.get('role');
     if (urlRole && ['Customer', 'Dealer', 'Plumber'].includes(urlRole)) {
@@ -73,6 +77,15 @@ export default function LoginPage({ onLoginSuccess }) {
       setAuthStep('INPUT');
       setError('');
     }
+
+    // Immediately remove ?role=... from browser address bar so URL remains clean /login
+    if (searchParams.has('role')) {
+      const cleanParams = new URLSearchParams(searchParams);
+      cleanParams.delete('role');
+      const cleanQuery = cleanParams.toString();
+      navigate(cleanQuery ? `/login?${cleanQuery}` : '/login', { replace: true });
+    }
+
     const regParam = searchParams.get('registered') === 'true';
     const regName = searchParams.get('name');
     const regMobile = searchParams.get('mobile');
@@ -81,10 +94,13 @@ export default function LoginPage({ onLoginSuccess }) {
     if (regMobile) setMobile(regMobile);
     if (regEmail) setEmail(regEmail);
     if (regParam) {
-      const activeRole = urlRole || 'Customer';
-      setSuccessMsg(`Account registered for ${regName || 'user'} (${activeRole})! Sign in to your dashboard.`);
+      setSuccessMsg(`Account registered for ${regName || 'user'}! Please enter OTP to sign in.`);
     }
-  }, [searchParams]);
+    const deniedReason = searchParams.get('denied');
+    if (deniedReason) {
+      setError(deniedReason);
+    }
+  }, [searchParams, navigate]);
 
   // Developer Mode toggle: default to true during development phase
   const [devModeSkipOtp, setDevModeSkipOtp] = useState(true);
@@ -127,18 +143,18 @@ export default function LoginPage({ onLoginSuccess }) {
       }
 
       const loggedUser = data.user;
-      try {
-        localStorage.setItem('plumbmart_user', JSON.stringify(loggedUser));
-      } catch (e) {}
+      setAuthSession(loggedUser, data.token);
 
       setSuccessMsg(`Welcome, ${loggedUser.name}!`);
 
       if (onLoginSuccess) {
-        onLoginSuccess(loggedUser);
+        onLoginSuccess(loggedUser, data.token);
       }
 
       if (redirectTarget === 'checkout') {
         navigate('/customer/checkout');
+      } else if (redirectTarget === 'customer') {
+        navigate('/customer/products');
       } else if (redirectTarget === 'cart') {
         navigate('/customer/cart');
       } else if (loggedUser.role === 'Dealer') {
@@ -162,19 +178,6 @@ export default function LoginPage({ onLoginSuccess }) {
     setAuthStep('INPUT');
     setError('');
     setSuccessMsg('');
-    if (newRole === 'Customer') {
-      setName('Rahul Sharma');
-      setMobile('9876543210');
-      setEmail('rahul.sharma@example.com');
-    } else if (newRole === 'Dealer') {
-      setName('Sri Venkateswara Traders');
-      setMobile('9000011111');
-      setEmail('dealer@plumbmart-demo.com');
-    } else if (newRole === 'Plumber') {
-      setName('Ramesh Kumar');
-      setMobile('9111122222');
-      setEmail('plumber@plumbmart-demo.com');
-    }
   };
 
   const handleDirectSubmit = (e) => {
@@ -230,9 +233,10 @@ export default function LoginPage({ onLoginSuccess }) {
       }
 
       setAuthStep('OTP');
-      setResendCooldown(30);
+      setResendCooldown(60);
+      setIsOtpExpired(false);
       setOtp('');
-      setSuccessMsg(`Verification code sent to ${data.email}. Please check your inbox.`);
+      setSuccessMsg(`Verification code sent to ${data.email}. Valid for 1 minute.`);
     } catch (err) {
       console.error('[Send Email OTP Error]:', err);
       setError(err.message || 'Network error while sending verification email.');
@@ -269,9 +273,11 @@ export default function LoginPage({ onLoginSuccess }) {
       }
 
       if (data.success) {
-        setResendCooldown(30);
+        setResendCooldown(60);
+        setIsOtpExpired(false);
         setOtp('');
-        setSuccessMsg(`A fresh verification code was sent to ${data.email}. Please check your inbox.`);
+        setError('');
+        setSuccessMsg(`A fresh verification code was sent to ${data.email}. Valid for 1 minute.`);
       } else {
         setError(data.message || 'Failed to resend code.');
       }
@@ -286,6 +292,11 @@ export default function LoginPage({ onLoginSuccess }) {
   const handleVerifyOtp = async (e) => {
     if (e) e.preventDefault();
     const cleanOtp = String(otp || '').trim() || '123456';
+
+    if (cleanOtp !== '123456' && (isOtpExpired || resendCooldown === 0)) {
+      setError('The verification code has expired (1-minute limit reached). Please click "Resend Code" to receive a fresh OTP.');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -328,9 +339,7 @@ export default function LoginPage({ onLoginSuccess }) {
 
       // Verification TRUE! Set user session and redirect to dashboard immediately
       const loggedUser = data.user;
-      try {
-        localStorage.setItem('plumbmart_user', JSON.stringify(loggedUser));
-      } catch (e) {}
+      setAuthSession(loggedUser, data.token);
 
       // Special visual handling for Dealer flow (OTP Login -> Zoho Verification -> Dealer Dashboard)
       if (loggedUser.role === 'Dealer') {
@@ -347,7 +356,7 @@ export default function LoginPage({ onLoginSuccess }) {
         setSuccessMsg(`Zoho Merchant Verified: ${cName}!`);
 
         if (onLoginSuccess) {
-          onLoginSuccess(loggedUser);
+          onLoginSuccess(loggedUser, data.token);
         }
 
         setTimeout(() => {
@@ -360,7 +369,7 @@ export default function LoginPage({ onLoginSuccess }) {
       setSuccessMsg(`Verification successful! Welcome, ${loggedUser.name}!`);
 
       if (onLoginSuccess) {
-        onLoginSuccess(loggedUser);
+        onLoginSuccess(loggedUser, data.token);
       }
 
       // Redirect to target or role dashboard
@@ -370,6 +379,8 @@ export default function LoginPage({ onLoginSuccess }) {
         navigate('/admin');
       } else if (redirectTarget === 'checkout') {
         navigate('/customer/checkout');
+      } else if (redirectTarget === 'customer') {
+        navigate('/customer/products');
       } else if (redirectTarget === 'cart') {
         navigate('/customer/cart');
       } else {
@@ -425,44 +436,15 @@ export default function LoginPage({ onLoginSuccess }) {
             </p>
           </div>
 
-          {/* Account Role Selector */}
-          <div className="mb-5">
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Select Account Role
-            </label>
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              {[
-                { id: 'Customer', label: 'Customer' },
-                { id: 'Dealer', label: 'Dealer (B2B)' },
-                { id: 'Plumber', label: 'Plumber' }
-              ].map(r => (
-                <button
-                  key={r.id}
-                  type="button"
-                  onClick={() => handleRoleChange(r.id)}
-                  className={`py-2 px-1 rounded-xl font-bold border transition ${
-                    role === r.id
-                      ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-          </div>
 
           {/* Registration Success Banner */}
           {isRegisteredParam && (
             <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-start gap-2.5 shadow-2xs">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold text-emerald-900 text-xs">{role} Registration Successful!</p>
+                <p className="font-bold text-emerald-900 text-xs">Registration Successful!</p>
                 <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed">
-                  {role === 'Dealer'
-                    ? `${name ? `Welcome, ${name}! ` : ''}Your Dealer account is registered with status PENDING. Please verify your email OTP to initiate Zoho Inventory verification.`
-                    : `${name ? `Welcome, ${name}! ` : ''}Your ${role} account is created. Enter the OTP code sent to your email to log in directly to your ${role === 'Plumber' ? 'Plumber Dashboard' : 'Customer Catalog'}.`
-                  }
+                  {name ? `Welcome, ${name}! ` : ''}Your account has been registered. Enter the OTP code sent to your email to log in directly to your dashboard.
                 </p>
               </div>
             </div>
@@ -476,6 +458,45 @@ export default function LoginPage({ onLoginSuccess }) {
                 <p className="font-bold text-blue-900 text-xs">Login Required to Buy</p>
                 <p className="text-[11px] text-blue-700 mt-0.5 leading-relaxed">
                   Please sign in to proceed with your delivery address and checkout. Your cart items are saved!
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Customer Store Login Banner */}
+          {redirectTarget === 'customer' && !isRegisteredParam && (
+            <div className="mb-4 p-3.5 bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded-2xl flex items-start gap-2.5 shadow-2xs">
+              <Lock className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-blue-900 text-xs">Customer Login Required</p>
+                <p className="text-[11px] text-blue-700 mt-0.5 leading-relaxed">
+                  Please sign in with your mobile number to access the customer store, bucket, and order tracking.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Dealer Login Banner */}
+          {redirectTarget === 'dealer' && !isRegisteredParam && (
+            <div className="mb-4 p-3.5 bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs rounded-2xl flex items-start gap-2.5 shadow-2xs">
+              <Building2 className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-indigo-900 text-xs">Dealer Login Required</p>
+                <p className="text-[11px] text-indigo-700 mt-0.5 leading-relaxed">
+                  Sign in with your registered email and phone number to access wholesale pricing, live stock, and trade credit terms.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Plumber Login Banner */}
+          {redirectTarget === 'plumber' && !isRegisteredParam && (
+            <div className="mb-4 p-3.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-2xl flex items-start gap-2.5 shadow-2xs">
+              <Wrench className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-900 text-xs">Plumber Technician Login Required</p>
+                <p className="text-[11px] text-amber-700 mt-0.5 leading-relaxed">
+                  Sign in to view assigned installation tasks, specs, and job checklists.
                 </p>
               </div>
             </div>
@@ -663,10 +684,21 @@ export default function LoginPage({ onLoginSuccess }) {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex justify-between">
-                  <span>Enter 6-Digit Email OTP</span>
-                  <span className="text-[11px] text-blue-600 font-normal">Check your inbox</span>
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                    <span>Enter 6-Digit Email OTP</span>
+                    <span className="text-[10px] text-blue-600 font-normal">Check your inbox</span>
+                  </label>
+                  {resendCooldown > 0 ? (
+                    <span className="text-[11px] font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                      ⏱️ 0:{resendCooldown < 10 ? '0' : ''}{resendCooldown}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 animate-pulse">
+                      ⚠️ OTP Expired
+                    </span>
+                  )}
+                </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                   <input
@@ -678,9 +710,18 @@ export default function LoginPage({ onLoginSuccess }) {
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     placeholder="Enter 6-digit OTP"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono tracking-widest text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition text-center"
+                    className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 border rounded-xl text-sm font-mono tracking-widest text-slate-900 focus:outline-none focus:ring-2 focus:bg-white transition text-center ${
+                      resendCooldown === 0 || isOtpExpired
+                        ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500'
+                        : 'border-slate-300 focus:ring-blue-500/20 focus:border-blue-500'
+                    }`}
                   />
                 </div>
+                {resendCooldown === 0 && (
+                  <p className="text-[11px] text-rose-600 font-semibold mt-1.5 flex items-center gap-1">
+                    <span>⚠️ OTP has expired (1 minute limit). Click &quot;Resend Code&quot; below to receive a new OTP.</span>
+                  </p>
+                )}
               </div>
 
               {/* Resend OTP button with countdown timer */}
@@ -690,13 +731,13 @@ export default function LoginPage({ onLoginSuccess }) {
                   type="button"
                   onClick={handleResendOtp}
                   disabled={resendCooldown > 0 || loading}
-                  className={`font-semibold flex items-center gap-1 transition ${
+                  className={`font-semibold flex items-center gap-1.5 transition px-3 py-1.5 rounded-xl ${
                     resendCooldown > 0 || loading
-                      ? 'text-slate-400 cursor-not-allowed'
-                      : 'text-blue-600 hover:text-blue-800 hover:underline'
+                      ? 'text-slate-400 bg-slate-100 cursor-not-allowed border border-slate-200'
+                      : 'text-white bg-blue-600 hover:bg-blue-700 font-bold shadow-md shadow-blue-500/20 cursor-pointer active:scale-95'
                   }`}
                 >
-                  <RotateCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+                  <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                   <span>{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}</span>
                 </button>
               </div>
@@ -714,7 +755,15 @@ export default function LoginPage({ onLoginSuccess }) {
                     </>
                   ) : (
                     <span>
-                      {redirectTarget === 'checkout' ? 'Validate OTP & Proceed to Buy' : 'Validate OTP & Go to Dashboard'}
+                      {redirectTarget === 'checkout'
+                        ? 'Validate OTP & Proceed to Buy'
+                        : redirectTarget === 'customer'
+                        ? 'Validate OTP & Enter Customer Store'
+                        : redirectTarget === 'dealer'
+                        ? 'Validate OTP & Verify Zoho Dealer'
+                        : redirectTarget === 'plumber'
+                        ? 'Validate OTP & Enter Plumber Pro'
+                        : 'Validate OTP & Go to Dashboard'}
                     </span>
                   )}
                 </button>

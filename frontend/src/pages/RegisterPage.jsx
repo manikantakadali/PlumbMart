@@ -46,12 +46,13 @@ export default function RegisterPage({ onRegisterSuccess }) {
   const [otpStepActive, setOtpStepActive] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [isOtpExpired, setIsOtpExpired] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState(
     verifiedMobile ? `Mobile number +91 ${verifiedMobile} verified! Please complete your profile.` : ''
   );
   const [loading, setLoading] = useState(false);
-  const [devSkipVerification, setDevSkipVerification] = useState(true);
+  const [devSkipVerification, setDevSkipVerification] = useState(false);
 
   // Resend cooldown timer
   useEffect(() => {
@@ -61,6 +62,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
         setResendCooldown((prev) => {
           if (prev <= 1) {
             clearInterval(timer);
+            setIsOtpExpired(true);
             return 0;
           }
           return prev - 1;
@@ -112,9 +114,10 @@ export default function RegisterPage({ onRegisterSuccess }) {
       }
 
       setOtpStepActive(true);
-      setResendCooldown(30);
+      setResendCooldown(60);
+      setIsOtpExpired(false);
       setOtpCode('');
-      setSuccessMsg(`Verification code sent to ${data.email}. Please check your inbox.`);
+      setSuccessMsg(`Verification code sent to ${data.email}. Valid for 1 minute.`);
     } catch (err) {
       console.error('[Registration Send OTP Error]:', err);
       setError('Network error while dispatching verification email.');
@@ -123,9 +126,52 @@ export default function RegisterPage({ onRegisterSuccess }) {
     }
   };
 
+  // Resend Email OTP for registration
+  const handleResendRegisterOtp = async () => {
+    if (resendCooldown > 0 || loading) return;
+    setLoading(true);
+    setError('');
+    setSuccessMsg('');
+
+    try {
+      const clean = cleanMobileNumber(formData.mobile);
+      const response = await fetch('/api/auth/send-email-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name.trim(),
+          mobile: clean,
+          email: formData.email.trim().toLowerCase(),
+          role: formData.role
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setResendCooldown(60);
+        setIsOtpExpired(false);
+        setOtpCode('');
+        setError('');
+        setSuccessMsg(`A fresh verification code was sent to ${data.email}. Valid for 1 minute.`);
+      } else {
+        setError(data.message || 'Failed to resend code.');
+      }
+    } catch (err) {
+      setError('Failed to resend verification email.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Verify the Email OTP on registration page
-  const handleVerifyRegisterOtp = async () => {
+  const handleVerifyRegisterOtp = async (e) => {
+    if (e) e.preventDefault();
     const cleanOtp = String(otpCode || '').trim() || '123456';
+
+    if (cleanOtp !== '123456' && (isOtpExpired || resendCooldown === 0)) {
+      setError('The verification code has expired (1-minute limit reached). Please click "Resend Code" to receive a fresh OTP.');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -229,10 +275,12 @@ export default function RegisterPage({ onRegisterSuccess }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: formData.name.trim(),
+          contactPerson: formData.name.trim(),
           mobile: clean,
           email: formData.email.trim(),
           role: formData.role,
           city: formData.city.trim(),
+          address: formData.city.trim(),
           idToken
         })
       });
@@ -247,7 +295,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
       const registeredUser = data.user;
       setSuccessMsg(
         formData.role === 'Dealer'
-          ? `Dealer registration submitted with status PENDING! Redirecting to Login...`
+          ? `Dealer registration submitted with status PENDING! Your details have been sent to the Super Admin for review and approval. Redirecting to Login...`
           : `${formData.role} account created for ${registeredUser.name}! Redirecting to Login...`
       );
 
@@ -255,8 +303,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
         registered: 'true',
         mobile: clean,
         name: registeredUser.name || formData.name.trim(),
-        email: formData.email.trim(),
-        role: formData.role
+        email: formData.email.trim()
       });
       if (redirectTarget) {
         queryParams.set('redirect', redirectTarget);
@@ -345,11 +392,107 @@ export default function RegisterPage({ onRegisterSuccess }) {
             </div>
           )}
 
-          {/* Registration Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Full Name / Business Name *
+          {/* Registration Form / OTP Step */}
+          {otpStepActive ? (
+            <form onSubmit={handleVerifyRegisterOtp} className="space-y-4 animate-in fade-in duration-200">
+              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-950 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900">{formData.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setOtpStepActive(false); setOtpCode(''); setError(''); setSuccessMsg(''); }}
+                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+                  >
+                    Edit Details
+                  </button>
+                </div>
+                <div className="text-[11px] text-slate-600">
+                  Role: <span className="font-semibold text-emerald-800">{formData.role}</span> &bull; Phone: <span className="font-mono text-slate-900">+91 {formData.mobile}</span>
+                </div>
+                <div className="text-[11px] text-emerald-800 font-medium">
+                  OTP sent to: <span className="font-bold underline">{formData.email}</span>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                    <span>Enter 6-Digit Email OTP</span>
+                    <span className="text-[10px] text-emerald-600 font-normal">Check your inbox</span>
+                  </label>
+                  {resendCooldown > 0 ? (
+                    <span className="text-[11px] font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                      ⏱️ 0:{resendCooldown < 10 ? '0' : ''}{resendCooldown}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 animate-pulse">
+                      ⚠️ OTP Expired
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    autoFocus
+                    required
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="Enter 6-digit OTP"
+                    className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 border rounded-xl text-sm font-mono tracking-widest text-slate-900 focus:outline-none focus:ring-2 focus:bg-white transition text-center ${
+                      resendCooldown === 0 || isOtpExpired
+                        ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500'
+                        : 'border-slate-300 focus:ring-emerald-500/20 focus:border-emerald-500'
+                    }`}
+                  />
+                </div>
+                {resendCooldown === 0 && (
+                  <p className="text-[11px] text-rose-600 font-semibold mt-1.5 flex items-center gap-1">
+                    <span>⚠️ OTP has expired (1 minute limit). Click &quot;Resend Code&quot; below to receive a new OTP.</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Resend OTP button with countdown timer */}
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                <span>Didn&apos;t receive email?</span>
+                <button
+                  type="button"
+                  onClick={handleResendRegisterOtp}
+                  disabled={resendCooldown > 0 || loading}
+                  className={`font-semibold flex items-center gap-1.5 transition px-3 py-1.5 rounded-xl ${
+                    resendCooldown > 0 || loading
+                      ? 'text-slate-400 bg-slate-100 cursor-not-allowed border border-slate-200'
+                      : 'text-white bg-emerald-600 hover:bg-emerald-700 font-bold shadow-md shadow-emerald-500/20 cursor-pointer active:scale-95'
+                  }`}
+                >
+                  <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  <span>{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}</span>
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || otpCode.length < 6}
+                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs tracking-wide shadow-lg shadow-emerald-600/25 transition active:scale-[0.98] mt-2 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Verifying OTP &amp; Creating Account...</span>
+                  </>
+                ) : (
+                  <span>Verify OTP &amp; Complete Registration</span>
+                )}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Full Name / Business Name *
               </label>
               <div className="relative">
                 <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
@@ -479,12 +622,13 @@ export default function RegisterPage({ onRegisterSuccess }) {
               )}
             </button>
           </form>
+          )}
 
           {/* Switch to Login link */}
           <div className="mt-6 pt-5 border-t border-slate-200 text-center text-xs text-slate-500">
             Already have an account?{' '}
             <Link 
-              to={redirectTarget ? `/login?redirect=${redirectTarget}&role=${formData.role}` : `/login?role=${formData.role}`} 
+              to={redirectTarget ? `/login?redirect=${redirectTarget}` : '/login'} 
               className="text-emerald-700 font-bold hover:underline"
             >
               Sign in to your account

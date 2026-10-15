@@ -991,7 +991,7 @@ async function createZohoCustomerContact({ name, email, mobile, companyName, gst
     };
 
     if (gstin) {
-      contactPayload.gst_no = String(gstin).trim();
+      contactPayload.notes = `GSTIN: ${String(gstin).trim()}`;
     }
 
     console.log(`[Zoho Contact] Creating new customer contact in Zoho Inventory: "${contactName}" (${cleanEmail})...`);

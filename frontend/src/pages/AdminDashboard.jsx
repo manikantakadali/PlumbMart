@@ -58,6 +58,7 @@ import {
   playToggleSound, 
   playWarningSound 
 } from '../utils/soundEffects';
+import { clearAuthSession } from '../utils/authSession';
 
 export default function AdminDashboard({ currentUser, onLogout }) {
   const navigate = useNavigate();
@@ -172,6 +173,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   const [dealers, setDealers] = useState([]);
   const [selectedDealer, setSelectedDealer] = useState(null);
   const [dealerSearch, setDealerSearch] = useState('');
+  const [dealerStatusFilter, setDealerStatusFilter] = useState('ALL');
   const [viewingDealer, setViewingDealer] = useState(null);
   const [dealerNoticeText, setDealerNoticeText] = useState('');
   const [isSendingDealerNotice, setIsSendingDealerNotice] = useState(false);
@@ -498,6 +500,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   // Dealer Approval & Credit Management
   const handleUpdateDealer = (dealerId, initialUpdates) => {
     const updates = { ...initialUpdates };
+    updates.adminRole = admin?.accessLevel || admin?.role || 'SuperAdmin';
     if (updates.status === 'Suspended') {
       updates.suspendedBy = {
         name: admin?.name || 'System Administrator',
@@ -508,7 +511,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
         suspendedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
         reason: 'Regulatory credit KYC audit & pending governance review'
       };
-    } else if (updates.status === 'Approved') {
+    } else if (updates.status === 'Approved' || updates.status === 'ACTIVE') {
+      updates.status = 'ACTIVE';
       updates.approvedBy = {
         name: admin?.name || 'System Administrator',
         email: admin?.email || 'admin@plumbmart.com',
@@ -550,7 +554,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     // 1. Broadcast immediately across tabs so Dealer portal updates instantly with zero latency
     const targetDealer = dealers.find(d => d.id === dealerId) || selectedDealer;
     const dealerName = targetDealer?.name || 'Sri Venkateswara Distributors';
-    const isApprovedAction = updates.status === 'Approved';
+    const isApprovedAction = updates.status === 'Approved' || updates.status === 'ACTIVE';
     const broadcastPayload = {
       type: 'DEALER_GOVERNANCE_UPDATED',
       dealerId,
@@ -588,7 +592,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
           dealerName,
           timestamp: Date.now()
         }));
-      } else if (updates.status === 'Suspended') {
+      } else if (updates.status === 'Suspended' || updates.status === 'REJECTED') {
         localStorage.removeItem('plumbmart_show_welcome_back');
         localStorage.removeItem('plumbmart_dealer_welcome_back');
       }
@@ -611,7 +615,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     if (isApprovedAction) {
       dispatchInAppNotification({
         title: '🎉 Welcome Back! Account Approved & Re-Activated',
-        message: `Wholesale B2B account for "${selectedDealer?.name || 'Sri Venkateswara Distributors'}" is now officially APPROVED & ACTIVE! Full credit limit and wholesale ordering are unlocked.`,
+        message: `Wholesale B2B account for "${targetDealer?.name || 'Sri Venkateswara Distributors'}" is now officially APPROVED & ACTIVE! Full credit limit and wholesale ordering are unlocked.`,
         targetGroup: 'Dealers',
         priority: 'urgent',
         type: 'DEALER_APPROVED',
@@ -639,9 +643,17 @@ export default function AdminDashboard({ currentUser, onLogout }) {
         const res = await fetch(`/api/dealers/${dealerId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updates)
+          body: JSON.stringify({ adminRole: 'SuperAdmin', ...updates })
         });
-        if (res.ok) saved = true;
+        if (res.ok) {
+          saved = true;
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          if (errData && errData.message) {
+            setSyncToast('⚠️ ' + errData.message);
+            return;
+          }
+        }
       } catch (e) {}
 
       if (!saved) {
@@ -649,7 +661,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
           const res = await fetch(`http://localhost:5000/api/dealers/${dealerId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updates)
+            body: JSON.stringify({ adminRole: 'SuperAdmin', ...updates })
           });
           if (res.ok) saved = true;
         } catch (e) {}
@@ -660,7 +672,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
           await fetch(`http://localhost:4000/api/dealers/${dealerId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updates)
+            body: JSON.stringify({ adminRole: 'SuperAdmin', ...updates })
           });
         } catch (e) {}
       }
@@ -672,9 +684,12 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     if (updates.status === 'Suspended') {
       playWarningSound();
       setSyncToast(`Dealer #${dealerId} SUSPENDED! Official email alert dispatched to ${dealerEmail}.`);
-    } else if (updates.status === 'Approved') {
+    } else if (isApprovedAction) {
       playSuccessSound();
       setSyncToast(`Dealer #${dealerId} APPROVED! Welcome & credit activation email sent to ${dealerEmail}.`);
+    } else if (updates.status === 'REJECTED') {
+      playWarningSound();
+      setSyncToast(`Dealer #${dealerId} status updated to REJECTED.`);
     } else {
       if (updates.credit30Days !== undefined && updates.credit90Days === undefined && updates.creditLimit === undefined) {
         playToggleSound(updates.credit30Days);
@@ -686,6 +701,122 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       setSyncToast(`Dealer #${dealerId} credit policy updated!`);
     }
     setTimeout(() => setSyncToast(null), 3500);
+  };
+
+  const handleCreateZohoCustomer = async (dealerId) => {
+    playClickSound();
+    try {
+      setSyncToast('Connecting to Zoho Inventory to create/verify customer...');
+      const res = await fetch(`/api/dealers/${dealerId}/create-zoho-customer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (data.success) {
+        playSuccessSound();
+        setSyncToast(data.message || '✓ Customer record successfully linked in Zoho Inventory!');
+        setDealers(prev => prev.map(d => d.id === dealerId ? {
+          ...d,
+          zohoVerified: true,
+          zohoContactId: data.contact?.contactId || d.zohoContactId,
+          zohoDetails: data.contact || d.zohoDetails
+        } : d));
+        if (viewingDealer && viewingDealer.id === dealerId) {
+          setViewingDealer(prev => ({
+            ...prev,
+            zohoVerified: true,
+            zohoContactId: data.contact?.contactId || prev.zohoContactId,
+            zohoDetails: data.contact || prev.zohoDetails
+          }));
+        }
+      } else {
+        playWarningSound();
+        setSyncToast('⚠️ ' + (data.message || 'Failed to create customer in Zoho.'));
+      }
+      setTimeout(() => setSyncToast(null), 5000);
+    } catch (e) {
+      setSyncToast('Network error while linking with Zoho Inventory.');
+    }
+  };
+
+  const handleApproveDealer = async (dealer) => {
+    playClickSound();
+    if (!dealer.zohoVerified) {
+      playWarningSound();
+      alert(`Cannot activate dealer "${dealer.name}".\n\nRequirement: Customer record must be verified and linked in Zoho Inventory first.\n\nPlease click "Create / Link in Zoho" to link or create the customer record before activating.`);
+      return;
+    }
+    const confirmApprove = window.confirm(`Approve and activate "${dealer.name}" as an ACTIVE Dealer?\n\nThis will grant access to the Dealer Dashboard and send an approval confirmation email.`);
+    if (!confirmApprove) return;
+
+    try {
+      const res = await fetch(`/api/dealers/${dealer.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'ACTIVE',
+          adminRole: admin?.accessLevel || admin?.role || 'SuperAdmin',
+          approvedBy: {
+            name: admin?.name || 'System Administrator',
+            email: admin?.email || 'admin@plumbmart.com',
+            role: admin?.accessLevel || admin?.role || 'SuperAdmin'
+          }
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        playSuccessSound();
+        setSyncToast(`✓ Dealer "${dealer.name}" approved & activated! Email sent.`);
+        setDealers(prev => prev.map(d => d.id === dealer.id ? { ...d, status: 'ACTIVE', zohoVerified: true } : d));
+        if (viewingDealer && viewingDealer.id === dealer.id) {
+          setViewingDealer(prev => ({ ...prev, status: 'ACTIVE', zohoVerified: true }));
+        }
+        setTimeout(() => setSyncToast(null), 4500);
+      } else {
+        playWarningSound();
+        alert('Approval failed: ' + (data.message || 'Verification failed'));
+      }
+    } catch (err) {
+      setSyncToast('Error approving dealer: ' + err.message);
+    }
+  };
+
+  const handleRejectDealer = async (dealer) => {
+    playClickSound();
+    const reason = window.prompt(`Reject registration for "${dealer.name}"?\nPlease specify a rejection reason:`, 'Incomplete or unverified business documentation.');
+    if (reason === null) return;
+
+    try {
+      const res = await fetch(`/api/dealers/${dealer.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'REJECTED',
+          adminRole: admin?.accessLevel || admin?.role || 'SuperAdmin',
+          reason: reason || 'Application rejected by Super Admin during review.',
+          rejectedBy: {
+            name: admin?.name || 'System Administrator',
+            email: admin?.email || 'admin@plumbmart.com',
+            role: admin?.accessLevel || admin?.role || 'SuperAdmin',
+            reason: reason || 'Application rejected by Super Admin'
+          }
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        playWarningSound();
+        setSyncToast(`Dealer "${dealer.name}" application REJECTED.`);
+        setDealers(prev => prev.map(d => d.id === dealer.id ? { ...d, status: 'REJECTED' } : d));
+        if (viewingDealer && viewingDealer.id === dealer.id) {
+          setViewingDealer(prev => ({ ...prev, status: 'REJECTED' }));
+        }
+        setTimeout(() => setSyncToast(null), 4500);
+      } else {
+        alert('Rejection failed: ' + (data.message || 'Error'));
+      }
+    } catch (err) {
+      setSyncToast('Error rejecting dealer: ' + err.message);
+    }
   };
 
   // Plumber Verification & Status Toggle with Real-time Multi-Tab Broadcast
@@ -1000,9 +1131,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
   // Logout Action
   const handleAdminLogout = () => {
-    try {
-      localStorage.removeItem('plumbmart_user');
-    } catch {}
+    clearAuthSession();
     if (onLogout) onLogout();
     navigate('/admin/login');
   };
@@ -1862,6 +1991,15 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
                   <div className="flex items-center gap-2 flex-wrap">
                     <button
+                      onClick={() => handleCreateZohoCustomer(viewingDealer.id)}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-indigo-200 text-xs font-bold border border-indigo-500/30 flex items-center gap-1.5 transition cursor-pointer"
+                      title="Create or link customer in Zoho Inventory"
+                    >
+                      <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>{viewingDealer.zohoVerified ? 'Zoho Linked ✓' : 'Create / Link in Zoho'}</span>
+                    </button>
+
+                    <button
                       onClick={async () => {
                         playClickSound();
                         try {
@@ -1870,11 +2008,13 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                           if (data.existsInZoho) {
                             playSuccessSound();
                             setSyncToast(`✓ Dealer verified in Zoho CRM (${data.zohoContact?.companyName || data.zohoContact?.contactName || 'Active'}).`);
-                            handleUpdateDealer(viewingDealer.id, { zohoVerified: true, zohoDetails: data.zohoContact });
+                            setDealers(prev => prev.map(d => d.id === viewingDealer.id ? { ...d, zohoVerified: true, zohoDetails: data.zohoContact, zohoContactId: data.zohoContact?.contactId } : d));
+                            setViewingDealer(prev => ({ ...prev, zohoVerified: true, zohoDetails: data.zohoContact, zohoContactId: data.zohoContact?.contactId }));
                           } else {
                             playWarningSound();
                             setSyncToast(`⚠️ Record NOT found in Zoho Inventory for ${viewingDealer.email}.`);
-                            handleUpdateDealer(viewingDealer.id, { zohoVerified: false });
+                            setDealers(prev => prev.map(d => d.id === viewingDealer.id ? { ...d, zohoVerified: false } : d));
+                            setViewingDealer(prev => ({ ...prev, zohoVerified: false }));
                           }
                           setTimeout(() => setSyncToast(null), 4000);
                         } catch (e) {
@@ -1899,15 +2039,24 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                     </button>
 
                     {viewingDealer.status !== 'Approved' && viewingDealer.status !== 'ACTIVE' && viewingDealer.status !== 'Active' ? (
-                      <button
-                        onClick={() => {
-                          handleUpdateDealer(viewingDealer.id, { status: 'ACTIVE', zohoVerified: true });
-                        }}
-                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/25 flex items-center gap-1.5 transition cursor-pointer"
-                      >
-                        <Check className="w-4 h-4" />
-                        <span>Approve Dealer</span>
-                      </button>
+                      <>
+                        <button
+                          onClick={() => handleApproveDealer(viewingDealer)}
+                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/25 flex items-center gap-1.5 transition cursor-pointer"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>Approve &amp; Activate</span>
+                        </button>
+                        {viewingDealer.status === 'PENDING' && (
+                          <button
+                            onClick={() => handleRejectDealer(viewingDealer)}
+                            className="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 text-xs font-bold border border-rose-600/30 flex items-center gap-1.5 transition cursor-pointer"
+                          >
+                            <X className="w-4 h-4" />
+                            <span>Reject</span>
+                          </button>
+                        )}
+                      </>
                     ) : (
                       <button
                         onClick={() => {
@@ -2086,7 +2235,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                           <button
                             onClick={() => handleUpdateDealer(viewingDealer.id, { credit90Days: !viewingDealer.credit90Days })}
                             className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                              viewingDealer.credit90Days ? 'APPROVED' : 'LOCKED'}
+                              viewingDealer.credit90Days ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-800 text-slate-400'
                             }`}
                           >
                             {viewingDealer.credit90Days ? 'APPROVED' : 'LOCKED'}
@@ -2159,8 +2308,16 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                           <span className="font-mono font-bold text-indigo-300">{viewingDealer.gstin || 'N/A'}</span>
                         </div>
                         <div className="flex justify-between py-1 border-b border-slate-900">
+                          <span className="text-slate-400">Registered Address</span>
+                          <span className="text-slate-200 text-right max-w-[200px] font-medium">{viewingDealer.address || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-900">
                           <span className="text-slate-400">Operating City / Region</span>
                           <span className="text-slate-200">{viewingDealer.city || 'Bengaluru, Karnataka'}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-900">
+                          <span className="text-slate-400">Zoho Inventory Customer ID</span>
+                          <span className="font-mono text-indigo-300 font-semibold">{viewingDealer.zohoContactId || 'Pending Zoho Linking'}</span>
                         </div>
                         <div className="flex justify-between py-1 border-b border-slate-900">
                           <span className="text-slate-400">System Dealer ID</span>
@@ -2336,30 +2493,121 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                 </div>
               </div>
 
+              {/* Dealer Filter Tabs */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+                <button
+                  onClick={() => setDealerStatusFilter('ALL')}
+                  className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                    dealerStatusFilter === 'ALL'
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
+                      : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <span>All Dealers</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/30 text-white font-mono">
+                    {dealers.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setDealerStatusFilter('PENDING')}
+                  className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                    dealerStatusFilter === 'PENDING'
+                      ? 'bg-amber-600 text-white shadow-md shadow-amber-600/25'
+                      : 'bg-slate-900 text-amber-400 hover:text-amber-300 border border-slate-800'
+                  }`}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Pending Review</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 text-amber-300 font-mono font-bold">
+                    {dealers.filter(d => d.status === 'PENDING' || d.status === 'Pending').length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setDealerStatusFilter('ACTIVE')}
+                  className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                    dealerStatusFilter === 'ACTIVE'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                      : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Active &amp; Approved</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 font-mono">
+                    {dealers.filter(d => d.status === 'ACTIVE' || d.status === 'Approved' || d.status === 'Active').length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setDealerStatusFilter('REJECTED')}
+                  className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                    dealerStatusFilter === 'REJECTED'
+                      ? 'bg-rose-600 text-white shadow-md shadow-rose-600/25'
+                      : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Rejected / Suspended</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500/20 text-rose-300 font-mono">
+                    {dealers.filter(d => d.status === 'REJECTED' || d.status === 'Suspended' || d.status === 'Rejected').length}
+                  </span>
+                </button>
+              </div>
+
               {/* Dealers Cards & Table */}
               <div className="space-y-3">
-                {dealers.filter(d => 
-                  (d.name || '').toLowerCase().includes(dealerSearch.toLowerCase()) ||
-                  (d.mobile || '').includes(dealerSearch) ||
-                  (d.gstin && d.gstin.toLowerCase().includes(dealerSearch.toLowerCase()))
-                ).length === 0 ? (
+                {dealers.filter(d => {
+                  const searchMatch = (d.name || '').toLowerCase().includes(dealerSearch.toLowerCase()) ||
+                    (d.mobile || '').includes(dealerSearch) ||
+                    (d.email || '').toLowerCase().includes(dealerSearch.toLowerCase()) ||
+                    (d.gstin && d.gstin.toLowerCase().includes(dealerSearch.toLowerCase()));
+                  if (!searchMatch) return false;
+                  if (dealerStatusFilter === 'PENDING') return d.status === 'PENDING' || d.status === 'Pending';
+                  if (dealerStatusFilter === 'ACTIVE') return d.status === 'ACTIVE' || d.status === 'Approved' || d.status === 'Active';
+                  if (dealerStatusFilter === 'REJECTED') return d.status === 'REJECTED' || d.status === 'Suspended' || d.status === 'Rejected';
+                  return true;
+                }).length === 0 ? (
                   <div className="p-12 text-center text-slate-400 bg-slate-950 rounded-2xl border border-slate-800">
                     <Building2 className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                    <p className="text-sm font-bold text-slate-300">No registered dealers found</p>
-                    <p className="text-xs text-slate-500 mt-1">Dealers will appear here once registered.</p>
+                    <p className="text-sm font-bold text-slate-300">No dealers match the selected filter</p>
+                    <p className="text-xs text-slate-500 mt-1">Try changing your search query or status filter tab.</p>
                   </div>
                 ) : (
                   dealers
-                    .filter(d => 
-                      (d.name || '').toLowerCase().includes(dealerSearch.toLowerCase()) ||
-                      (d.mobile || '').includes(dealerSearch) ||
-                      (d.gstin && d.gstin.toLowerCase().includes(dealerSearch.toLowerCase()))
-                    )
+                    .filter(d => {
+                      const searchMatch = (d.name || '').toLowerCase().includes(dealerSearch.toLowerCase()) ||
+                        (d.mobile || '').includes(dealerSearch) ||
+                        (d.email || '').toLowerCase().includes(dealerSearch.toLowerCase()) ||
+                        (d.gstin && d.gstin.toLowerCase().includes(dealerSearch.toLowerCase()));
+                      if (!searchMatch) return false;
+                      if (dealerStatusFilter === 'PENDING') return d.status === 'PENDING' || d.status === 'Pending';
+                      if (dealerStatusFilter === 'ACTIVE') return d.status === 'ACTIVE' || d.status === 'Approved' || d.status === 'Active';
+                      if (dealerStatusFilter === 'REJECTED') return d.status === 'REJECTED' || d.status === 'Suspended' || d.status === 'Rejected';
+                      return true;
+                    })
                     .map(dealer => (
                     <div 
                       key={dealer.id}
-                      className="bg-slate-950 rounded-2xl border border-slate-800 p-5 space-y-4 hover:border-slate-700 transition"
+                      className={`bg-slate-950 rounded-2xl border p-5 space-y-4 hover:border-slate-700 transition ${
+                        dealer.status === 'PENDING' || dealer.status === 'Pending'
+                          ? 'border-amber-500/40 ring-1 ring-amber-500/20'
+                          : 'border-slate-800'
+                      }`}
                     >
+                      {/* Pending Review Notice Banner */}
+                      {(dealer.status === 'PENDING' || dealer.status === 'Pending') && (
+                        <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                          <div className="flex items-center gap-2 text-amber-300 font-semibold">
+                            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                            <span>New Dealer Registration awaiting Super Admin Review &amp; Zoho Linking</span>
+                          </div>
+                          <span className="text-[11px] text-amber-400/80 font-mono">
+                            Registered: {dealer.createdAt ? new Date(dealer.createdAt).toLocaleDateString('en-IN') : 'Recently'}
+                          </span>
+                        </div>
+                      )}
+
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-slate-800">
                         <div>
                           <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -2380,8 +2628,13 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
                           <h3 className="text-base font-bold text-white">{dealer.name || 'Registered Dealer'}</h3>
                           <p className="text-xs text-slate-400 mt-0.5">
-                            Contact Person: <strong className="text-slate-300">{dealer.contactPerson || dealer.name || 'Authorized Contact'}</strong> &bull; Mobile: <span className="font-mono text-slate-300">+91 {dealer.mobile || 'N/A'}</span>
+                            Contact Person: <strong className="text-slate-300">{dealer.contactPerson || dealer.name || 'Authorized Contact'}</strong> &bull; Mobile: <span className="font-mono text-slate-300">+91 {dealer.mobile || 'N/A'}</span> &bull; Email: <span className="font-mono text-slate-300">{dealer.email || 'N/A'}</span>
                           </p>
+                          {dealer.address && (
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              Address: <span className="text-slate-400">{dealer.address}{dealer.city ? `, ${dealer.city}` : ''}</span>
+                            </p>
+                          )}
                         </div>
 
                         {/* Status Badge */}
@@ -2462,6 +2715,15 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                           </button>
 
                           <button
+                            onClick={() => handleCreateZohoCustomer(dealer.id)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-indigo-200 text-xs font-bold border border-indigo-500/30 flex items-center gap-1.5 transition cursor-pointer"
+                            title="Create or link customer in Zoho Inventory"
+                          >
+                            <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>{dealer.zohoVerified ? 'Zoho Linked ✓' : 'Create / Link in Zoho'}</span>
+                          </button>
+
+                          <button
                             onClick={async () => {
                               playClickSound();
                               try {
@@ -2470,7 +2732,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                                 if (data.existsInZoho) {
                                   playSuccessSound();
                                   setSyncToast(`✓ Dealer verified in Zoho Inventory (${data.zohoContact?.companyName || data.zohoContact?.contactName || 'Active'}).`);
-                                  setDealers(prev => prev.map(d => d.id === dealer.id ? { ...d, zohoVerified: true, zohoDetails: data.zohoContact } : d));
+                                  setDealers(prev => prev.map(d => d.id === dealer.id ? { ...d, zohoVerified: true, zohoDetails: data.zohoContact, zohoContactId: data.zohoContact?.contactId } : d));
                                 } else {
                                   playWarningSound();
                                   setSyncToast(`⚠️ Record NOT found in Zoho Inventory for ${dealer.email}. Create customer in Zoho first.`);
@@ -2481,7 +2743,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                                 setSyncToast('Failed to check Zoho status.');
                               }
                             }}
-                            className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold border border-slate-800 flex items-center gap-1.5"
+                            className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold border border-slate-800 flex items-center gap-1.5 cursor-pointer"
                             title="Verify customer record in Zoho Inventory"
                           >
                             <RotateCw className="w-3.5 h-3.5 text-slate-400" />
@@ -2493,22 +2755,34 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                               playClickSound();
                               setSelectedDealer(dealer);
                             }}
-                            className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold border border-slate-800"
+                            className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold border border-slate-800 cursor-pointer"
                           >
                             Edit Credit Limit
                           </button>
 
                           {dealer.status !== 'Approved' && dealer.status !== 'ACTIVE' && dealer.status !== 'Active' ? (
-                            <button
-                              onClick={() => handleUpdateDealer(dealer.id, { status: 'ACTIVE', zohoVerified: true })}
-                              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20"
-                            >
-                              Approve Dealer
-                            </button>
+                            <>
+                              <button
+                                onClick={() => handleApproveDealer(dealer)}
+                                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Approve &amp; Activate</span>
+                              </button>
+                              {dealer.status === 'PENDING' && (
+                                <button
+                                  onClick={() => handleRejectDealer(dealer)}
+                                  className="px-3.5 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 text-xs font-bold border border-rose-600/30 flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                  <span>Reject</span>
+                                </button>
+                              )}
+                            </>
                           ) : (
                             <button
                               onClick={() => handleUpdateDealer(dealer.id, { status: 'Suspended' })}
-                              className="px-3.5 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 text-xs font-bold border border-rose-600/30"
+                              className="px-3.5 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 text-xs font-bold border border-rose-600/30 cursor-pointer"
                             >
                               Suspend Access
                             </button>

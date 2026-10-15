@@ -24,6 +24,12 @@ import {
   removeFromCustomerCart, 
   clearCustomerCart 
 } from './utils/customerCart';
+import { 
+  getStoredUser, 
+  setAuthSession, 
+  clearAuthSession,
+  setupInactivityAutoLogout
+} from './utils/authSession';
 
 const DEFAULT_PRODUCTS = [
   {
@@ -218,14 +224,44 @@ export default function App() {
 
   // Profile modal state
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('plumbmart_user');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [currentUser, setCurrentUser] = useState(() => getStoredUser());
+
+  // Listen for auth logout events and multi-tab logout sync
+  useEffect(() => {
+    const handleAuthLogout = () => {
+      setCurrentUser(null);
+    };
+    const handleStorageChange = (e) => {
+      if (e.key === 'plumbmart_auth_logout_broadcast' || (e.key === 'plumbmart_user' && !e.newValue)) {
+        setCurrentUser(null);
+      }
+    };
+    window.addEventListener('plumbmart_auth_logout', handleAuthLogout);
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('plumbmart_auth_logout', handleAuthLogout);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  // Global inactivity auto-logout tracking and expiration handler
+  useEffect(() => {
+    const cleanup = setupInactivityAutoLogout(() => {
+      setCurrentUser(null);
+      showToast('Session expired due to inactivity. Signed out for security.');
+    });
+
+    const handleSessionExpired = (e) => {
+      setCurrentUser(null);
+      showToast(e.detail?.message || 'Session expired due to inactivity. Signed out for security.');
+    };
+    window.addEventListener('plumbmart_session_expired', handleSessionExpired);
+
+    return () => {
+      cleanup();
+      window.removeEventListener('plumbmart_session_expired', handleSessionExpired);
+    };
+  }, []);
 
   // Listen to customer_cart_updated event to keep cartItems synchronized
   useEffect(() => {
@@ -273,7 +309,11 @@ export default function App() {
   const handleAddToCart = (product) => {
     const updated = addToCustomerCart(product, 1);
     setCartItems(updated);
-    showToast(`Added ${product.name.slice(0, 24)}... to bucket`);
+    if (!currentUser) {
+      showToast(`Added ${product.name.slice(0, 20)}... to bucket (Login required to checkout)`);
+    } else {
+      showToast(`Added ${product.name.slice(0, 24)}... to bucket`);
+    }
   };
 
   const handleUpdateQuantity = (productId, newQuantity) => {
@@ -295,43 +335,27 @@ export default function App() {
     showToast(`Order #${orderId} confirmed for ₹${total.toLocaleString('en-IN')}`);
   };
 
-  const handleLoginSuccess = (user) => {
+  const handleLoginSuccess = (user, token) => {
     setCurrentUser(user);
-    try {
-      localStorage.setItem('plumbmart_user', JSON.stringify(user));
-    } catch {
-      // ignore
-    }
+    setAuthSession(user, token);
     showToast(`Welcome back, ${user.name}!`);
   };
 
-  const handleRegisterSuccess = (user) => {
+  const handleRegisterSuccess = (user, token) => {
     setCurrentUser(user);
-    try {
-      localStorage.setItem('plumbmart_user', JSON.stringify(user));
-    } catch {
-      // ignore
-    }
+    setAuthSession(user, token);
     showToast(`Account registered for ${user.name}!`);
   };
 
   const handleLogout = () => {
+    clearAuthSession();
     setCurrentUser(null);
-    try {
-      localStorage.removeItem('plumbmart_user');
-    } catch {
-      // ignore
-    }
     showToast('Signed out of account');
   };
 
-  const handleAdminLoginSuccess = (adminUser) => {
+  const handleAdminLoginSuccess = (adminUser, token) => {
     setCurrentUser(adminUser);
-    try {
-      localStorage.setItem('plumbmart_user', JSON.stringify(adminUser));
-    } catch {
-      // ignore
-    }
+    setAuthSession(adminUser, token);
     showToast('Authenticated as Administrator!');
   };
 

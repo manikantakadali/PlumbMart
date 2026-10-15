@@ -80,7 +80,7 @@ async function sendEmailOtp({ email, name, mobile, role = 'Customer' }) {
   }
 
   const otp = generateOtp();
-  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+  const expiresAt = Date.now() + 60 * 1000; // 1 minute (60 seconds)
 
   // Persist session to disk
   const store = getOtpStore();
@@ -119,7 +119,7 @@ async function sendEmailOtp({ email, name, mobile, role = 'Customer' }) {
           </div>
           
           <p style="font-size: 11px; color: #94a3b8; line-height: 1.4; margin-bottom: 0;">
-            &bull; This verification code expires in <b>10 minutes</b>.<br/>
+            &bull; This verification code expires in <b>1 minute (60 seconds)</b>.<br/>
             &bull; Do not share this code with anyone. PlumbMart representatives will never ask for your verification code.
           </p>
         </div>
@@ -156,7 +156,7 @@ async function sendEmailOtp({ email, name, mobile, role = 'Customer' }) {
     email: cleanEmail,
     emailSentViaSmtp,
     devOtp: otp, // surfaced for development convenience
-    expiresInSeconds: 600
+    expiresInSeconds: 60
   };
 }
 
@@ -193,7 +193,7 @@ function verifyEmailOtp(email, otp) {
   if (Date.now() > session.expiresAt) {
     store.delete(cleanEmail);
     persistOtpStore(store);
-    return { valid: false, error: 'The verification code has expired. Please request a new OTP.' };
+    return { valid: false, error: 'The verification code has expired (1-minute limit reached). Please request a fresh OTP.' };
   }
 
   session.attempts = (session.attempts || 0) + 1;

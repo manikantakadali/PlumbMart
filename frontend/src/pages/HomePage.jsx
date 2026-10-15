@@ -1,6 +1,7 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
+import ProductCard from '../components/ProductCard';
 import BucketDrawer from '../components/BucketDrawer';
 import { ProfileModal } from '../components/AuthModals';
 import Footer from '../components/Footer';
@@ -18,7 +19,8 @@ import {
   CheckCircle2,
   Award,
   Box,
-  Droplets
+  Droplets,
+  Lock
 } from 'lucide-react';
 import { BucketIcon } from '../components/Header';
 
@@ -50,7 +52,9 @@ export default function HomePage({
   isCartOpen,
   setIsCartOpen
 }) {
+  const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = React.useState('All Products');
+  const [visibleCount, setVisibleCount] = React.useState(15);
 
   const scrollToCompany = () => {
     const element = document.getElementById('company-section');
@@ -59,16 +63,49 @@ export default function HomePage({
     }
   };
 
-  const filteredProducts = products.filter((p) => {
+  const scrollToProducts = () => {
+    const element = document.getElementById('store-products-section');
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleBuyNow = (product) => {
+    const inCart = (cartItems || []).find((item) => item.id === product.id);
+    if (!inCart) {
+      onAddToCart(product);
+    }
+    if (currentUser) {
+      navigate('/customer/checkout');
+    } else {
+      navigate('/login?redirect=checkout');
+    }
+  };
+
+  const handlePortalNavigation = (targetPath, role = 'Customer') => {
+    if (currentUser) {
+      navigate(targetPath);
+    } else {
+      navigate(`/login?redirect=${role.toLowerCase()}`);
+    }
+  };
+
+  React.useEffect(() => {
+    setVisibleCount(15);
+  }, [selectedCategory, searchQuery]);
+
+  const filteredProducts = (products || []).filter((p) => {
     const matchesCategory = selectedCategory === 'All Products' || p.category === selectedCategory;
+    const query = (searchQuery || '').toLowerCase();
     const matchesSearch = 
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchQuery.toLowerCase());
+      p.name.toLowerCase().includes(query) ||
+      (p.brand && p.brand.toLowerCase().includes(query)) ||
+      (p.category && p.category.toLowerCase().includes(query));
     return matchesCategory && matchesSearch;
   });
 
-  const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+  const displayedProducts = filteredProducts.slice(0, visibleCount);
+  const totalCartCount = (cartItems || []).reduce((acc, item) => acc + item.quantity, 0);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
@@ -140,13 +177,13 @@ export default function HomePage({
                 <span>What We Do &amp; Solutions</span>
                 <ArrowDown className="w-4 h-4" />
               </button>
-              <Link
-                to="/customer/products"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-bold text-xs sm:text-sm shadow-xs transition active:scale-95"
+              <button
+                onClick={scrollToProducts}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-bold text-xs sm:text-sm shadow-xs transition active:scale-95 cursor-pointer"
               >
                 <span>Browse Store Products</span>
                 <ArrowRight className="w-4 h-4 text-blue-600" />
-              </Link>
+              </button>
             </div>
           </div>
 
@@ -207,13 +244,14 @@ export default function HomePage({
             </div>
 
             <div className="pt-6 mt-6 border-t border-slate-100">
-              <Link
-                to="/customer/products"
-                className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition active:scale-98"
+              <button
+                type="button"
+                onClick={() => handlePortalNavigation('/customer/products', 'Customer')}
+                className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition active:scale-98 cursor-pointer"
               >
                 <span>Enter Customer Store</span>
                 <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+              </button>
             </div>
           </div>
 
@@ -251,13 +289,14 @@ export default function HomePage({
             </div>
 
             <div className="pt-6 mt-6 border-t border-slate-100">
-              <Link
-                to="/dealer/products"
-                className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition active:scale-98"
+              <button
+                type="button"
+                onClick={() => handlePortalNavigation('/dealer/products', 'Dealer')}
+                className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition active:scale-98 cursor-pointer"
               >
                 <span>Dealer B2B Portal</span>
                 <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+              </button>
             </div>
           </div>
 
@@ -295,17 +334,177 @@ export default function HomePage({
             </div>
 
             <div className="pt-6 mt-6 border-t border-slate-100">
-              <Link
-                to="/plumber"
-                className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md shadow-amber-600/20 transition active:scale-98"
+              <button
+                type="button"
+                onClick={() => handlePortalNavigation('/plumber', 'Plumber')}
+                className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md shadow-amber-600/20 transition active:scale-98 cursor-pointer"
               >
                 <span>Plumber Pro App</span>
                 <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+              </button>
             </div>
           </div>
 
         </div>
+
+        {/* Section: Live Store Products Catalog */}
+        <section id="store-products-section" className="space-y-6 scroll-mt-20">
+          
+          {/* Section Header */}
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-slate-200 pb-4">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold shadow-2xs mb-2">
+                <Box className="w-3.5 h-3.5 text-blue-600" />
+                <span>Certified Master Inventory • Same-Day Dispatch</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                Browse Store Products
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-xl">
+                Genuine CPVC, UPVC pipes, brass valves, single lever mixers, and tools with instant site delivery.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handlePortalNavigation('/customer/products', 'Customer')}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+              >
+                <span>View Full Catalog</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Guest Shopping Mode / Login Required to Buy Banner */}
+          {!currentUser && (
+            <div className="p-3.5 bg-amber-50/90 border border-amber-200/90 rounded-2xl text-amber-900 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-amber-100/80 text-amber-700 shrink-0">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-amber-950 block">Login Access Required to Buy</span>
+                  <span className="text-[11px] text-amber-800">
+                    You can freely browse products and add items to your bucket. To checkout and place orders, mobile login with OTP verification is required.
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Link
+                  to="/login?redirect=checkout"
+                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition active:scale-95"
+                >
+                  Login Access
+                </Link>
+                <Link
+                  to="/register?redirect=checkout"
+                  className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl transition active:scale-95"
+                >
+                  Register
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* Category Filter Pills Bar */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 shrink-0 cursor-pointer ${
+                  selectedCategory === cat
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25 scale-[1.02]'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/90 shadow-2xs'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {/* Search feedback & product count */}
+          <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+            <span>
+              Showing <strong className="text-slate-800">{displayedProducts.length}</strong> of{' '}
+              <strong className="text-slate-800">{filteredProducts.length}</strong> products
+              {selectedCategory !== 'All Products' && (
+                <span> in <span className="text-blue-600 font-semibold">{selectedCategory}</span></span>
+              )}
+              {searchQuery && (
+                <span> matching &ldquo;<span className="text-blue-600 font-semibold">{searchQuery}</span>&rdquo;</span>
+              )}
+            </span>
+
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="text-xs text-blue-600 hover:underline font-semibold"
+              >
+                Clear Search
+              </button>
+            )}
+          </div>
+
+          {/* Product Cards Grid: Compact Small Cards */}
+          {filteredProducts.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+              {displayedProducts.map((product) => {
+                const inCart = (cartItems || []).find((item) => item.id === product.id);
+                return (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    cartItem={inCart}
+                    onAddToCart={onAddToCart}
+                    onUpdateQuantity={onUpdateQuantity}
+                    onBuyNow={handleBuyNow}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-500 shadow-2xs">
+              <Box className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+              <p className="font-bold text-sm text-slate-700">No products found</p>
+              <p className="text-xs text-slate-400 mt-1">
+                Try selecting &apos;All Products&apos; or modifying your search query.
+              </p>
+              <button
+                onClick={() => {
+                  setSelectedCategory('All Products');
+                  setSearchQuery('');
+                }}
+                className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+              >
+                Reset Catalog Filter
+              </button>
+            </div>
+          )}
+
+          {/* Show More / Load More Button */}
+          {filteredProducts.length > displayedProducts.length && (
+            <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <button
+                onClick={() => setVisibleCount((prev) => prev + 15)}
+                className="px-6 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+              >
+                Load More Products ({filteredProducts.length - displayedProducts.length} remaining)
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePortalNavigation('/customer/products', 'Customer')}
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition active:scale-95 cursor-pointer"
+              >
+                <span>Open Dedicated Customer Store</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+        </section>
 
         {/* Section 3: How PlumbMart Works (4-Step Process) */}
         <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-10 border border-slate-800 shadow-xl space-y-8">
@@ -370,13 +569,14 @@ export default function HomePage({
                 Product Categories We Supply
               </h3>
             </div>
-            <Link
-              to="/customer/products"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700"
+            <button
+              type="button"
+              onClick={() => handlePortalNavigation('/customer/products', 'Customer')}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
             >
               <span>View All Store Products</span>
               <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -417,10 +617,10 @@ export default function HomePage({
                 link: '/customer/products?category=Tools%20%26%20Sealants'
               }
             ].map((catItem, idx) => (
-              <Link
+              <div
                 key={idx}
-                to={catItem.link}
-                className="group bg-white rounded-2xl overflow-hidden border border-slate-200 hover:border-blue-400 hover:shadow-lg transition-all duration-300 flex flex-col"
+                onClick={() => handlePortalNavigation(catItem.link, 'Customer')}
+                className="cursor-pointer group bg-white rounded-2xl overflow-hidden border border-slate-200 hover:border-blue-400 hover:shadow-lg transition-all duration-300 flex flex-col"
               >
                 <div className="h-32 w-full overflow-hidden bg-slate-100 relative">
                   <img
@@ -447,7 +647,7 @@ export default function HomePage({
                     <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
                   </div>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         </div>
@@ -484,6 +684,19 @@ export default function HomePage({
         </div>
 
       </main>
+
+      {/* Floating Bucket Shortcut Button (for mobile convenience) */}
+      {totalCartCount > 0 && (
+        <div className="fixed bottom-6 right-6 z-30 sm:hidden">
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-blue-600 text-white shadow-xl shadow-blue-600/30 font-bold text-xs active:scale-95 transition"
+          >
+            <BucketIcon className="w-4 h-4" />
+            <span>Bucket ({totalCartCount})</span>
+          </button>
+        </div>
+      )}
 
       {/* Footer */}
       <Footer onCategoryClick={(cat) => setSelectedCategory(cat)} />

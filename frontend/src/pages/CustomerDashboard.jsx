@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { clearAuthSession } from '../utils/authSession';
 import { 
   Droplets, 
   ArrowLeft, 
@@ -28,8 +29,23 @@ import {
 } from 'lucide-react';
 
 export default function CustomerDashboard({ currentUser, onLogout }) {
+  const navigate = useNavigate();
+
+  // Auth guard: Require Customer login
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/login?redirect=customer', { replace: true });
+    }
+  }, [currentUser, navigate]);
+
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'addresses' | 'saved' | 'support'
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  const handleLogoutClick = () => {
+    clearAuthSession();
+    if (onLogout) onLogout();
+    navigate('/login');
+  };
 
   // Dynamic Customer Profile & State
   const activeMobile = currentUser?.mobile || '9876543210';
@@ -413,7 +429,7 @@ export default function CustomerDashboard({ currentUser, onLogout }) {
               </Link>
               {onLogout && (
                 <button
-                  onClick={onLogout}
+                  onClick={handleLogoutClick}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl text-rose-600 hover:bg-rose-50 transition"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -469,7 +485,7 @@ export default function CustomerDashboard({ currentUser, onLogout }) {
                 </Link>
                 {onLogout && (
                   <button
-                    onClick={onLogout}
+                    onClick={handleLogoutClick}
                     className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-slate-200 text-xs font-semibold transition"
                   >
                     Logout

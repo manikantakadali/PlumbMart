@@ -1,15 +1,37 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShieldCheck, Lock, Mail, ArrowLeft, KeyRound, Droplets, Eye, EyeOff } from 'lucide-react';
+import { setAuthSession } from '../utils/authSession';
 
 export default function AdminLoginPage({ onAdminLoginSuccess }) {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@plumbmart.com');
-  const [password, setPassword] = useState('admin123');
-  const [securityPin, setSecurityPin] = useState('123456');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [securityPin, setSecurityPin] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState('');
+
+  // Enforce blank fields on load and prevent browser password managers from injecting credentials
+  React.useEffect(() => {
+    setEmail('');
+    setPassword('');
+    setSecurityPin('');
+    const t1 = setTimeout(() => {
+      setEmail('');
+      setPassword('');
+      setSecurityPin('');
+    }, 50);
+    const t2 = setTimeout(() => {
+      setEmail('');
+      setPassword('');
+      setSecurityPin('');
+    }, 200);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
 
   const [loading, setLoading] = useState(false);
 
@@ -64,8 +86,9 @@ export default function AdminLoginPage({ onAdminLoginSuccess }) {
       }
 
       const adminUser = data.user;
+      setAuthSession(adminUser, data.token);
       if (onAdminLoginSuccess) {
-        onAdminLoginSuccess(adminUser);
+        onAdminLoginSuccess(adminUser, data.token);
       }
       navigate('/admin');
     } catch (err) {
@@ -76,6 +99,7 @@ export default function AdminLoginPage({ onAdminLoginSuccess }) {
         role: 'Admin',
         accessLevel: 'SuperAdmin'
       };
+      setAuthSession(fallbackAdmin, `plumbmart-admin-${Date.now()}`);
       if (onAdminLoginSuccess) {
         onAdminLoginSuccess(fallbackAdmin);
       }
@@ -133,15 +157,37 @@ export default function AdminLoginPage({ onAdminLoginSuccess }) {
 
           {/* Admin Form */}
           <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
+            {/* Hidden decoy fields to absorb browser password manager auto-population */}
+            <input
+              type="text"
+              name="decoy_username_trap"
+              tabIndex={-1}
+              aria-hidden="true"
+              autoComplete="off"
+              style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }}
+            />
+            <input
+              type="password"
+              name="decoy_password_trap"
+              tabIndex={-1}
+              aria-hidden="true"
+              autoComplete="off"
+              style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }}
+            />
+
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                 Admin Email / Username
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
                 <input
                   type="email"
+                  name="plumb_adm_usr"
                   required
+                  readOnly
+                  onFocus={(e) => e.target.removeAttribute('readOnly')}
+                  onClick={(e) => e.target.removeAttribute('readOnly')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter admin email address"
@@ -156,12 +202,17 @@ export default function AdminLoginPage({ onAdminLoginSuccess }) {
                 Admin Password
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
                 <input
                   type={showPassword ? "text" : "password"}
+                  name="plumb_adm_pwd"
                   required
+                  readOnly
+                  onFocus={(e) => e.target.removeAttribute('readOnly')}
+                  onClick={(e) => e.target.removeAttribute('readOnly')}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter admin password"
                   autoComplete="new-password"
                   className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition"
                 />
@@ -181,14 +232,18 @@ export default function AdminLoginPage({ onAdminLoginSuccess }) {
                 Security PIN (MFA)
               </label>
               <div className="relative">
-                <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
                 <input
                   type={showPin ? "text" : "password"}
+                  name="plumb_adm_pin"
+                  readOnly
+                  onFocus={(e) => e.target.removeAttribute('readOnly')}
+                  onClick={(e) => e.target.removeAttribute('readOnly')}
                   value={securityPin}
                   onChange={(e) => setSecurityPin(e.target.value)}
                   placeholder="Enter 6-digit PIN"
                   maxLength={6}
-                  autoComplete="off"
+                  autoComplete="one-time-code"
                   className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition font-mono"
                 />
                 <button

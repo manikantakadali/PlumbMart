@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import DealerLayout from '../components/DealerLayout';
 import { 
   Box, 
@@ -32,6 +32,7 @@ const CATEGORIES = [
 ];
 
 export default function DealerProductsPage({ currentUser, onLogout }) {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlCategory = searchParams.get('category');
 
@@ -40,6 +41,13 @@ export default function DealerProductsPage({ currentUser, onLogout }) {
   const [selectedCategory, setSelectedCategory] = useState(urlCategory || 'All Categories');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSuspendedModalOpen, setIsSuspendedModalOpen] = useState(false);
+
+  // Auth guard: Require Dealer login
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/login?redirect=dealer', { replace: true });
+    }
+  }, [currentUser, navigate]);
 
   useEffect(() => {
     if (urlCategory) {
