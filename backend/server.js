@@ -43,6 +43,7 @@ const {
   exchangeCodeForTokens,
   getConnectionStatus,
   getStoredTokens,
+  loadTokensFromDb,
   fetchOrganizations,
   fetchInventoryItems,
   getSyncedZohoProducts,
@@ -103,7 +104,11 @@ app.get('/', (req, res) => {
 app.get('/api/products', async (req, res) => {
   try {
     let products = [];
-    const status = getConnectionStatus();
+    let status = getConnectionStatus();
+    if (!status.isConnected && typeof loadTokensFromDb === 'function') {
+      await loadTokensFromDb();
+      status = getConnectionStatus();
+    }
     if (status.isConnected) {
       try {
         const zohoList = await getSyncedZohoProducts(req.query.refresh === 'true');
@@ -3000,10 +3005,14 @@ app.get('/api/zoho/callback', async (req, res) => {
 
   try {
     // Perform secure token exchange on backend
+    const host = req.headers['x-forwarded-host'] || req.headers.host || '';
+    const proto = req.headers['x-forwarded-proto'] || (host.includes('localhost') ? 'http' : 'https');
+    const autoRedirect = host && !host.includes('localhost') ? `${proto}://${host}/api/zoho/callback` : '';
     const resolvedAccountsServer = accountsServer || (location ? `https://accounts.zoho.${location}` : null);
     const tokenResult = await exchangeCodeForTokens({
       code,
-      accountsServer: resolvedAccountsServer
+      accountsServer: resolvedAccountsServer,
+      redirectUriOverride: autoRedirect
     });
 
     // Support JSON response if requested by client or API test
@@ -3114,7 +3123,11 @@ app.get('/api/zoho/callback', async (req, res) => {
  */
 app.get('/api/zoho/auth-url', (req, res) => {
   try {
-    const authUrl = generateAuthUrl(req.query.state || '');
+    const host = req.headers['x-forwarded-host'] || req.headers.host || '';
+    const proto = req.headers['x-forwarded-proto'] || (host.includes('localhost') ? 'http' : 'https');
+    const autoRedirect = host && !host.includes('localhost') ? `${proto}://${host}/api/zoho/callback` : '';
+    const redirectOverride = req.query.redirect_uri || autoRedirect;
+    const authUrl = generateAuthUrl(req.query.state || '', redirectOverride);
     if (req.query.redirect === 'true') {
       return res.redirect(authUrl);
     }

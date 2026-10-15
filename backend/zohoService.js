@@ -2,61 +2,113 @@ const fs = require('fs');
 const path = require('path');
 
 const TOKENS_FILE = path.join(__dirname, 'data', 'zoho_tokens.json');
+let memoryTokenCache = null;
 
 /**
  * Get Zoho Configuration from environment
  */
 function getZohoConfig() {
+  const isProd = process.env.NODE_ENV === 'production' || Boolean(process.env.RENDER) || Boolean(process.env.RENDER_EXTERNAL_URL);
+  const defaultRedirect = (isProd || process.env.RENDER_EXTERNAL_URL)
+    ? 'https://plumbmart.onrender.com/api/zoho/callback'
+    : 'http://localhost:5000/api/zoho/callback';
+
   return {
-    clientId: process.env.ZOHO_CLIENT_ID || '',
-    clientSecret: process.env.ZOHO_CLIENT_SECRET || '',
-    redirectUri: process.env.ZOHO_REDIRECT_URI || 'http://localhost:5000/api/zoho/callback',
+    clientId: process.env.ZOHO_CLIENT_ID || '1000.9F7034BDPCIHCG97E7UT4E8GUIK75Z',
+    clientSecret: process.env.ZOHO_CLIENT_SECRET || 'd241414f46c57eacd490430998825b34ffa231e714',
+    redirectUri: process.env.ZOHO_REDIRECT_URI || defaultRedirect,
     accountsUrl: (process.env.ZOHO_ACCOUNTS_URL || 'https://accounts.zoho.in').replace(/\/+$/, ''),
-    orgId: process.env.ZOHO_ORG_ID || '',
+    orgId: process.env.ZOHO_ORG_ID || '60091844668',
     scope: process.env.ZOHO_SCOPE || 'ZohoInventory.fullaccess.all'
   };
 }
 
 /**
- * Read stored tokens from backend/data/zoho_tokens.json
+ * Load tokens asynchronously from Supabase system_settings table
  */
-function getStoredTokens() {
+async function loadTokensFromDb() {
+  if (memoryTokenCache && memoryTokenCache.access_token) return memoryTokenCache;
   try {
-    if (fs.existsSync(TOKENS_FILE)) {
-      const raw = fs.readFileSync(TOKENS_FILE, 'utf-8');
-      return JSON.parse(raw);
+    const { query } = require('./db');
+    const res = await query("SELECT value FROM system_settings WHERE key = 'zoho_tokens'");
+    if (res.rows && res.rows.length > 0) {
+      memoryTokenCache = typeof res.rows[0].value === 'string' ? JSON.parse(res.rows[0].value) : res.rows[0].value;
+      try {
+        const dir = path.dirname(TOKENS_FILE);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(TOKENS_FILE, JSON.stringify(memoryTokenCache, null, 2), 'utf-8');
+      } catch (fErr) {}
+      return memoryTokenCache;
     }
   } catch (err) {
-    console.error('[Zoho Service] Error reading tokens file:', err.message);
+    // console.warn('[Zoho Service] loadTokensFromDb note:', err.message);
   }
   return null;
 }
 
+// Background preload of tokens from DB if not already loaded
+setTimeout(() => {
+  loadTokensFromDb().catch(() => {});
+}, 500);
+
 /**
- * Save tokens securely on backend
+ * Read stored tokens from memory cache or backend/data/zoho_tokens.json
+ */
+function getStoredTokens() {
+  if (memoryTokenCache && memoryTokenCache.access_token) {
+    return memoryTokenCache;
+  }
+  try {
+    if (fs.existsSync(TOKENS_FILE)) {
+      const raw = fs.readFileSync(TOKENS_FILE, 'utf-8');
+      memoryTokenCache = JSON.parse(raw);
+      return memoryTokenCache;
+    }
+  } catch (err) {
+    console.error('[Zoho Service] Error reading tokens file:', err.message);
+  }
+  return memoryTokenCache;
+}
+
+/**
+ * Save tokens securely on backend and persist to Supabase
  */
 function saveStoredTokens(tokenData) {
+  memoryTokenCache = tokenData;
   try {
     const dir = path.dirname(TOKENS_FILE);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokenData, null, 2), 'utf-8');
-    return true;
   } catch (err) {
     console.error('[Zoho Service] Error writing tokens file:', err.message);
-    throw new Error('Failed to persist Zoho OAuth tokens on backend.');
   }
+
+  // Persist to Supabase system_settings
+  try {
+    const { query } = require('./db');
+    query(
+      `INSERT INTO system_settings (key, value, updated_at) 
+       VALUES ('zoho_tokens', $1, NOW()) 
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [JSON.stringify(tokenData)]
+    ).catch(e => console.warn('[Zoho DB Token Persist Warning]:', e.message));
+  } catch (e) {}
+
+  return true;
 }
 
 /**
  * Generate Zoho Authorization URL for user consent
  */
-function generateAuthUrl(state = '') {
+function generateAuthUrl(state = '', redirectUriOverride = '') {
   const config = getZohoConfig();
   if (!config.clientId) {
     throw new Error('ZOHO_CLIENT_ID is not configured in backend environment.');
   }
+
+  const redirectUri = redirectUriOverride || config.redirectUri;
 
   const params = new URLSearchParams({
     scope: config.scope,
@@ -64,7 +116,7 @@ function generateAuthUrl(state = '') {
     response_type: 'code',
     access_type: 'offline',
     prompt: 'consent',
-    redirect_uri: config.redirectUri
+    redirect_uri: redirectUri
   });
 
   if (state) {
@@ -78,7 +130,7 @@ function generateAuthUrl(state = '') {
  * Exchange Authorization Code for Access & Refresh Tokens
  * Follows official Zoho OAuth 2.0 protocol
  */
-async function exchangeCodeForTokens({ code, accountsServer }) {
+async function exchangeCodeForTokens({ code, accountsServer, redirectUriOverride }) {
   const config = getZohoConfig();
 
   if (!config.clientId || !config.clientSecret) {
@@ -96,15 +148,17 @@ async function exchangeCodeForTokens({ code, accountsServer }) {
   const baseAccountsUrl = (accountsServer || config.accountsUrl || 'https://accounts.zoho.in').replace(/\/+$/, '');
   const tokenEndpoint = `${baseAccountsUrl}/oauth/v2/token`;
 
+  const redirectUri = (redirectUriOverride || config.redirectUri).trim();
+
   const bodyParams = new URLSearchParams({
     code: String(code).trim(),
     client_id: config.clientId.trim(),
     client_secret: config.clientSecret.trim(),
-    redirect_uri: config.redirectUri.trim(),
+    redirect_uri: redirectUri,
     grant_type: 'authorization_code'
   });
 
-  console.log(`[Zoho OAuth] Exchanging authorization code via ${tokenEndpoint}...`);
+  console.log(`[Zoho OAuth] Exchanging authorization code via ${tokenEndpoint}... (redirect_uri: ${redirectUri})`);
 
   let response;
   try {
@@ -246,7 +300,10 @@ async function refreshAccessToken() {
  * Get valid access token, refreshing automatically if close to expiry
  */
 async function getValidAccessToken() {
-  const tokens = getStoredTokens();
+  let tokens = getStoredTokens();
+  if (!tokens || !tokens.access_token) {
+    tokens = await loadTokensFromDb();
+  }
   if (!tokens || !tokens.access_token) {
     return null;
   }
@@ -1037,6 +1094,7 @@ async function createZohoCustomerContact({ name, email, mobile, companyName, gst
 module.exports = {
   getZohoConfig,
   getStoredTokens,
+  loadTokensFromDb,
   generateAuthUrl,
   exchangeCodeForTokens,
   refreshAccessToken,
