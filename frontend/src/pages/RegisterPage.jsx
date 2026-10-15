@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { 
   Droplets, 
@@ -68,8 +68,9 @@ export default function RegisterPage({ onRegisterSuccess }) {
   const [devSkipVerification, setDevSkipVerification] = useState(false);
 
   const [otpExpirySeconds, setOtpExpirySeconds] = useState(0);
+  const isVerifyingRef = useRef(false);
 
-  // Resend cooldown timer (re-enables Resend button after 60s)
+  // Resend cooldown timer (re-enables Resend button after 30s)
   useEffect(() => {
     let timer = null;
     if (resendCooldown > 0) {
@@ -107,6 +108,13 @@ export default function RegisterPage({ onRegisterSuccess }) {
       if (timer) clearInterval(timer);
     };
   }, [otpExpirySeconds]);
+
+  // Dynamic Auto-Submission when 6 digits OTP are entered
+  useEffect(() => {
+    if (otpStepActive && otpCode && otpCode.length === 6 && !loading && !isVerifyingRef.current) {
+      handleVerifyRegisterOtp(null, otpCode);
+    }
+  }, [otpCode, otpStepActive]);
 
   // Send Email OTP for registration verification
   const handleSendRegisterOtp = async () => {
@@ -214,6 +222,8 @@ export default function RegisterPage({ onRegisterSuccess }) {
   // Verify the Email OTP on registration page
   const handleVerifyRegisterOtp = async (e, customOtpValue) => {
     if (e && e.preventDefault) e.preventDefault();
+    if (isVerifyingRef.current) return;
+
     const candidateOtp = customOtpValue !== undefined ? customOtpValue : otpCode;
     const cleanOtp = String(candidateOtp || '').trim() || '123456';
 
@@ -222,6 +232,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
       return;
     }
 
+    isVerifyingRef.current = true;
     setLoading(true);
     setError('');
 
@@ -248,6 +259,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
         setResendCooldown(0);
         setIsOtpExpired(false);
         setLoading(false);
+        isVerifyingRef.current = false;
         return;
       }
 
@@ -280,6 +292,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
       setError('Verification failed. Please check connection and try again.');
     } finally {
       setLoading(false);
+      isVerifyingRef.current = false;
     }
   };
 
@@ -472,9 +485,9 @@ export default function RegisterPage({ onRegisterSuccess }) {
                     <span>Enter 6-Digit Email OTP</span>
                     <span className="text-[10px] text-emerald-600 font-normal">Check your inbox</span>
                   </label>
-                  {resendCooldown > 0 ? (
+                  {otpExpirySeconds > 0 && !isOtpExpired ? (
                     <span className="text-[11px] font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                      ⏱️ 0:{resendCooldown < 10 ? '0' : ''}{resendCooldown}
+                      ⏱️ {Math.floor(otpExpirySeconds / 60)}:{otpExpirySeconds % 60 < 10 ? '0' : ''}{otpExpirySeconds % 60}
                     </span>
                   ) : isOtpExpired ? (
                     <span className="text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 animate-pulse">
@@ -499,8 +512,20 @@ export default function RegisterPage({ onRegisterSuccess }) {
                       const val = e.target.value.replace(/\D/g, '').slice(0, 6);
                       setOtpCode(val);
                       setError('');
-                      if (val.length === 6 && !loading) {
+                      if (val.length === 6 && !loading && !isVerifyingRef.current) {
                         handleVerifyRegisterOtp(null, val);
+                      }
+                    }}
+                    onPaste={(e) => {
+                      const paste = (e.clipboardData || window.clipboardData).getData('text');
+                      const cleanPaste = paste.replace(/\D/g, '').slice(0, 6);
+                      if (cleanPaste.length === 6) {
+                        e.preventDefault();
+                        setOtpCode(cleanPaste);
+                        setError('');
+                        if (!loading && !isVerifyingRef.current) {
+                          handleVerifyRegisterOtp(null, cleanPaste);
+                        }
                       }
                     }}
                     placeholder="Enter 6-digit OTP"
