@@ -2880,27 +2880,49 @@ app.put('/api/orders/:id/status', async (req, res) => {
   db.notifications.unshift({
     id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
     title: `Order #${order.id} ${status}`,
-    message: `Your order #${order.id} status has been updated to "${status}" by PlumbMart Operations.`,
+    message: isCancelled 
+      ? `Your order #${order.id} has been cancelled by PlumbMart Operations.` 
+      : `Your order #${order.id} status has been updated to "${status}" by PlumbMart Operations.`,
     targetGroup: clientTarget,
-    priority: status.toLowerCase() === 'delivered' ? 'normal' : 'high',
+    priority: isCancelled ? 'urgent' : (status.toLowerCase() === 'delivered' ? 'normal' : 'high'),
+    type: 'ORDER_UPDATE',
+    status: status,
     sentAt: 'Just now',
     createdAt: new Date().toISOString(),
     sender: 'PlumbMart Logistics',
     orderId: order.id
   });
 
-  // Also notify plumbers when an order is finalized / marked delivered
-  db.notifications.unshift({
-    id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
-    title: `Order #${order.id} Verified & Closed`,
-    message: `Admin Operations verified the field task for Order #${order.id} (${order.clientName || 'Sri Venkateswara Distributors'}). Status: "${status}".`,
-    targetGroup: 'Plumbers',
-    priority: 'normal',
-    sentAt: 'Just now',
-    createdAt: new Date().toISOString(),
-    sender: 'PlumbMart Operations',
-    orderId: order.id
-  });
+  // Notify plumbers when an order is finalized / marked delivered or cancelled
+  if (isDelivered) {
+    db.notifications.unshift({
+      id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
+      title: `Order #${order.id} Verified & Closed`,
+      message: `Admin Operations verified the field task for Order #${order.id} (${order.clientName || 'Partner'}). Status: "${status}".`,
+      targetGroup: 'Plumbers',
+      priority: 'normal',
+      type: 'ORDER_UPDATE',
+      status: status,
+      sentAt: 'Just now',
+      createdAt: new Date().toISOString(),
+      sender: 'PlumbMart Operations',
+      orderId: order.id
+    });
+  } else if (isCancelled) {
+    db.notifications.unshift({
+      id: 'NOTIF-' + Math.floor(1000 + Math.random() * 9000),
+      title: `Order #${order.id} Field Task Cancelled`,
+      message: `Order #${order.id} has been cancelled by Operations. Material pickup/installation is halted.`,
+      targetGroup: 'Plumbers',
+      priority: 'high',
+      type: 'ORDER_UPDATE',
+      status: status,
+      sentAt: 'Just now',
+      createdAt: new Date().toISOString(),
+      sender: 'PlumbMart Operations',
+      orderId: order.id
+    });
+  }
 
   saveDb(db);
 

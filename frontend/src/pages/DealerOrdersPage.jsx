@@ -19,7 +19,8 @@ import {
   ExternalLink,
   MapPin,
   AlertCircle,
-  Wrench
+  Wrench,
+  XCircle
 } from 'lucide-react';
 import { getDealerHub } from '../utils/hubResolver';
 import { downloadTaxInvoice } from '../utils/invoiceGenerator';
@@ -43,7 +44,7 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
     gstin: '29ABCDE1234F1Z5'
   };
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (isBackground = false) => {
     try {
       let res;
       try {
@@ -59,8 +60,8 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
       const data = await res.json();
       if (data && data.success && Array.isArray(data.data) && data.data.length > 0) {
         setOrders(data.data);
-      } else {
-        // Default demo orders if empty
+      } else if (!isBackground) {
+        // Default demo orders if empty on initial load
         setOrders([
           {
             id: 'PM-881902',
@@ -151,37 +152,81 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
     } catch (err) {
       console.error('Error loading dealer orders:', err);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchOrders();
+    fetchOrders(false);
+
+    // Live background polling every 2.5s for instant multi-device / multi-tab synchronization
+    const pollTimer = setInterval(() => {
+      fetchOrders(true);
+    }, 2500);
 
     let bc = null;
     try {
       bc = new BroadcastChannel('plumbmart_orders');
       bc.onmessage = (msg) => {
-        if (msg.data && (
+        if (!msg.data) return;
+
+        if (msg.data.type === 'STATUS_UPDATED' && msg.data.orderId) {
+          // 1. Optimistic instant local state update (0ms delay)
+          setOrders(prev => prev.map(o => 
+            o.id === msg.data.orderId ? { ...o, status: msg.data.status } : o
+          ));
+          // 2. Fetch latest order state from server
+          setTimeout(() => fetchOrders(true), 600);
+        } else if (
           msg.data.type === 'NEW_ORDER' || 
-          msg.data.type === 'STATUS_UPDATED' || 
+          msg.data.type === 'ORDER_PLACED' || 
           msg.data.type === 'PLUMBER_RESPONSE_SUBMITTED'
-        )) {
-          fetchOrders();
+        ) {
+          fetchOrders(true);
         }
       };
     } catch (e) {}
 
-    const handleUpdate = () => fetchOrders();
-    window.addEventListener('plumbmart_order_created', handleUpdate);
-    window.addEventListener('plumbmart_order_updated', handleUpdate);
-    window.addEventListener('plumbmart_status_updated', handleUpdate);
+    // 2. Window Custom Event for intra-window triggers
+    const handleStatusUpdate = (e) => {
+      if (e.detail && e.detail.orderId && e.detail.status) {
+        setOrders(prev => prev.map(o => 
+          o.id === e.detail.orderId ? { ...o, status: e.detail.status } : o
+        ));
+      }
+      setTimeout(() => fetchOrders(true), 500);
+    };
+
+    const handleOrderUpdate = () => fetchOrders(true);
+
+    window.addEventListener('plumbmart_status_updated', handleStatusUpdate);
+    window.addEventListener('plumbmart_order_created', handleOrderUpdate);
+    window.addEventListener('plumbmart_order_updated', handleOrderUpdate);
+
+    // 3. Storage event listener for cross-tab sync
+    const handleStorage = (e) => {
+      if (e.key === 'plumbmart_status_broadcast' && e.newValue) {
+        try {
+          const payload = JSON.parse(e.newValue);
+          if (payload && payload.orderId && payload.status) {
+            setOrders(prev => prev.map(o => 
+              o.id === payload.orderId ? { ...o, status: payload.status } : o
+            ));
+          }
+        } catch (err) {}
+      } else if (e.key === 'plumbmart_last_order_broadcast') {
+        fetchOrders(true);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
 
     return () => {
+      clearInterval(pollTimer);
       if (bc) bc.close();
-      window.removeEventListener('plumbmart_order_created', handleUpdate);
-      window.removeEventListener('plumbmart_order_updated', handleUpdate);
-      window.removeEventListener('plumbmart_status_updated', handleUpdate);
+      window.removeEventListener('plumbmart_status_updated', handleStatusUpdate);
+      window.removeEventListener('plumbmart_order_created', handleOrderUpdate);
+      window.removeEventListener('plumbmart_order_updated', handleOrderUpdate);
+      window.removeEventListener('storage', handleStorage);
     };
   }, []);
 
@@ -350,6 +395,7 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
               const isExpanded = expandedOrderId === order.id;
               const isCreditOrder = order.paymentMethod && order.paymentMethod.includes('Credit');
               const isPaid = order.paymentStatus === 'Paid' || order.creditStatus === 'Settled';
+              const isCancelled = (order.status || '').toLowerCase() === 'cancelled';
 
               // Default tracking pipeline if missing
               const trackingSteps = order.tracking || [
@@ -379,10 +425,12 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
                             Zoho SO: {order.zohoSalesOrder}
                           </span>
                         )}
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
                           order.status === 'Delivered'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-indigo-50 text-indigo-700 border border-indigo-200 animate-pulse'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : isCancelled
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-indigo-50 text-indigo-700 border-indigo-200 animate-pulse'
                         }`}>
                           ● {order.status}
                         </span>
@@ -450,79 +498,123 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
                     </div>
                   </div>
 
-                  {/* Payment & Credit Due Date Card (Direct Requirement 4) */}
-                  <div className="my-5">
-                    {isCreditOrder ? (
-                      <div className={`rounded-2xl p-4 sm:p-5 border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
-                        isPaid 
-                          ? 'bg-emerald-50/70 border-emerald-200' 
-                          : 'bg-amber-50/80 border-amber-200'
-                      }`}>
-                        <div className="flex items-start gap-3">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                            isPaid ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white'
-                          }`}>
-                            <Calendar className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-slate-900">
-                                Payment Method: {order.paymentMethod}
-                              </span>
-                              <span className={`px-2 py-0.2 rounded text-[10px] font-bold ${
-                                isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'
-                              }`}>
-                                {isPaid ? '✓ Paid & Settled' : 'Payment Outstanding'}
-                              </span>
-                            </div>
-
-                            <div className="text-xs mt-1">
-                              {isPaid ? (
-                                <span className="text-emerald-700 font-semibold">
-                                  ✓ Invoice has been settled in full. Credit limit restored in Zoho CRM.
-                                </span>
-                              ) : (
-                                <span className="text-amber-900">
-                                  Credit Due Date: <strong className="text-amber-950 underline text-sm">{order.creditDueDate || 'Within 30 Days'}</strong>
-                                  <span className="text-slate-600 ml-2">({order.creditDueDays || 30} Days Credit Period)</span>
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                  {/* Cancelled Notice Card if order was cancelled */}
+                  {isCancelled && (
+                    <div className="my-5 bg-rose-50/90 border border-rose-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <XCircle className="w-5 h-5" />
                         </div>
-
-                        {!isPaid && (
-                          <button
-                            onClick={() => handleSettleInvoice(order.id)}
-                            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 whitespace-nowrap transition active:scale-95"
-                          >
-                            Pay Due Invoice Now
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between gap-3 text-xs">
-                        <div className="flex items-center gap-2.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          <span className="text-slate-700">
-                            Payment Method: <strong className="text-slate-900">{order.paymentMethod}</strong> (Paid Upfront • Tax Invoice Settled)
-                          </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-rose-950">
+                              Order #{order.id} Cancelled
+                            </span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                              Operations Action
+                            </span>
+                          </div>
+                          <p className="text-xs text-rose-700 mt-1">
+                            This order was cancelled by PlumbMart Operations. Outstanding credit liabilities or payments for this order have been released.
+                          </p>
                         </div>
-                        <span className="text-[11px] font-bold text-emerald-700">✓ No Credit Liability</span>
                       </div>
-                    )}
-                  </div>
+                      <span className="text-[11px] font-bold text-rose-700 shrink-0 bg-white border border-rose-200 px-3 py-1.5 rounded-xl">
+                        Zero Outstanding Due
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Payment & Credit Due Date Card (Direct Requirement 4 - Only when not cancelled) */}
+                  {!isCancelled && (
+                    <div className="my-5">
+                      {isCreditOrder ? (
+                        <div className={`rounded-2xl p-4 sm:p-5 border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+                          isPaid 
+                            ? 'bg-emerald-50/70 border-emerald-200' 
+                            : 'bg-amber-50/80 border-amber-200'
+                        }`}>
+                          <div className="flex items-start gap-3">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                              isPaid ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white'
+                            }`}>
+                              <Calendar className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-900">
+                                  Payment Method: {order.paymentMethod}
+                                </span>
+                                <span className={`px-2 py-0.2 rounded text-[10px] font-bold ${
+                                  isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'
+                                }`}>
+                                  {isPaid ? '✓ Paid & Settled' : 'Payment Outstanding'}
+                                </span>
+                              </div>
+
+                              <div className="text-xs mt-1">
+                                {isPaid ? (
+                                  <span className="text-emerald-700 font-semibold">
+                                    ✓ Invoice has been settled in full. Credit limit restored in Zoho CRM.
+                                  </span>
+                                ) : (
+                                  <span className="text-amber-900">
+                                    Credit Due Date: <strong className="text-amber-950 underline text-sm">{order.creditDueDate || 'Within 30 Days'}</strong>
+                                    <span className="text-slate-600 ml-2">({order.creditDueDays || 30} Days Credit Period)</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {!isPaid && (
+                            <button
+                              onClick={() => handleSettleInvoice(order.id)}
+                              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 whitespace-nowrap transition active:scale-95"
+                            >
+                              Pay Due Invoice Now
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between gap-3 text-xs">
+                          <div className="flex items-center gap-2.5">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span className="text-slate-700">
+                              Payment Method: <strong className="text-slate-900">{order.paymentMethod}</strong> (Paid Upfront • Tax Invoice Settled)
+                            </span>
+                          </div>
+                          <span className="text-[11px] font-bold text-emerald-700">✓ No Credit Liability</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Visual Order Fulfillment Stepper / Tracker */}
                   <div className="py-3">
                     <h4 className="text-xs font-bold text-slate-900 mb-4 flex items-center gap-2">
-                      <Truck className="w-4 h-4 text-indigo-600" />
+                      <Truck className={`w-4 h-4 ${isCancelled ? 'text-slate-400' : 'text-indigo-600'}`} />
                       <span>Live Fulfillment &amp; Dispatch Tracker</span>
                     </h4>
 
-                    {/* Stepper Timeline */}
-                    <div className="relative">
-                      <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 relative z-10">
+                    {isCancelled ? (
+                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-bold text-xs shrink-0">
+                            ✕
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-rose-900">Dispatch Halted &amp; Cancelled</span>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Order was cancelled by Operations. No physical shipment in transit.</p>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                          Cancelled
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 relative z-10">
                         {trackingSteps.map((step, idx) => {
                           const isDone = step.completed;
                           const isCurrent = !isDone && (idx === 0 || trackingSteps[idx - 1].completed);
@@ -563,6 +655,7 @@ export default function DealerOrdersPage({ currentUser, onLogout }) {
                         })}
                       </div>
                     </div>
+                  )}
                   </div>
 
                   {/* Expandable Order Details (Items & Delivery Site) */}

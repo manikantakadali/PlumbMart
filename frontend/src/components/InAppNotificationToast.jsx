@@ -10,7 +10,10 @@ import {
   Wrench, 
   User, 
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  XCircle,
+  AlertCircle,
+  AlertOctagon
 } from 'lucide-react';
 
 /**
@@ -229,27 +232,86 @@ export default function InAppNotificationToast({ role = 'Customer', onNotificati
   return (
     <aside 
       aria-label="Live In-App Notifications" 
-      className="fixed top-4 right-4 sm:top-5 sm:right-6 z-[999999] pointer-events-none flex flex-col gap-3 max-w-sm sm:max-w-md w-full px-2"
+      className="fixed top-3 inset-x-2.5 sm:inset-x-auto sm:top-5 sm:right-6 z-[999999] pointer-events-none flex flex-col gap-2.5 max-w-sm sm:max-w-md w-auto mx-auto sm:mx-0 px-1 sm:px-0"
     >
       {toasts.map((toast) => {
         const isUrgent = toast.priority === 'urgent';
         const isHigh = toast.priority === 'high';
 
-        // Badge styling based on target role
+        const titleLower = (toast.title || '').toLowerCase();
+        const msgLower = (toast.message || '').toLowerCase();
+        const isOrderRelated = toast.type === 'ORDER_UPDATE' || titleLower.includes('order #');
+        const isCancelled = titleLower.includes('cancelled') || msgLower.includes('cancelled');
+        const isDelivered = titleLower.includes('delivered') || msgLower.includes('delivered');
+        const isShipped = titleLower.includes('shipped') || titleLower.includes('out for delivery') || titleLower.includes('in transit') || msgLower.includes('shipped') || msgLower.includes('out for delivery');
+
+        // Badge styling based on type and status
         let theme = {
           badgeBg: 'bg-blue-600',
           badgeText: 'text-white',
-          accentBorder: 'border-blue-400',
+          accentBorder: 'border-slate-200/90',
+          cardBg: 'bg-white/95',
           iconBg: 'bg-blue-50 text-blue-600',
           progressBg: 'bg-blue-600',
           label: 'Customer Notice'
         };
 
-        if (role === 'Dealer' || toast.targetGroup === 'Dealers') {
+        if (isCancelled) {
+          theme = {
+            badgeBg: 'bg-rose-600',
+            badgeText: 'text-white',
+            accentBorder: 'border-rose-300 ring-2 ring-rose-500/10',
+            cardBg: 'bg-gradient-to-br from-rose-50/90 via-white to-white',
+            iconBg: 'bg-rose-100 text-rose-600',
+            progressBg: 'bg-rose-600',
+            label: 'Order Cancelled'
+          };
+        } else if (isDelivered) {
+          theme = {
+            badgeBg: 'bg-emerald-600',
+            badgeText: 'text-white',
+            accentBorder: 'border-emerald-200',
+            cardBg: 'bg-white/95',
+            iconBg: 'bg-emerald-100 text-emerald-600',
+            progressBg: 'bg-emerald-600',
+            label: 'Order Delivered'
+          };
+        } else if (isShipped) {
+          theme = {
+            badgeBg: 'bg-blue-600',
+            badgeText: 'text-white',
+            accentBorder: 'border-blue-200',
+            cardBg: 'bg-white/95',
+            iconBg: 'bg-blue-100 text-blue-600',
+            progressBg: 'bg-blue-600',
+            label: 'Order Dispatched'
+          };
+        } else if (isOrderRelated) {
+          theme = {
+            badgeBg: 'bg-indigo-600',
+            badgeText: 'text-white',
+            accentBorder: 'border-indigo-200',
+            cardBg: 'bg-white/95',
+            iconBg: 'bg-indigo-100 text-indigo-600',
+            progressBg: 'bg-indigo-600',
+            label: 'Order Update'
+          };
+        } else if (toast.type === 'DEALER_UPDATE') {
           theme = {
             badgeBg: 'bg-indigo-600',
             badgeText: 'text-white',
             accentBorder: 'border-indigo-400',
+            cardBg: 'bg-white/95',
+            iconBg: 'bg-indigo-50 text-indigo-600',
+            progressBg: 'bg-indigo-600',
+            label: 'Credit & Governance'
+          };
+        } else if (role === 'Dealer' || toast.targetGroup === 'Dealers') {
+          theme = {
+            badgeBg: 'bg-indigo-600',
+            badgeText: 'text-white',
+            accentBorder: 'border-indigo-400',
+            cardBg: 'bg-white/95',
             iconBg: 'bg-indigo-50 text-indigo-600',
             progressBg: 'bg-indigo-600',
             label: 'Dealer Bulletin'
@@ -259,18 +321,11 @@ export default function InAppNotificationToast({ role = 'Customer', onNotificati
             badgeBg: 'bg-emerald-600',
             badgeText: 'text-white',
             accentBorder: 'border-emerald-400',
+            cardBg: 'bg-white/95',
             iconBg: 'bg-emerald-50 text-emerald-600',
             progressBg: 'bg-emerald-600',
             label: 'Plumber Alert'
           };
-        }
-
-        if (toast.type === 'ORDER_UPDATE') {
-          theme.label = 'Order Update';
-          theme.iconBg = 'bg-amber-50 text-amber-600';
-          theme.badgeBg = 'bg-amber-600';
-        } else if (toast.type === 'DEALER_UPDATE') {
-          theme.label = 'Credit & Governance';
         }
 
         return (
@@ -278,7 +333,7 @@ export default function InAppNotificationToast({ role = 'Customer', onNotificati
             key={toast.id}
             role="status"
             aria-live="polite"
-            className="pointer-events-auto relative overflow-hidden bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/90 p-4 transition-all duration-300 transform translate-y-0 opacity-100 hover:shadow-indigo-100/50"
+            className={`pointer-events-auto relative overflow-hidden backdrop-blur-md rounded-2xl shadow-2xl border p-4 transition-all duration-300 transform translate-y-0 opacity-100 hover:shadow-indigo-100/50 ${theme.cardBg} ${theme.accentBorder}`}
             style={{
               animation: 'inAppToastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards'
             }}
@@ -287,8 +342,12 @@ export default function InAppNotificationToast({ role = 'Customer', onNotificati
             <div className="flex items-start justify-between gap-3 mb-2">
               <div className="flex items-center gap-2">
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${theme.iconBg} shadow-xs`}>
-                  {toast.type === 'ORDER_UPDATE' ? (
-                    <Truck className="w-4 h-4" />
+                  {isCancelled ? (
+                    <XCircle className="w-4 h-4 text-rose-600" />
+                  ) : isDelivered ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  ) : isOrderRelated ? (
+                    <Truck className="w-4 h-4 text-indigo-600" />
                   ) : toast.type === 'DEALER_UPDATE' ? (
                     <CreditCard className="w-4 h-4" />
                   ) : role === 'Plumber' ? (
@@ -322,23 +381,47 @@ export default function InAppNotificationToast({ role = 'Customer', onNotificati
 
             {/* Title & Message */}
             <div className="pl-1 pr-2">
-              <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
+              <h4 className={`text-sm font-extrabold leading-snug ${isCancelled ? 'text-rose-950' : 'text-slate-900'}`}>
                 {toast.title}
               </h4>
-              <p className="mt-1 text-xs text-slate-600 leading-relaxed font-medium">
+              <p className={`mt-1 text-xs leading-relaxed font-medium ${isCancelled ? 'text-rose-800' : 'text-slate-600'}`}>
                 {toast.message}
               </p>
             </div>
 
-            {/* Footer with target audience badge */}
+            {/* Footer */}
             <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
-              <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Instant Delivery
-              </span>
-              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
-                Audience: {toast.targetGroup}
-              </span>
+              {isCancelled ? (
+                <>
+                  <span className="text-[10px] text-rose-600 font-bold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                    Status: Cancelled
+                  </span>
+                  <span className="text-[10px] font-semibold text-rose-700 bg-rose-100/80 border border-rose-200 px-2 py-0.5 rounded-md">
+                    Live Operations Alert
+                  </span>
+                </>
+              ) : isOrderRelated ? (
+                <>
+                  <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Live Order Sync
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
+                    {toast.targetGroup || 'Orders'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Official Bulletin
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                    Audience: {toast.targetGroup}
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Auto-dismiss shrinking progress bar */}

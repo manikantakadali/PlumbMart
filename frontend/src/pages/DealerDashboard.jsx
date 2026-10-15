@@ -573,6 +573,16 @@ export default function DealerDashboard({ currentUser, onLogout }) {
           handleGovernanceUpdate(payload);
         } catch (err) {}
       }
+      if (e.key === 'plumbmart_status_broadcast' && e.newValue) {
+        try {
+          const payload = JSON.parse(e.newValue);
+          if (payload && payload.orderId && payload.status) {
+            setOrders(prev => prev.map(o => 
+              o.id === payload.orderId ? { ...o, status: payload.status } : o
+            ));
+          }
+        } catch (err) {}
+      }
       if (e.key === 'plumbmart_dealer_notice_broadcast') {
         try {
           const payload = JSON.parse(e.newValue);

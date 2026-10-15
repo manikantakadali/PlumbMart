@@ -367,12 +367,30 @@ export default function DealerLayout({ children, currentUser, onLogout, products
           if (fresh.length > 0) {
             fresh.forEach(item => {
               knownAnnouncementsRef.current.add(item.id);
+              const isOrderUpdate = item.orderId || (item.title && item.title.toLowerCase().includes('order #'));
+              const notifType = isOrderUpdate ? 'ORDER_UPDATE' : (item.type || 'ANNOUNCEMENT');
+
               window.dispatchEvent(new CustomEvent('plumbmart_inapp_notify', {
                 detail: {
                   ...item,
-                  type: 'ANNOUNCEMENT'
+                  type: notifType
                 }
               }));
+
+              if (isOrderUpdate) {
+                const matchOrder = (item.title || '').match(/Order #([A-Za-z0-9-_]+)\s*(.*)/i);
+                const orderId = item.orderId || (matchOrder ? matchOrder[1] : null);
+                const status = (item.title || '').toLowerCase().includes('cancelled') 
+                  ? 'Cancelled' 
+                  : (matchOrder && matchOrder[2] ? matchOrder[2].trim() : null);
+
+                window.dispatchEvent(new CustomEvent('plumbmart_status_updated', {
+                  detail: { orderId, status }
+                }));
+                window.dispatchEvent(new CustomEvent('plumbmart_order_updated', {
+                  detail: { orderId, status }
+                }));
+              }
             });
           }
         }
