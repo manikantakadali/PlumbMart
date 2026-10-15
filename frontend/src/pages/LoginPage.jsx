@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Droplets, 
@@ -50,8 +50,9 @@ export default function LoginPage({ onLoginSuccess }) {
   const [zohoVerifiedData, setZohoVerifiedData] = useState(null);
 
   const [otpExpirySeconds, setOtpExpirySeconds] = useState(0);
+  const isVerifyingRef = useRef(false);
 
-  // Resend cooldown countdown timer (re-enables Resend button after 60s)
+  // Resend cooldown countdown timer (re-enables Resend button after 30s)
   useEffect(() => {
     let timer = null;
     if (resendCooldown > 0) {
@@ -89,6 +90,13 @@ export default function LoginPage({ onLoginSuccess }) {
       if (timer) clearInterval(timer);
     };
   }, [otpExpirySeconds]);
+
+  // Dynamic Auto-Submission when 6 digits OTP are entered
+  useEffect(() => {
+    if (authStep === 'OTP' && otp && otp.length === 6 && !loading && !isVerifyingRef.current) {
+      handleVerifyOtp(null, otp);
+    }
+  }, [otp, authStep]);
 
   // Dynamic registration synchronization and URL cleaning (ensure role is NEVER displayed in URL bar)
   useEffect(() => {
@@ -258,7 +266,7 @@ export default function LoginPage({ onLoginSuccess }) {
       }
 
       setAuthStep('OTP');
-      setResendCooldown(60);
+      setResendCooldown(30);
       setOtpExpirySeconds(300);
       setIsOtpExpired(false);
       setOtp('');
@@ -300,7 +308,7 @@ export default function LoginPage({ onLoginSuccess }) {
       }
 
       if (data.success) {
-        setResendCooldown(60);
+        setResendCooldown(30);
         setOtpExpirySeconds(300);
         setIsOtpExpired(false);
         setOtp('');
@@ -322,6 +330,8 @@ export default function LoginPage({ onLoginSuccess }) {
   // Step 3: Validate Email OTP and Redirect to Dashboard
   const handleVerifyOtp = async (e, customOtpValue) => {
     if (e && e.preventDefault) e.preventDefault();
+    if (isVerifyingRef.current) return;
+
     const candidateOtp = customOtpValue !== undefined ? customOtpValue : otp;
     const cleanOtp = String(candidateOtp || '').trim() || '123456';
 
@@ -330,6 +340,7 @@ export default function LoginPage({ onLoginSuccess }) {
       return;
     }
 
+    isVerifyingRef.current = true;
     setLoading(true);
     setError('');
     setSuccessMsg('');
@@ -369,6 +380,7 @@ export default function LoginPage({ onLoginSuccess }) {
         setResendCooldown(0);
         setIsOtpExpired(false);
         setLoading(false);
+        isVerifyingRef.current = false;
         return;
       }
 
@@ -428,6 +440,7 @@ export default function LoginPage({ onLoginSuccess }) {
       setError(err.message || 'Verification connection failed.');
     } finally {
       setLoading(false);
+      isVerifyingRef.current = false;
     }
   };
 
@@ -807,9 +820,9 @@ export default function LoginPage({ onLoginSuccess }) {
                     <span>Enter 6-Digit Email OTP</span>
                     <span className="text-[10px] text-blue-600 font-normal">Check your inbox</span>
                   </label>
-                  {resendCooldown > 0 ? (
+                  {otpExpirySeconds > 0 && !isOtpExpired ? (
                     <span className="text-[11px] font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                      ⏱️ 0:{resendCooldown < 10 ? '0' : ''}{resendCooldown}
+                      ⏱️ {Math.floor(otpExpirySeconds / 60)}:{otpExpirySeconds % 60 < 10 ? '0' : ''}{otpExpirySeconds % 60}
                     </span>
                   ) : isOtpExpired ? (
                     <span className="text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 animate-pulse">
@@ -834,8 +847,20 @@ export default function LoginPage({ onLoginSuccess }) {
                       const val = e.target.value.replace(/\D/g, '').slice(0, 6);
                       setOtp(val);
                       setError('');
-                      if (val.length === 6 && !loading) {
+                      if (val.length === 6 && !loading && !isVerifyingRef.current) {
                         handleVerifyOtp(null, val);
+                      }
+                    }}
+                    onPaste={(e) => {
+                      const paste = (e.clipboardData || window.clipboardData).getData('text');
+                      const cleanPaste = paste.replace(/\D/g, '').slice(0, 6);
+                      if (cleanPaste.length === 6) {
+                        e.preventDefault();
+                        setOtp(cleanPaste);
+                        setError('');
+                        if (!loading && !isVerifyingRef.current) {
+                          handleVerifyOtp(null, cleanPaste);
+                        }
                       }
                     }}
                     placeholder="Enter 6-digit OTP"

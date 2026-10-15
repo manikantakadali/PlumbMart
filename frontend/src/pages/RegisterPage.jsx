@@ -167,7 +167,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
       }
 
       setOtpStepActive(true);
-      setResendCooldown(60);
+      setResendCooldown(30);
       setOtpExpirySeconds(300);
       setIsOtpExpired(false);
       setOtpCode('');
@@ -203,7 +203,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
 
       const data = await response.json();
       if (data.success) {
-        setResendCooldown(60);
+        setResendCooldown(30);
         setOtpExpirySeconds(300);
         setIsOtpExpired(false);
         setOtpCode('');
