@@ -658,6 +658,31 @@ function formatPlumberRow(r) {
 }
 
 /**
+ * Find plumber strictly by email without auto-creating (used for login & registration verification)
+ */
+async function findPlumberByEmail(email) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail) return null;
+
+  // 1. Check local cache
+  const local = getDb();
+  const cached = (local.plumbers || []).find(p => (p.email || '').toLowerCase() === cleanEmail);
+  if (cached) return formatPlumberRow(cached);
+
+  // 2. Check Supabase
+  try {
+    const res = await query('SELECT * FROM plumbers WHERE LOWER(email) = $1', [cleanEmail]);
+    if (res.rows.length > 0) {
+      return formatPlumberRow(res.rows[0]);
+    }
+  } catch (err) {
+    console.warn('[Supabase Fallback] findPlumberByEmail error:', err.message);
+  }
+
+  return null;
+}
+
+/**
  * Fetch or auto-create plumber in Supabase
  */
 async function getPlumberByMobile(mobile) {
@@ -946,6 +971,7 @@ module.exports = {
   setDefaultCustomerAddress,
   deleteCustomerAddress,
   updateCustomerProfile,
+  findPlumberByEmail,
   getPlumberByMobile,
   updatePlumberProfile,
   updatePlumberStatusInDb,

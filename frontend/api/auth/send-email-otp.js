@@ -18,26 +18,30 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, message: 'Method Not Allowed' });
   }
 
-  const { name, mobile, email, role } = req.body || {};
+  const { name, mobile, email, role, isLogin, isRegistration } = req.body || {};
   const cleanEmail = String(email || '').trim().toLowerCase();
 
   if (!cleanEmail || !cleanEmail.includes('@')) {
     return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
   }
 
-  // 1. Generate 6-digit numerical OTP
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-  // 2. Synchronize OTP session with Render backend
+  // 1. Synchronize OTP session with Render backend and check registration status
   try {
-    await fetch('https://plumbmart.onrender.com/api/auth/send-email-otp', {
+    const backendRes = await fetch('https://plumbmart.onrender.com/api/auth/send-email-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, mobile, email: cleanEmail, role })
+      body: JSON.stringify({ name, mobile, email: cleanEmail, role, isLogin, isRegistration })
     });
+    const backendData = await backendRes.json().catch(() => ({}));
+    if (!backendRes.ok || !backendData.success) {
+      return res.status(backendRes.status || 400).json(backendData);
+    }
   } catch (backendErr) {
     console.warn('[Vercel Serverless] Backend sync warning:', backendErr.message);
   }
+
+  // 2. Generate 6-digit numerical OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
   // 3. Dispatch Live Email directly from Vercel via Gmail SSL (Port 465 is open on Vercel)
   try {

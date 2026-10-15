@@ -214,7 +214,8 @@ export default function LoginPage({ onLoginSuccess }) {
           name: name.trim(),
           mobile: cleanPhone,
           email: email.trim().toLowerCase(),
-          role
+          role,
+          isLogin: true
         })
       });
 
@@ -263,7 +264,8 @@ export default function LoginPage({ onLoginSuccess }) {
           name: name.trim(),
           mobile: cleanMobileNumber(mobile),
           email: email.trim().toLowerCase(),
-          role
+          role,
+          isLogin: true
         })
       });
 

@@ -115,7 +115,8 @@ export default function RegisterPage({ onRegisterSuccess }) {
           name: formData.name.trim(),
           mobile: clean,
           email: formData.email.trim().toLowerCase(),
-          role: formData.role
+          role: formData.role,
+          isRegistration: true
         })
       });
 
@@ -165,7 +166,8 @@ export default function RegisterPage({ onRegisterSuccess }) {
           name: formData.name.trim(),
           mobile: clean,
           email: formData.email.trim().toLowerCase(),
-          role: formData.role
+          role: formData.role,
+          isRegistration: true
         })
       });
 

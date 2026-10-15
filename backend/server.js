@@ -22,6 +22,7 @@ const {
   setDefaultCustomerAddress, 
   deleteCustomerAddress,
   updateCustomerProfile,
+  findPlumberByEmail,
   getPlumberByMobile,
   updatePlumberProfile,
   updatePlumberStatusInDb,
@@ -285,8 +286,34 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
       });
     }
 
+    const isRegistrationFlow = Boolean(req.body.isRegistration || req.body.action === 'register');
+
+    // Check registration for Customer and Plumber roles before sending login OTP
+    if (!isRegistrationFlow) {
+      const targetCheckRole = req.body.role || assignedRole;
+      if (targetCheckRole === 'Customer') {
+        const existingCustomer = await findCustomerByEmail(cleanEmail);
+        if (!existingCustomer) {
+          return res.status(404).json({
+            success: false,
+            notRegistered: true,
+            message: 'Register first'
+          });
+        }
+      } else if (targetCheckRole === 'Plumber') {
+        const existingPlumber = await findPlumberByEmail(cleanEmail);
+        if (!existingPlumber) {
+          return res.status(404).json({
+            success: false,
+            notRegistered: true,
+            message: 'Register first'
+          });
+        }
+      }
+    }
+
     // If dealer exists and account is PENDING or REJECTED, reject login OTP request early with informative message
-    if (assignedRole === 'Dealer' && !req.body.isRegistration) {
+    if (assignedRole === 'Dealer' && !isRegistrationFlow) {
       const existingDealer = (db.dealers || []).find(d => 
         (cleanMobile && d.mobile === cleanMobile) || 
         (cleanEmail && d.email && d.email.toLowerCase() === cleanEmail)
@@ -432,43 +459,47 @@ async function resolveUserByRole({ role = 'auto', mobile = '', email = '', name 
   }
 
   if (targetRole === 'Plumber') {
-    const plumber = (db.plumbers || []).find(p => p.mobile === cleanMobile || (cleanEmail && p.email?.toLowerCase() === cleanEmail)) || (db.plumbers || [])[0];
-    if (plumber) {
-      return {
-        id: plumber.id,
-        name: plumber.name || personName,
-        mobile: plumber.mobile || cleanMobile,
-        email: plumber.email || cleanEmail,
-        role: 'Plumber',
-        license: plumber.license || 'PLUMB-KA-2024-884',
-        completedJobs: plumber.completedJobs || 48,
-        rating: plumber.rating || 4.9,
-        rewardPoints: plumber.rewardPoints || 650,
-        walletBalance: plumber.walletBalance || 4850,
-        status: plumber.status || 'VERIFIED'
-      };
+    let plumber = null;
+    if (cleanEmail) {
+      plumber = await findPlumberByEmail(cleanEmail);
     }
+    if (!plumber && cleanMobile) {
+      const local = getDb();
+      plumber = (local.plumbers || []).find(p => p.mobile === cleanMobile);
+    }
+    if (!plumber) {
+      const err = new Error('Register first');
+      err.status = 404;
+      throw err;
+    }
+    return {
+      id: plumber.id,
+      name: plumber.name || personName,
+      mobile: plumber.mobile || cleanMobile,
+      email: plumber.email || cleanEmail,
+      role: 'Plumber',
+      license: plumber.license || 'PLUMB-KA-2024-884',
+      completedJobs: plumber.completedJobs || 48,
+      rating: plumber.rating || 4.9,
+      rewardPoints: plumber.rewardPoints || 650,
+      walletBalance: plumber.walletBalance || 4850,
+      status: plumber.status || 'VERIFIED'
+    };
   }
 
   // Default: Customer
   let customer = null;
-  if (cleanMobile) {
-    customer = await findCustomerByMobile(cleanMobile);
-  }
-  if (!customer && cleanEmail) {
+  if (cleanEmail) {
     customer = await findCustomerByEmail(cleanEmail);
   }
-  if (!customer) {
-    customer = (db.customers || []).find(c => c.mobile === cleanMobile || (cleanEmail && c.email?.toLowerCase() === cleanEmail));
+  if (!customer && cleanMobile) {
+    customer = await findCustomerByMobile(cleanMobile);
   }
   if (!customer) {
-    customer = await createCustomerRecord({
-      name: personName,
-      mobile: cleanMobile,
-      email: cleanEmail,
-      role: 'Customer',
-      city: 'Bengaluru'
-    });
+    const err = new Error('Register first');
+    err.status = 404;
+    throw err;
+  }
   } else if (cleanEmail && (!customer.email || customer.email !== cleanEmail)) {
     customer.email = cleanEmail;
     try {
@@ -740,12 +771,24 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
       };
 
     } else if (assignedRole === 'Plumber') {
-      let plumber = (db.plumbers || []).find(p => 
-        (cleanMobile && p.mobile === cleanMobile) || 
-        (cleanEmail && p.email && p.email.toLowerCase() === cleanEmail)
-      );
+      const isRegistration = Boolean(req.body.isRegistration || req.body.action === 'register');
+      let plumber = null;
+      if (cleanEmail) {
+        plumber = await findPlumberByEmail(cleanEmail);
+      }
+      if (!plumber && cleanMobile) {
+        const local = getDb();
+        plumber = (local.plumbers || []).find(p => p.mobile === cleanMobile);
+      }
 
       if (!plumber) {
+        if (!isRegistration) {
+          return res.status(404).json({
+            success: false,
+            notRegistered: true,
+            message: 'Register first'
+          });
+        }
         plumber = {
           id: 'PLM-' + Date.now().toString().slice(-4),
           name: personName,
@@ -777,15 +820,23 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
 
     } else {
       // Customer: Search Supabase & local database
+      const isRegistration = Boolean(req.body.isRegistration || req.body.action === 'register');
       let customer = null;
-      if (cleanMobile) {
-        customer = await findCustomerByMobile(cleanMobile);
-      }
-      if (!customer && cleanEmail) {
+      if (cleanEmail) {
         customer = await findCustomerByEmail(cleanEmail);
+      }
+      if (!customer && cleanMobile) {
+        customer = await findCustomerByMobile(cleanMobile);
       }
 
       if (!customer) {
+        if (!isRegistration) {
+          return res.status(404).json({
+            success: false,
+            notRegistered: true,
+            message: 'Register first'
+          });
+        }
         customer = await createCustomerRecord({
           name: personName,
           mobile: cleanMobile,
