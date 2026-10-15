@@ -5,6 +5,22 @@
       "destination": "/api/auth/send-email-otp"
     },
     {
+      "source": "/api/auth/admin-login",
+      "destination": "/api/auth/admin-login"
+    },
+    {
+      "source": "/api/products",
+      "destination": "/api/products"
+    },
+    {
+      "source": "/api/zoho/status",
+      "destination": "/api/zoho/status"
+    },
+    {
+      "source": "/api/admin/zoho-sync",
+      "destination": "/api/admin/zoho-sync"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://plumbmart.onrender.com/api/:path*"
     },

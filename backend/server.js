@@ -3172,8 +3172,12 @@ app.get('/api/zoho/auth-url', (req, res) => {
  * 3. GET /api/zoho/status
  * Returns safe connection status of Zoho OAuth integration without exposing sensitive tokens
  */
-app.get('/api/zoho/status', (req, res) => {
-  const status = getConnectionStatus();
+app.get('/api/zoho/status', async (req, res) => {
+  let status = getConnectionStatus();
+  if (!status.isConnected && typeof loadTokensFromDb === 'function') {
+    await loadTokensFromDb();
+    status = getConnectionStatus();
+  }
   return res.json({ success: true, ...status });
 });
 
