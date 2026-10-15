@@ -264,19 +264,21 @@ export default function RegisterPage({ onRegisterSuccess }) {
       }
 
       setIsPhoneVerified(true);
-      setOtpStepActive(false);
-      const roleName = formData.role;
+      const registeredUser = data.user || {};
+      const registeredName = registeredUser.name || formData.name.trim() || 'Valued User';
+      const roleName = formData.role || registeredUser.role || 'Customer';
+
       setSuccessMsg(
         roleName === 'Dealer'
           ? `Email verified! Dealer registration saved with status PENDING. Redirecting to Login...`
-          : `Email verified! ${roleName} account created for ${data.user.name}. Redirecting to Login...`
+          : `Email verified! ${roleName} account created for ${registeredName}. Redirecting to Login...`
       );
 
       const queryParams = new URLSearchParams({
         registered: 'true',
         mobile: clean,
-        name: data.user.name || formData.name.trim(),
-        email: formData.email.trim(),
+        name: registeredName,
+        email: (formData.email || registeredUser.email || '').trim(),
         role: roleName
       });
       if (redirectTarget) {
@@ -285,7 +287,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
 
       setTimeout(() => {
         navigate(`/login?${queryParams.toString()}`);
-      }, 900);
+      }, 500);
 
     } catch (err) {
       console.error('[Verify OTP Error]:', err);
@@ -357,18 +359,22 @@ export default function RegisterPage({ onRegisterSuccess }) {
         return;
       }
 
-      const registeredUser = data.user;
+      const registeredUser = data.user || {};
+      const registeredName = registeredUser.name || formData.name.trim() || 'Valued User';
+      const roleName = formData.role || registeredUser.role || 'Customer';
+
       setSuccessMsg(
-        formData.role === 'Dealer'
+        roleName === 'Dealer'
           ? `Dealer registration submitted with status PENDING! Your details have been sent to the Super Admin for review and approval. Redirecting to Login...`
-          : `${formData.role} account created for ${registeredUser.name}! Redirecting to Login...`
+          : `${roleName} account created for ${registeredName}! Redirecting to Login...`
       );
 
       const queryParams = new URLSearchParams({
         registered: 'true',
         mobile: clean,
-        name: registeredUser.name || formData.name.trim(),
-        email: formData.email.trim()
+        name: registeredName,
+        email: (formData.email || registeredUser.email || '').trim(),
+        role: roleName
       });
       if (redirectTarget) {
         queryParams.set('redirect', redirectTarget);
@@ -376,7 +382,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
 
       setTimeout(() => {
         navigate(`/login?${queryParams.toString()}`);
-      }, 900);
+      }, 500);
     } catch (err) {
       setError(err.message || 'Connection error. Please try again.');
     } finally {
