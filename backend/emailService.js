@@ -40,7 +40,10 @@ function getTransporter() {
       host,
       port,
       secure: port === 465,
-      auth: { user, pass }
+      auth: { user, pass },
+      connectionTimeout: 4000,
+      greetingTimeout: 4000,
+      socketTimeout: 5000
     });
     console.log('[Email Service] Configured custom SMTP transport.');
   } else if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASS) {
@@ -50,7 +53,10 @@ function getTransporter() {
       auth: {
         user: String(process.env.GMAIL_USER || '').trim(),
         pass: cleanPass
-      }
+      },
+      connectionTimeout: 4000,
+      greetingTimeout: 4000,
+      socketTimeout: 5000
     });
     console.log(`[Email Service] Configured Gmail transport for: ${process.env.GMAIL_USER}`);
   } else {
@@ -136,7 +142,11 @@ async function sendEmailOtp({ email, name, mobile, role = 'Customer' }) {
 
   if (currentTransporter) {
     try {
-      await currentTransporter.sendMail(mailOptions);
+      const sendPromise = currentTransporter.sendMail(mailOptions);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('SMTP dispatch timed out')), 5000)
+      );
+      await Promise.race([sendPromise, timeoutPromise]);
       emailSentViaSmtp = true;
       console.log(`[Email Service] Live email successfully dispatched to ${cleanEmail}`);
     } catch (err) {

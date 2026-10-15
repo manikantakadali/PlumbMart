@@ -3375,3 +3375,6 @@ if (Number(PORT) !== 4000) {
     // ignore
   }
 }
+
+module.exports = app;
+

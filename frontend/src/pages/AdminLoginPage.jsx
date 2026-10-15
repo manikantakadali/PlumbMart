@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShieldCheck, Lock, Mail, ArrowLeft, KeyRound, Droplets, Eye, EyeOff } from 'lucide-react';
 import { setAuthSession } from '../utils/authSession';
+import { apiFetch } from '../utils/apiConfig';
 
 export default function AdminLoginPage({ onAdminLoginSuccess }) {
   const navigate = useNavigate();
@@ -55,28 +56,15 @@ export default function AdminLoginPage({ onAdminLoginSuccess }) {
 
       let response;
       try {
-        response = await fetch('/api/auth/admin-login', {
+        response = await apiFetch('/api/auth/admin-login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        if (!response.ok && response.status !== 401 && response.status !== 400) {
-          throw new Error('Proxy failed');
-        }
-      } catch {
-        try {
-          response = await fetch('http://localhost:5000/api/auth/admin-login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-        } catch {
-          response = await fetch('http://localhost:4000/api/auth/admin-login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-        }
+      } catch (err) {
+        setError('Unable to reach administration server. Please verify connection.');
+        setLoading(false);
+        return;
       }
 
       const data = await response.json();

@@ -21,6 +21,7 @@ import {
   cleanMobileNumber, 
   getFirebaseErrorMessage 
 } from '../firebase';
+import { apiFetch } from '../utils/apiConfig';
 
 export default function RegisterPage({ onRegisterSuccess }) {
   const navigate = useNavigate();
@@ -107,7 +108,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
     setSuccessMsg('');
 
     try {
-      const response = await fetch('/api/auth/send-email-otp', {
+      const response = await apiFetch('/api/auth/send-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -157,7 +158,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
 
     try {
       const clean = cleanMobileNumber(formData.mobile);
-      const response = await fetch('/api/auth/send-email-otp', {
+      const response = await apiFetch('/api/auth/send-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -200,7 +201,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
 
     try {
       const clean = cleanMobileNumber(formData.mobile);
-      const response = await fetch('/api/auth/verify-email-otp', {
+      const response = await apiFetch('/api/auth/verify-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -292,7 +293,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/register', {
+      const response = await apiFetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

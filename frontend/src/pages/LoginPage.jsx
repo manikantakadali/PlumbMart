@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { cleanMobileNumber } from '../firebase';
 import { setAuthSession } from '../utils/authSession';
+import { apiFetch } from '../utils/apiConfig';
 
 export default function LoginPage({ onLoginSuccess }) {
   const navigate = useNavigate();
@@ -123,7 +124,7 @@ export default function LoginPage({ onLoginSuccess }) {
     setSuccessMsg('');
 
     try {
-      const response = await fetch('/api/auth/quick-login', {
+      const response = await apiFetch('/api/auth/quick-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -206,7 +207,7 @@ export default function LoginPage({ onLoginSuccess }) {
     setSuccessMsg('');
 
     try {
-      const response = await fetch('/api/auth/send-email-otp', {
+      const response = await apiFetch('/api/auth/send-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -255,7 +256,7 @@ export default function LoginPage({ onLoginSuccess }) {
     setSuccessMsg('');
 
     try {
-      const response = await fetch('/api/auth/send-email-otp', {
+      const response = await apiFetch('/api/auth/send-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -313,7 +314,7 @@ export default function LoginPage({ onLoginSuccess }) {
     }
 
     try {
-      const response = await fetch('/api/auth/verify-email-otp', {
+      const response = await apiFetch('/api/auth/verify-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
