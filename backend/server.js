@@ -499,7 +499,6 @@ async function resolveUserByRole({ role = 'auto', mobile = '', email = '', name 
     const err = new Error('Register first');
     err.status = 404;
     throw err;
-  }
   } else if (cleanEmail && (!customer.email || customer.email !== cleanEmail)) {
     customer.email = cleanEmail;
     try {
