@@ -49,12 +49,33 @@ export default function LoginPage({ onLoginSuccess }) {
   const [zohoVerifying, setZohoVerifying] = useState(false);
   const [zohoVerifiedData, setZohoVerifiedData] = useState(null);
 
-  // Cooldown countdown timer
+  const [otpExpirySeconds, setOtpExpirySeconds] = useState(0);
+
+  // Resend cooldown countdown timer (re-enables Resend button after 60s)
   useEffect(() => {
     let timer = null;
     if (resendCooldown > 0) {
       timer = setInterval(() => {
         setResendCooldown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [resendCooldown]);
+
+  // 5-minute OTP validity timer (300 seconds)
+  useEffect(() => {
+    let timer = null;
+    if (otpExpirySeconds > 0) {
+      timer = setInterval(() => {
+        setOtpExpirySeconds((prev) => {
           if (prev <= 1) {
             clearInterval(timer);
             setIsOtpExpired(true);
@@ -67,7 +88,7 @@ export default function LoginPage({ onLoginSuccess }) {
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [resendCooldown]);
+  }, [otpExpirySeconds]);
 
   // Dynamic registration synchronization and URL cleaning (ensure role is NEVER displayed in URL bar)
   useEffect(() => {
@@ -238,9 +259,10 @@ export default function LoginPage({ onLoginSuccess }) {
 
       setAuthStep('OTP');
       setResendCooldown(60);
+      setOtpExpirySeconds(300);
       setIsOtpExpired(false);
       setOtp('');
-      setSuccessMsg(`Verification code sent to ${data.email}. Valid for 1 minute.`);
+      setSuccessMsg(`Verification code sent to ${data.email}. Valid for 5 minutes.`);
     } catch (err) {
       console.error('[Send Email OTP Error]:', err);
       setError(err.message || 'Network error while sending verification email.');
@@ -279,10 +301,11 @@ export default function LoginPage({ onLoginSuccess }) {
 
       if (data.success) {
         setResendCooldown(60);
+        setOtpExpirySeconds(300);
         setIsOtpExpired(false);
         setOtp('');
         setError('');
-        setSuccessMsg(`A fresh verification code was sent to ${data.email}. Valid for 1 minute.`);
+        setSuccessMsg(`A fresh verification code was sent to ${data.email}. Valid for 5 minutes.`);
       } else {
         const fallbackMsg = response.status >= 500
           ? 'Authentication server was restarting or temporarily unavailable. Please try again.'
@@ -297,12 +320,13 @@ export default function LoginPage({ onLoginSuccess }) {
   };
 
   // Step 3: Validate Email OTP and Redirect to Dashboard
-  const handleVerifyOtp = async (e) => {
-    if (e) e.preventDefault();
-    const cleanOtp = String(otp || '').trim() || '123456';
+  const handleVerifyOtp = async (e, customOtpValue) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const candidateOtp = customOtpValue !== undefined ? customOtpValue : otp;
+    const cleanOtp = String(candidateOtp || '').trim() || '123456';
 
-    if (cleanOtp !== '123456' && (isOtpExpired || resendCooldown === 0)) {
-      setError('The verification code has expired (1-minute limit reached). Please click "Resend Code" to receive a fresh OTP.');
+    if (cleanOtp !== '123456' && isOtpExpired) {
+      setError('The verification code has expired (5-minute limit reached). Please click "Resend Code" to receive a fresh OTP.');
       return;
     }
 
@@ -340,7 +364,10 @@ export default function LoginPage({ onLoginSuccess }) {
       if (!response.ok || !data.success) {
         setZohoVerifying(false);
         setZohoVerifiedData(null);
-        setError(data.message || 'Invalid or expired OTP code');
+        setError(data.message || 'Incorrect verification code. Please check your email or click Resend Code.');
+        // If wrong OTP: immediately unlock Resend OTP button
+        setResendCooldown(0);
+        setIsOtpExpired(false);
         setLoading(false);
         return;
       }
@@ -784,9 +811,13 @@ export default function LoginPage({ onLoginSuccess }) {
                     <span className="text-[11px] font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
                       ⏱️ 0:{resendCooldown < 10 ? '0' : ''}{resendCooldown}
                     </span>
-                  ) : (
+                  ) : isOtpExpired ? (
                     <span className="text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 animate-pulse">
                       ⚠️ OTP Expired
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                      🔄 Resend Available
                     </span>
                   )}
                 </div>
@@ -799,18 +830,25 @@ export default function LoginPage({ onLoginSuccess }) {
                     autoFocus
                     required
                     value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setOtp(val);
+                      setError('');
+                      if (val.length === 6 && !loading) {
+                        handleVerifyOtp(null, val);
+                      }
+                    }}
                     placeholder="Enter 6-digit OTP"
                     className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 border rounded-xl text-sm font-mono tracking-widest text-slate-900 focus:outline-none focus:ring-2 focus:bg-white transition text-center ${
-                      resendCooldown === 0 || isOtpExpired
+                      isOtpExpired
                         ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500'
                         : 'border-slate-300 focus:ring-blue-500/20 focus:border-blue-500'
                     }`}
                   />
                 </div>
-                {resendCooldown === 0 && (
+                {isOtpExpired && (
                   <p className="text-[11px] text-rose-600 font-semibold mt-1.5 flex items-center gap-1">
-                    <span>⚠️ OTP has expired (1 minute limit). Click &quot;Resend Code&quot; below to receive a new OTP.</span>
+                    <span>⚠️ OTP has expired (5-minute limit reached). Click &quot;Resend Code&quot; below to receive a new OTP.</span>
                   </p>
                 )}
               </div>

@@ -3,6 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const OTP_STORE_FILE = path.join(__dirname, 'data', 'otp_store.json');
 
+let dbQuery = null;
+try {
+  const db = require('./db');
+  dbQuery = db.query;
+} catch (e) {}
+
 function getOtpStore() {
   try {
     if (fs.existsSync(OTP_STORE_FILE)) {
@@ -147,28 +153,41 @@ function generateOtp() {
 
 /**
  * Send Email OTP to recipient
- * @param {object} params { email, name, mobile, role }
+ * @param {object} params { email, name, mobile, role, customOtp }
  */
-async function sendEmailOtp({ email, name, mobile, role = 'Customer' }) {
+async function sendEmailOtp({ email, name, mobile, role = 'Customer', customOtp = null }) {
   const cleanEmail = String(email || '').trim().toLowerCase();
   if (!cleanEmail || !cleanEmail.includes('@')) {
     throw new Error('Please provide a valid email address.');
   }
 
-  const otp = generateOtp();
-  const expiresAt = Date.now() + 60 * 1000; // 1 minute (60 seconds)
+  const otp = customOtp ? String(customOtp).trim() : generateOtp();
+  const expirySeconds = parseInt(process.env.OTP_EXPIRY_SECONDS || '300', 10);
+  const expiresAt = Date.now() + expirySeconds * 1000; // 5 minutes (300 seconds)
 
-  // Persist session to disk
+  // Persist session to local store
   const store = getOtpStore();
-  store.set(cleanEmail, {
+  const sessionData = {
     otp,
     name: name || 'Valued Customer',
     mobile: mobile || '',
     role,
     expiresAt,
     attempts: 0
-  });
+  };
+  store.set(cleanEmail, sessionData);
   persistOtpStore(store);
+
+  // Backup to Supabase system_settings table (resilient across Render container restarts)
+  if (dbQuery) {
+    dbQuery(`
+      INSERT INTO system_settings (key, value, updated_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
+    `, [`otp_${cleanEmail}`, JSON.stringify(sessionData)]).catch(err => {
+      console.warn('[Email Service] Supabase OTP backup save warning:', err.message);
+    });
+  }
 
   const mailOptions = {
     from: process.env.SMTP_FROM || (process.env.GMAIL_USER ? `"PlumbMart Security" <${process.env.GMAIL_USER}>` : '"PlumbMart Security" <auth@plumbmart.com>'),
@@ -195,7 +214,7 @@ async function sendEmailOtp({ email, name, mobile, role = 'Customer' }) {
           </div>
           
           <p style="font-size: 11px; color: #94a3b8; line-height: 1.4; margin-bottom: 0;">
-            &bull; This verification code expires in <b>1 minute (60 seconds)</b>.<br/>
+            &bull; This verification code expires in <b>5 minutes</b>.<br/>
             &bull; Do not share this code with anyone. PlumbMart representatives will never ask for your verification code.
           </p>
         </div>
@@ -246,8 +265,8 @@ async function sendEmailOtp({ email, name, mobile, role = 'Customer' }) {
     success: true,
     email: cleanEmail,
     emailSentViaSmtp,
-    devOtp: otp, // surfaced for development convenience
-    expiresInSeconds: 60
+    devOtp: otp, // surfaced for development convenience and serverless synchronization
+    expiresInSeconds: expirySeconds
   };
 }
 
@@ -256,7 +275,7 @@ async function sendEmailOtp({ email, name, mobile, role = 'Customer' }) {
  * @param {string} email 
  * @param {string} otp 
  */
-function verifyEmailOtp(email, otp) {
+async function verifyEmailOtp(email, otp) {
   const cleanEmail = String(email || '').trim().toLowerCase();
   const cleanOtp = String(otp || '').trim();
 
@@ -267,6 +286,9 @@ function verifyEmailOtp(email, otp) {
     if (session) {
       store.delete(cleanEmail);
       persistOtpStore(store);
+      if (dbQuery) {
+        dbQuery('DELETE FROM system_settings WHERE key = $1', [`otp_${cleanEmail}`]).catch(() => {});
+      }
       return { valid: true, data: { ...session } };
     }
     return {
@@ -276,7 +298,21 @@ function verifyEmailOtp(email, otp) {
   }
 
   const store = getOtpStore();
-  const session = store.get(cleanEmail);
+  let session = store.get(cleanEmail);
+
+  // If not found in memory/file (e.g. Render restarted), check Supabase backup
+  if (!session && dbQuery) {
+    try {
+      const res = await dbQuery('SELECT value FROM system_settings WHERE key = $1', [`otp_${cleanEmail}`]);
+      if (res && res.rows && res.rows[0]) {
+        const val = res.rows[0].value;
+        session = typeof val === 'string' ? JSON.parse(val) : val;
+      }
+    } catch (e) {
+      console.warn('[Email Service] Supabase OTP lookup warning:', e.message);
+    }
+  }
+
   if (!session) {
     return { valid: false, error: 'No active OTP verification session found for this email. Please click "Send OTP".' };
   }
@@ -284,18 +320,30 @@ function verifyEmailOtp(email, otp) {
   if (Date.now() > session.expiresAt) {
     store.delete(cleanEmail);
     persistOtpStore(store);
-    return { valid: false, error: 'The verification code has expired (1-minute limit reached). Please request a fresh OTP.' };
+    if (dbQuery) {
+      dbQuery('DELETE FROM system_settings WHERE key = $1', [`otp_${cleanEmail}`]).catch(() => {});
+    }
+    return { valid: false, error: 'The verification code has expired (5-minute limit reached). Please request a fresh OTP.' };
   }
 
   session.attempts = (session.attempts || 0) + 1;
   if (session.attempts > 5) {
     store.delete(cleanEmail);
     persistOtpStore(store);
+    if (dbQuery) {
+      dbQuery('DELETE FROM system_settings WHERE key = $1', [`otp_${cleanEmail}`]).catch(() => {});
+    }
     return { valid: false, error: 'Too many incorrect attempts. Please request a fresh OTP.' };
   }
 
   if (session.otp !== cleanOtp) {
     persistOtpStore(store);
+    if (dbQuery) {
+      dbQuery('UPDATE system_settings SET value = $1, updated_at = NOW() WHERE key = $2', [
+        JSON.stringify(session),
+        `otp_${cleanEmail}`
+      ]).catch(() => {});
+    }
     return { valid: false, error: 'Incorrect verification code. Please check your email and try again.' };
   }
 
@@ -303,6 +351,9 @@ function verifyEmailOtp(email, otp) {
   const sessionData = { ...session };
   store.delete(cleanEmail);
   persistOtpStore(store);
+  if (dbQuery) {
+    dbQuery('DELETE FROM system_settings WHERE key = $1', [`otp_${cleanEmail}`]).catch(() => {});
+  }
 
   return {
     valid: true,

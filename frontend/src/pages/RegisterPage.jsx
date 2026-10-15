@@ -67,12 +67,33 @@ export default function RegisterPage({ onRegisterSuccess }) {
   const [loading, setLoading] = useState(false);
   const [devSkipVerification, setDevSkipVerification] = useState(false);
 
-  // Resend cooldown timer
+  const [otpExpirySeconds, setOtpExpirySeconds] = useState(0);
+
+  // Resend cooldown timer (re-enables Resend button after 60s)
   useEffect(() => {
     let timer = null;
     if (resendCooldown > 0) {
       timer = setInterval(() => {
         setResendCooldown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [resendCooldown]);
+
+  // 5-minute OTP validity timer (300 seconds)
+  useEffect(() => {
+    let timer = null;
+    if (otpExpirySeconds > 0) {
+      timer = setInterval(() => {
+        setOtpExpirySeconds((prev) => {
           if (prev <= 1) {
             clearInterval(timer);
             setIsOtpExpired(true);
@@ -85,7 +106,7 @@ export default function RegisterPage({ onRegisterSuccess }) {
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [resendCooldown]);
+  }, [otpExpirySeconds]);
 
   // Send Email OTP for registration verification
   const handleSendRegisterOtp = async () => {
@@ -139,9 +160,10 @@ export default function RegisterPage({ onRegisterSuccess }) {
 
       setOtpStepActive(true);
       setResendCooldown(60);
+      setOtpExpirySeconds(300);
       setIsOtpExpired(false);
       setOtpCode('');
-      setSuccessMsg(`Verification code sent to ${data.email}. Valid for 1 minute.`);
+      setSuccessMsg(`Verification code sent to ${data.email}. Valid for 5 minutes.`);
     } catch (err) {
       console.error('[Registration Send OTP Error]:', err);
       setError('Network error while dispatching verification email.');
@@ -174,10 +196,11 @@ export default function RegisterPage({ onRegisterSuccess }) {
       const data = await response.json();
       if (data.success) {
         setResendCooldown(60);
+        setOtpExpirySeconds(300);
         setIsOtpExpired(false);
         setOtpCode('');
         setError('');
-        setSuccessMsg(`A fresh verification code was sent to ${data.email}. Valid for 1 minute.`);
+        setSuccessMsg(`A fresh verification code was sent to ${data.email}. Valid for 5 minutes.`);
       } else {
         setError(data.message || 'Failed to resend code.');
       }
@@ -189,12 +212,13 @@ export default function RegisterPage({ onRegisterSuccess }) {
   };
 
   // Verify the Email OTP on registration page
-  const handleVerifyRegisterOtp = async (e) => {
-    if (e) e.preventDefault();
-    const cleanOtp = String(otpCode || '').trim() || '123456';
+  const handleVerifyRegisterOtp = async (e, customOtpValue) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const candidateOtp = customOtpValue !== undefined ? customOtpValue : otpCode;
+    const cleanOtp = String(candidateOtp || '').trim() || '123456';
 
-    if (cleanOtp !== '123456' && (isOtpExpired || resendCooldown === 0)) {
-      setError('The verification code has expired (1-minute limit reached). Please click "Resend Code" to receive a fresh OTP.');
+    if (cleanOtp !== '123456' && isOtpExpired) {
+      setError('The verification code has expired (5-minute limit reached). Please click "Resend Code" to receive a fresh OTP.');
       return;
     }
 
@@ -219,7 +243,10 @@ export default function RegisterPage({ onRegisterSuccess }) {
 
       const data = await response.json();
       if (!response.ok || !data.success) {
-        setError(data.message || 'Invalid or expired OTP code');
+        setError(data.message || 'Incorrect verification code. Please check your email or click Resend Code.');
+        // If wrong OTP: immediately unlock Resend OTP button
+        setResendCooldown(0);
+        setIsOtpExpired(false);
         setLoading(false);
         return;
       }
@@ -449,9 +476,13 @@ export default function RegisterPage({ onRegisterSuccess }) {
                     <span className="text-[11px] font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
                       ⏱️ 0:{resendCooldown < 10 ? '0' : ''}{resendCooldown}
                     </span>
-                  ) : (
+                  ) : isOtpExpired ? (
                     <span className="text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 animate-pulse">
                       ⚠️ OTP Expired
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                      🔄 Resend Available
                     </span>
                   )}
                 </div>
@@ -464,18 +495,25 @@ export default function RegisterPage({ onRegisterSuccess }) {
                     autoFocus
                     required
                     value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setOtpCode(val);
+                      setError('');
+                      if (val.length === 6 && !loading) {
+                        handleVerifyRegisterOtp(null, val);
+                      }
+                    }}
                     placeholder="Enter 6-digit OTP"
                     className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 border rounded-xl text-sm font-mono tracking-widest text-slate-900 focus:outline-none focus:ring-2 focus:bg-white transition text-center ${
-                      resendCooldown === 0 || isOtpExpired
+                      isOtpExpired
                         ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500'
                         : 'border-slate-300 focus:ring-emerald-500/20 focus:border-emerald-500'
                     }`}
                   />
                 </div>
-                {resendCooldown === 0 && (
+                {isOtpExpired && (
                   <p className="text-[11px] text-rose-600 font-semibold mt-1.5 flex items-center gap-1">
-                    <span>⚠️ OTP has expired (1 minute limit). Click &quot;Resend Code&quot; below to receive a new OTP.</span>
+                    <span>⚠️ OTP has expired (5-minute limit reached). Click &quot;Resend Code&quot; below to receive a new OTP.</span>
                   </p>
                 )}
               </div>

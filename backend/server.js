@@ -346,17 +346,22 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
       }
     }
 
+    const finalOtp = req.body.otp || req.body.customOtp || null;
     const result = await sendEmailOtp({
       email,
       name: name || assignedRole,
       mobile: cleanMobile,
-      role: assignedRole
+      role: assignedRole,
+      customOtp: finalOtp
     });
 
     return res.json({
       success: true,
       message: `Verification code sent to ${result.email}`,
       email: result.email,
+      otp: result.devOtp,
+      devOtp: result.devOtp,
+      expiresInSeconds: result.expiresInSeconds || 300,
       emailSentViaSmtp: result.emailSentViaSmtp,
       detectedRole: assignedRole
     });
@@ -537,7 +542,7 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Email and verification code are required.' });
       }
 
-      const verification = verifyEmailOtp(email, cleanOtp);
+      const verification = await verifyEmailOtp(email, cleanOtp);
       if (!verification.valid) {
         return res.status(400).json({ success: false, message: verification.error });
       }

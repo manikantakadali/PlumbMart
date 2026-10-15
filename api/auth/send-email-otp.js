@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, message: 'Method Not Allowed' });
   }
 
-  const { name, mobile, email, role } = req.body || {};
+  const { name, mobile, email, role, isLogin, isRegistration } = req.body || {};
   const cleanEmail = String(email || '').trim().toLowerCase();
 
   if (!cleanEmail || !cleanEmail.includes('@')) {
@@ -26,15 +26,33 @@ export default async function handler(req, res) {
   }
 
   // 1. Generate 6-digit numerical OTP
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+  let finalOtp = generatedOtp;
 
-  // 2. Synchronize OTP session with Render backend
+  // 2. Synchronize OTP session with Render backend (passing the exact OTP) and check registration status
   try {
-    await fetch('https://plumbmart.onrender.com/api/auth/send-email-otp', {
+    const backendRes = await fetch('https://plumbmart.onrender.com/api/auth/send-email-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, mobile, email: cleanEmail, role })
+      body: JSON.stringify({
+        name,
+        mobile,
+        email: cleanEmail,
+        role,
+        isLogin,
+        isRegistration,
+        otp: generatedOtp,
+        customOtp: generatedOtp
+      })
     });
+    const backendData = await backendRes.json().catch(() => ({}));
+    if (!backendRes.ok || !backendData.success) {
+      return res.status(backendRes.status || 400).json(backendData);
+    }
+    // If Render confirms an OTP, use that so both are 100% in sync
+    if (backendData.otp || backendData.devOtp) {
+      finalOtp = String(backendData.otp || backendData.devOtp).trim();
+    }
   } catch (backendErr) {
     console.warn('[Vercel Serverless] Backend sync warning:', backendErr.message);
   }
@@ -63,7 +81,7 @@ export default async function handler(req, res) {
     const mailOptions = {
       from: `"PlumbMart Security" <${gmailUser}>`,
       to: cleanEmail,
-      subject: `${otp} is your PlumbMart Verification Code`,
+      subject: `${finalOtp} is your PlumbMart Verification Code`,
       html: `
         <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 520px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
           <div style="background: linear-gradient(135deg, #2563eb, #0284c7); padding: 24px; text-align: center; color: #ffffff;">
@@ -80,12 +98,12 @@ export default async function handler(req, res) {
             
             <div style="background-color: #f8fafc; border: 2px dashed #93c5fd; border-radius: 14px; padding: 18px; text-align: center; margin-bottom: 20px;">
               <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #1d4ed8; display: inline-block;">
-                ${otp}
+                ${finalOtp}
               </span>
             </div>
             
             <p style="font-size: 11px; color: #94a3b8; line-height: 1.4; margin-bottom: 0;">
-              &bull; This verification code expires in <b>1 minute (60 seconds)</b>.<br/>
+              &bull; This verification code expires in <b>5 minutes</b>.<br/>
               &bull; Do not share this code with anyone. PlumbMart representatives will never ask for your verification code.
             </p>
           </div>
@@ -98,7 +116,7 @@ export default async function handler(req, res) {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`[Vercel Serverless] Live email successfully dispatched to ${cleanEmail}`);
+    console.log(`[Vercel Serverless] Live email successfully dispatched to ${cleanEmail} with code ${finalOtp}`);
   } catch (mailErr) {
     console.error('[Vercel Serverless] SMTP send error:', mailErr.message);
   }
