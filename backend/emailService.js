@@ -33,7 +33,8 @@ function getTransporter() {
   const host = process.env.SMTP_HOST;
   const port = parseInt(process.env.SMTP_PORT || '587', 10);
   const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const gmailUser = String(process.env.GMAIL_USER || 'manikantakadali99@gmail.com').trim();
+  const gmailPass = String(process.env.GMAIL_APP_PASS || 'xgbh bagl wgyx bbzs').replace(/\s+/g, '');
 
   if (host && user && pass) {
     transporter = nodemailer.createTransport({
@@ -41,24 +42,28 @@ function getTransporter() {
       port,
       secure: port === 465,
       auth: { user, pass },
-      connectionTimeout: 4000,
-      greetingTimeout: 4000,
-      socketTimeout: 5000
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 10000
     });
     console.log('[Email Service] Configured custom SMTP transport.');
-  } else if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASS) {
-    const cleanPass = String(process.env.GMAIL_APP_PASS || '').replace(/\s+/g, '');
+  } else if (gmailUser && gmailPass) {
     transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
       auth: {
-        user: String(process.env.GMAIL_USER || '').trim(),
-        pass: cleanPass
+        user: gmailUser,
+        pass: gmailPass
       },
-      connectionTimeout: 4000,
-      greetingTimeout: 4000,
-      socketTimeout: 5000
+      tls: {
+        rejectUnauthorized: false
+      },
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 10000
     });
-    console.log(`[Email Service] Configured Gmail transport for: ${process.env.GMAIL_USER}`);
+    console.log(`[Email Service] Configured Gmail transport for: ${gmailUser}`);
   } else {
     // Fallback: Test transport
     transporter = null;

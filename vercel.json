@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/auth/send-email-otp",
+      "destination": "/api/auth/send-email-otp"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://plumbmart.onrender.com/api/:path*"
     },
