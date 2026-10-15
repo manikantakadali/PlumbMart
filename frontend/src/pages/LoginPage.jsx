@@ -657,28 +657,6 @@ export default function LoginPage({ onLoginSuccess }) {
                     <span>Plumber</span>
                   </button>
                 </div>
-
-                {/* Account Type Dropdown (matching Register page) */}
-                <select
-                  value={role}
-                  onChange={(e) => {
-                    const chosen = e.target.value;
-                    if (['Customer', 'Dealer', 'Plumber'].includes(chosen)) {
-                      handleRoleChange(chosen);
-                    }
-                  }}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition font-medium"
-                >
-                  <option value="Customer">Customer (Retail Buyer)</option>
-                  <option value="Dealer">Dealer (B2B Wholesale & Credit)</option>
-                  <option value="Plumber">Plumber (Contractor Rewards)</option>
-                </select>
-
-                <p className="text-[10px] text-slate-400 mt-1">
-                  {role === 'Dealer' && 'B2B wholesale pricing, credit approval & live stock tracking.'}
-                  {role === 'Plumber' && 'Loyalty points, cashback rewards & technician discounts.'}
-                  {role === 'Customer' && 'Retail plumbing catalog, quick checkout & doorstep delivery.'}
-                </p>
               </div>
 
               <div>
