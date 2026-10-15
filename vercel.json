@@ -5,6 +5,10 @@
       "destination": "/api/auth/send-email-otp"
     },
     {
+      "source": "/api/auth/admin-login",
+      "destination": "/api/auth/admin-login"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://plumbmart.onrender.com/api/:path*"
     },
