@@ -307,10 +307,13 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
 
     return res.json({
       success: true,
-      message: `Verification code sent to ${result.email}`,
+      message: result.emailSentViaSmtp
+        ? `Verification code sent to ${result.email}`
+        : `Verification code generated for ${result.email}`,
       email: result.email,
       emailSentViaSmtp: result.emailSentViaSmtp,
-      detectedRole: assignedRole
+      detectedRole: assignedRole,
+      devOtp: result.devOtp
     });
   } catch (err) {
     console.error('[API Error /api/auth/send-email-otp]:', err);

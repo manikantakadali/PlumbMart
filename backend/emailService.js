@@ -69,6 +69,71 @@ function getTransporter() {
 }
 
 /**
+ * Send email via Resend API (HTTPS Port 443 - works seamlessly on Render Free & Vercel)
+ */
+async function sendViaResend({ to, subject, html }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return false;
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: process.env.RESEND_FROM || 'PlumbMart <onboarding@resend.dev>',
+        to: [to],
+        subject,
+        html
+      })
+    });
+    if (res.ok) {
+      console.log(`[Email Service] Live email successfully dispatched via Resend HTTPS to ${to}`);
+      return true;
+    }
+    const errText = await res.text();
+    console.warn(`[Email Service] Resend HTTPS dispatch warning: ${errText}`);
+  } catch (err) {
+    console.warn(`[Email Service] Resend HTTPS error: ${err.message}`);
+  }
+  return false;
+}
+
+/**
+ * Send email via Brevo API (HTTPS Port 443 - works seamlessly on Render Free & Vercel)
+ */
+async function sendViaBrevo({ to, subject, html, name }) {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) return false;
+  try {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': apiKey,
+        'Content-Type': 'application/json',
+        'accept': 'application/json'
+      },
+      body: JSON.stringify({
+        sender: { name: 'PlumbMart Security', email: process.env.BREVO_FROM_EMAIL || process.env.GMAIL_USER || 'auth@plumbmart.com' },
+        to: [{ email: to, name: name || 'Valued User' }],
+        subject,
+        htmlContent: html
+      })
+    });
+    if (res.ok) {
+      console.log(`[Email Service] Live email successfully dispatched via Brevo HTTPS to ${to}`);
+      return true;
+    }
+    const errText = await res.text();
+    console.warn(`[Email Service] Brevo HTTPS dispatch warning: ${errText}`);
+  } catch (err) {
+    console.warn(`[Email Service] Brevo HTTPS error: ${err.message}`);
+  }
+  return false;
+}
+
+/**
  * Generate 6-digit numerical OTP
  */
 function generateOtp() {
@@ -140,17 +205,28 @@ async function sendEmailOtp({ email, name, mobile, role = 'Customer' }) {
   const currentTransporter = getTransporter();
   let emailSentViaSmtp = false;
 
-  if (currentTransporter) {
+  // 1. Try Resend HTTPS API (Port 443 - never blocked by cloud firewalls)
+  if (process.env.RESEND_API_KEY) {
+    emailSentViaSmtp = await sendViaResend({ to: cleanEmail, subject: mailOptions.subject, html: mailOptions.html });
+  }
+
+  // 2. Try Brevo HTTPS API (Port 443 - never blocked by cloud firewalls)
+  if (!emailSentViaSmtp && process.env.BREVO_API_KEY) {
+    emailSentViaSmtp = await sendViaBrevo({ to: cleanEmail, subject: mailOptions.subject, html: mailOptions.html, name });
+  }
+
+  // 3. Fallback to SMTP transport (Gmail / Custom SMTP) with safety timeout
+  if (!emailSentViaSmtp && currentTransporter) {
     try {
       const sendPromise = currentTransporter.sendMail(mailOptions);
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('SMTP dispatch timed out')), 5000)
+        setTimeout(() => reject(new Error('SMTP dispatch timed out')), 4000)
       );
       await Promise.race([sendPromise, timeoutPromise]);
       emailSentViaSmtp = true;
-      console.log(`[Email Service] Live email successfully dispatched to ${cleanEmail}`);
+      console.log(`[Email Service] Live email successfully dispatched via SMTP to ${cleanEmail}`);
     } catch (err) {
-      console.warn(`[Email Service Warning] Failed to send live email via SMTP: ${err.message}. Logging code to console.`);
+      console.warn(`[Email Service Warning] Failed to send live email via SMTP: ${err.message}.`);
     }
   }
 

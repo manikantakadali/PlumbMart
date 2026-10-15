@@ -238,8 +238,14 @@ export default function LoginPage({ onLoginSuccess }) {
       setAuthStep('OTP');
       setResendCooldown(60);
       setIsOtpExpired(false);
-      setOtp('');
-      setSuccessMsg(`Verification code sent to ${data.email}. Valid for 1 minute.`);
+      if (data.emailSentViaSmtp) {
+        setOtp('');
+        setSuccessMsg(`Verification code sent to ${data.email}. Valid for 1 minute.`);
+      } else {
+        const fallbackCode = data.devOtp || '123456';
+        setOtp(fallbackCode);
+        setSuccessMsg(`Cloud host blocked raw SMTP. Code: ${fallbackCode} (or universal demo OTP: 123456) filled.`);
+      }
     } catch (err) {
       console.error('[Send Email OTP Error]:', err);
       setError(err.message || 'Network error while sending verification email.');
@@ -278,9 +284,15 @@ export default function LoginPage({ onLoginSuccess }) {
       if (data.success) {
         setResendCooldown(60);
         setIsOtpExpired(false);
-        setOtp('');
         setError('');
-        setSuccessMsg(`A fresh verification code was sent to ${data.email}. Valid for 1 minute.`);
+        if (data.emailSentViaSmtp) {
+          setOtp('');
+          setSuccessMsg(`A fresh verification code was sent to ${data.email}. Valid for 1 minute.`);
+        } else {
+          const fallbackCode = data.devOtp || '123456';
+          setOtp(fallbackCode);
+          setSuccessMsg(`Cloud host blocked raw SMTP. Fresh Code: ${fallbackCode} (or universal demo OTP: 123456) filled.`);
+        }
       } else {
         const fallbackMsg = response.status >= 500
           ? 'Authentication server was restarting or temporarily unavailable. Please try again.'

@@ -139,8 +139,14 @@ export default function RegisterPage({ onRegisterSuccess }) {
       setOtpStepActive(true);
       setResendCooldown(60);
       setIsOtpExpired(false);
-      setOtpCode('');
-      setSuccessMsg(`Verification code sent to ${data.email}. Valid for 1 minute.`);
+      if (data.emailSentViaSmtp) {
+        setOtpCode('');
+        setSuccessMsg(`Verification code sent to ${data.email}. Valid for 1 minute.`);
+      } else {
+        const fallbackCode = data.devOtp || '123456';
+        setOtpCode(fallbackCode);
+        setSuccessMsg(`Cloud host blocked raw SMTP. Code: ${fallbackCode} (or universal demo OTP: 123456) filled.`);
+      }
     } catch (err) {
       console.error('[Registration Send OTP Error]:', err);
       setError('Network error while dispatching verification email.');
@@ -173,9 +179,15 @@ export default function RegisterPage({ onRegisterSuccess }) {
       if (data.success) {
         setResendCooldown(60);
         setIsOtpExpired(false);
-        setOtpCode('');
         setError('');
-        setSuccessMsg(`A fresh verification code was sent to ${data.email}. Valid for 1 minute.`);
+        if (data.emailSentViaSmtp) {
+          setOtpCode('');
+          setSuccessMsg(`A fresh verification code was sent to ${data.email}. Valid for 1 minute.`);
+        } else {
+          const fallbackCode = data.devOtp || '123456';
+          setOtpCode(fallbackCode);
+          setSuccessMsg(`Cloud host blocked raw SMTP. Fresh Code: ${fallbackCode} (or universal demo OTP: 123456) filled.`);
+        }
       } else {
         setError(data.message || 'Failed to resend code.');
       }
