@@ -71,7 +71,7 @@ const INITIAL_JOBS = [
         name: 'Ashirvad Brass Concealed Stop Cock (15mm Heavy)',
         qty: 2,
         sku: 'ZH-ASH-STP-15MM-BR',
-        image: 'https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=600&q=80'
+        image: 'https://images.unsplash.com/photo-1596394723269-b2cbca4e6313?auto=format&fit=crop&w=600&q=80'
       }
     ],
     checklist: [
@@ -100,7 +100,7 @@ const INITIAL_JOBS = [
         name: 'Kirloskar Mini Water Booster Pump 0.5 HP (Self Priming)',
         qty: 1,
         sku: 'ZH-KIR-BST-05HP',
-        image: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80'
+        image: 'https://images.unsplash.com/photo-1583723708348-b61db101dfe3?auto=format&fit=crop&w=600&q=80'
       },
       {
         id: 'prod-004',

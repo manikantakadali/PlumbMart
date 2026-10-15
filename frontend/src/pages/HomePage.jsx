@@ -585,70 +585,90 @@ export default function HomePage({
                 cat: 'Pipes & Tubes',
                 brand: 'Astral & Supreme',
                 spec: 'CPVC & UPVC High Pressure',
-                img: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=600&q=80',
+                sku: 'PLB-PIPE-098',
+                defaultImg: '/products/PLB-PIPE-098.jpg',
                 link: '/customer/products?category=Pipes%20%26%20Tubes'
               },
               {
                 cat: 'Fittings & Valves',
                 brand: 'Ashirvad & ValvePro',
                 spec: 'Heavy Brass Stopcocks & Valves',
-                img: 'https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=600&q=80',
+                sku: 'PLB-FIT-003',
+                defaultImg: '/products/PLB-FIT-003.jpg',
                 link: '/customer/products?category=Fittings%20%26%20Valves'
               },
               {
                 cat: 'Bath & Faucets',
                 brand: 'Jaquar & BathEase',
                 spec: 'Single Lever Chrome Mixers',
-                img: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80',
+                sku: 'PLB-BF-008',
+                defaultImg: '/products/PLB-BF-008.jpg',
                 link: '/customer/products?category=Bath%20%26%20Faucets'
               },
               {
                 cat: 'Pumps & Motors',
                 brand: 'Kirloskar Mini Booster',
                 spec: '0.5 HP Self-Priming Pumps',
-                img: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
+                sku: 'PLB-PM-011',
+                defaultImg: '/products/PLB-PM-011.jpg',
                 link: '/customer/products?category=Pumps%20%26%20Motors'
               },
               {
                 cat: 'Tools & Sealants',
                 brand: 'Pidilite M-Seal & Astral',
                 spec: 'Epoxy Putty & Solvent Cement',
-                img: 'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?auto=format&fit=crop&w=600&q=80',
+                sku: 'PLB-TS-004',
+                defaultImg: '/products/PLB-TS-004.jpg',
                 link: '/customer/products?category=Tools%20%26%20Sealants'
               }
-            ].map((catItem, idx) => (
-              <div
-                key={idx}
-                onClick={() => handlePortalNavigation(catItem.link, 'Customer')}
-                className="cursor-pointer group bg-white rounded-2xl overflow-hidden border border-slate-200 hover:border-blue-400 hover:shadow-lg transition-all duration-300 flex flex-col"
-              >
-                <div className="h-32 w-full overflow-hidden bg-slate-100 relative">
-                  <img
-                    src={catItem.img}
-                    alt={catItem.cat}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
-                  <span className="absolute bottom-2 left-2 text-[10px] font-bold text-white bg-slate-900/80 px-2 py-0.5 rounded backdrop-blur-xs">
-                    {catItem.brand}
-                  </span>
-                </div>
-                <div className="p-3.5 space-y-1 flex-1 flex flex-col justify-between">
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition">
-                      {catItem.cat}
-                    </h4>
-                    <p className="text-[10px] text-slate-500">
-                      {catItem.spec}
-                    </p>
+            ].map((catItem, idx) => {
+              // Match live Zoho product from inventory if available, otherwise use default Zoho product image
+              const matchedZohoProd = (products || []).find(p => 
+                (p.sku && p.sku === catItem.sku) ||
+                (p.category === catItem.cat && p.image && !p.image.includes('unsplash'))
+              );
+              const cardImage = matchedZohoProd?.image || matchedZohoProd?.imageUrl || catItem.defaultImg;
+
+              return (
+                <div
+                  key={idx}
+                  onClick={() => handlePortalNavigation(catItem.link, 'Customer')}
+                  className="cursor-pointer group bg-white rounded-2xl overflow-hidden border border-slate-200 hover:border-blue-400 hover:shadow-lg transition-all duration-300 flex flex-col justify-between"
+                >
+                  <div className="h-36 w-full overflow-hidden bg-white relative flex items-center justify-center p-3 border-b border-slate-100">
+                    <img
+                      src={cardImage}
+                      alt={catItem.cat}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = catItem.defaultImg;
+                      }}
+                      className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <span className="absolute top-2 left-2 text-[10px] font-bold text-blue-700 bg-blue-50/95 border border-blue-200/80 px-2 py-0.5 rounded-full shadow-2xs backdrop-blur-xs">
+                      {catItem.brand}
+                    </span>
+                    <span className="absolute bottom-2 right-2 text-[9px] font-mono font-bold text-emerald-700 bg-emerald-50/95 border border-emerald-200/80 px-1.5 py-0.5 rounded shadow-2xs">
+                      Zoho Synced
+                    </span>
                   </div>
-                  <div className="pt-2 flex items-center justify-between text-[11px] font-bold text-blue-600">
-                    <span>Explore</span>
-                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                  <div className="p-3.5 space-y-1 flex-1 flex flex-col justify-between bg-white">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition">
+                        {catItem.cat}
+                      </h4>
+                      <p className="text-[10px] text-slate-500">
+                        {catItem.spec}
+                      </p>
+                    </div>
+                    <div className="pt-2 flex items-center justify-between text-[11px] font-bold text-blue-600">
+                      <span>Explore</span>
+                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

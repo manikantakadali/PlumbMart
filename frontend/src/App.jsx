@@ -44,7 +44,7 @@ const DEFAULT_PRODUCTS = [
     reviews: 142,
     stock: 120,
     tag: 'Bestseller',
-    image: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=600&q=80',
+    image: '/products/PLB-PIPE-001.jpg',
     description: 'PVC pipe for general plumbing and water distribution.'
   },
   {
@@ -59,7 +59,7 @@ const DEFAULT_PRODUCTS = [
     reviews: 88,
     stock: 85,
     tag: 'Top Grade',
-    image: 'https://images.unsplash.com/photo-1542013936693-884638332954?auto=format&fit=crop&w=600&q=80',
+    image: '/products/PLB-PIPE-002.jpg',
     description: 'CPVC pipe suitable for hot and cold water plumbing systems.'
   },
   {
@@ -74,7 +74,7 @@ const DEFAULT_PRODUCTS = [
     reviews: 210,
     stock: 250,
     tag: 'Essential',
-    image: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80',
+    image: '/products/PLB-FIT-001.jpg',
     description: 'Elbow connector for changing the direction of PVC pipe runs.'
   },
   {
@@ -89,7 +89,7 @@ const DEFAULT_PRODUCTS = [
     reviews: 165,
     stock: 45,
     tag: 'Heavy Duty',
-    image: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=600&q=80',
+    image: '/products/PLB-FIT-002.jpg',
     description: 'Manual shut-off valve for compatible plumbing installations.'
   },
   {
@@ -104,7 +104,7 @@ const DEFAULT_PRODUCTS = [
     reviews: 195,
     stock: 35,
     tag: 'Premium Chrome',
-    image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80',
+    image: '/products/PLB-BF-001.jpg',
     description: 'Chrome-finish tap for bathroom wash basins.'
   },
   {
@@ -119,7 +119,7 @@ const DEFAULT_PRODUCTS = [
     reviews: 130,
     stock: 22,
     tag: 'Trending',
-    image: 'https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=600&q=80',
+    image: '/products/PLB-BF-002.jpg',
     description: 'Handheld shower set for standard compatible bathroom fittings.'
   },
   {
@@ -134,7 +134,7 @@ const DEFAULT_PRODUCTS = [
     reviews: 84,
     stock: 12,
     tag: 'High Flow',
-    image: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
+    image: '/products/PLB-PM-001.jpg',
     description: 'Sample domestic water pump listing; verify specifications before purchase.'
   },
   {
@@ -149,7 +149,7 @@ const DEFAULT_PRODUCTS = [
     reviews: 312,
     stock: 28,
     tag: 'Forged Steel',
-    image: 'https://images.unsplash.com/photo-1581244277943-fe4a9c777189?auto=format&fit=crop&w=600&q=80',
+    image: '/products/PLB-TS-001.jpg',
     description: 'Adjustable wrench for plumbing pipe installation and maintenance.'
   },
   {
@@ -164,7 +164,7 @@ const DEFAULT_PRODUCTS = [
     reviews: 450,
     stock: 300,
     tag: 'Leak-Proof',
-    image: 'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?auto=format&fit=crop&w=600&q=80',
+    image: '/products/PLB-TS-002.jpg',
     description: 'Thread sealing tape for compatible threaded plumbing joints.'
   },
   {
@@ -179,7 +179,7 @@ const DEFAULT_PRODUCTS = [
     reviews: 270,
     stock: 60,
     tag: 'Fast Bonding',
-    image: 'https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=600&q=80',
+    image: '/products/PLB-TS-003.jpg',
     description: 'Solvent cement for compatible PVC pipe and fitting joints; follow product instructions.'
   },
   {
