@@ -104,7 +104,6 @@ export default function LoginPage({ onLoginSuccess }) {
 
   // Developer Mode toggle: default to true during development phase
   const [devModeSkipOtp, setDevModeSkipOtp] = useState(true);
-  const [devOtpHint, setDevOtpHint] = useState('');
 
   // Quick Direct Dev Login (Bypass OTP)
   const handleQuickLogin = async (overrideRole, overrideMobile, overrideEmail, overrideName) => {
@@ -227,7 +226,10 @@ export default function LoginPage({ onLoginSuccess }) {
       }
 
       if (!response.ok || !data.success) {
-        setError(data.message || 'Failed to dispatch verification code to email');
+        const fallbackMsg = response.status >= 500
+          ? 'Authentication server was restarting or temporarily unavailable. Please click Send Verification OTP again.'
+          : 'Failed to dispatch verification code to email';
+        setError(data.message || data.error || fallbackMsg);
         setLoading(false);
         return;
       }
@@ -279,7 +281,10 @@ export default function LoginPage({ onLoginSuccess }) {
         setError('');
         setSuccessMsg(`A fresh verification code was sent to ${data.email}. Valid for 1 minute.`);
       } else {
-        setError(data.message || 'Failed to resend code.');
+        const fallbackMsg = response.status >= 500
+          ? 'Authentication server was restarting or temporarily unavailable. Please try again.'
+          : 'Failed to resend code.';
+        setError(data.message || data.error || fallbackMsg);
       }
     } catch (err) {
       setError('Failed to resend verification email.');
@@ -752,7 +757,7 @@ export default function LoginPage({ onLoginSuccess }) {
                   <span className="font-bold text-slate-900">{name}</span>
                   <button
                     type="button"
-                    onClick={() => { setAuthStep('INPUT'); setOtp(''); setError(''); setSuccessMsg(''); setDevOtpHint(''); }}
+                    onClick={() => { setAuthStep('INPUT'); setOtp(''); setError(''); setSuccessMsg(''); }}
                     className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline"
                   >
                     Edit Details
@@ -866,7 +871,7 @@ export default function LoginPage({ onLoginSuccess }) {
             ) : (
               <span>
                 Need an account?{' '}
-                <Link to={`/register${role ? `?role=${role}` : ''}`} className="text-blue-600 font-bold hover:underline">
+                <Link to="/register" state={{ role }} className="text-blue-600 font-bold hover:underline">
                   Create an account
                 </Link>
               </span>

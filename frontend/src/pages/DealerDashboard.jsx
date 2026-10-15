@@ -121,12 +121,42 @@ export default function DealerDashboard({ currentUser, onLogout }) {
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [isWelcomeBackActive, setIsWelcomeBackActive] = useState(() => {
     try {
+      let saved = null;
+      try {
+        saved = JSON.parse(localStorage.getItem('plumbmart_user') || '{}');
+      } catch {}
+      const targetId = currentUser?.id || currentUser?.mobile || saved?.id || 'DLR-01';
+      if (localStorage.getItem(`plumbmart_welcome_dismissed_dealer_${targetId}`) === 'true') {
+        return false;
+      }
       return localStorage.getItem('plumbmart_show_welcome_back') === 'true' ||
              Boolean(localStorage.getItem('plumbmart_dealer_welcome_back'));
     } catch {
       return false;
     }
   });
+
+  const handleDismissWelcome = () => {
+    const targetId = currentUser?.id || currentUser?.mobile || dealerProfile?.id || 'DLR-01';
+    setIsWelcomeBackActive(false);
+    setGovernanceNotice(null);
+    try {
+      localStorage.setItem(`plumbmart_welcome_dismissed_dealer_${targetId}`, 'true');
+      localStorage.removeItem('plumbmart_show_welcome_back');
+      localStorage.removeItem('plumbmart_dealer_welcome_back');
+      localStorage.removeItem(`plumbmart_dealer_welcome_back_${targetId}`);
+    } catch (e) {}
+    window.dispatchEvent(new CustomEvent('close_dealer_welcome_modal'));
+  };
+
+  useEffect(() => {
+    const handleClose = () => {
+      setIsWelcomeBackActive(false);
+      setGovernanceNotice(null);
+    };
+    window.addEventListener('close_dealer_welcome_modal', handleClose);
+    return () => window.removeEventListener('close_dealer_welcome_modal', handleClose);
+  }, []);
 
   // Dynamic SuperAdmin Priority Directive Notice State
   const [adminNotice, setAdminNotice] = useState(() => {
@@ -185,37 +215,40 @@ export default function DealerDashboard({ currentUser, onLogout }) {
           : Math.max(0, limit - due);
 
         setDealerProfile(prev => {
-          // Detect status change from Admin
-          if (prev.status && d.status && prev.status !== d.status) {
-            if (d.status === 'Suspended') {
-              setIsWelcomeBackActive(false);
-              try {
-                localStorage.removeItem('plumbmart_show_welcome_back');
-                localStorage.removeItem('plumbmart_dealer_welcome_back');
-              } catch (e) {}
-              setGovernanceNotice({
-                title: 'Account Suspended by Super Admin',
-                message: 'Your wholesale account access and credit lines have been suspended.',
-                time: new Date().toLocaleTimeString(),
-                isSuspended: true
-              });
-            } else if (d.status === 'Approved' || d.status === 'Active' || d.status === 'ACTIVE') {
-              setIsSuspendedModalOpen(false);
-              setIsWelcomeBackActive(true);
-              try {
-                localStorage.setItem('plumbmart_show_welcome_back', 'true');
-              } catch (e) {}
-              window.dispatchEvent(new CustomEvent('open_dealer_welcome_modal'));
-              setGovernanceNotice({
-                title: '🎉 Welcome Back! Account Approved & Re-activated',
-                message: 'Your wholesale account has been approved and unlocked by corporate administration.',
-                time: new Date().toLocaleTimeString(),
-                isApproved: true
-              });
-            } else if (d.status === 'PENDING' || d.status === 'Pending') {
-              navigate('/login', { replace: true });
-            }
+          const wasSuspended = prev.status === 'Suspended' || prev.status === 'SUSPENDED';
+          const isNowApproved = ['Approved', 'ACTIVE', 'Active'].includes(d.status);
+          const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_dealer_${targetId}`) === 'true';
+
+          if (d.status === 'Suspended') {
+            setIsWelcomeBackActive(false);
+            try {
+              localStorage.removeItem('plumbmart_show_welcome_back');
+              localStorage.removeItem('plumbmart_dealer_welcome_back');
+              localStorage.removeItem(`plumbmart_welcome_dismissed_dealer_${targetId}`);
+            } catch (e) {}
+            setGovernanceNotice({
+              title: 'Account Suspended by Super Admin',
+              message: 'Your wholesale account access and credit lines have been suspended.',
+              time: new Date().toLocaleTimeString(),
+              isSuspended: true
+            });
+          } else if (wasSuspended && isNowApproved && !isDismissed) {
+            setIsSuspendedModalOpen(false);
+            setIsWelcomeBackActive(true);
+            try {
+              localStorage.setItem('plumbmart_show_welcome_back', 'true');
+            } catch (e) {}
+            window.dispatchEvent(new CustomEvent('open_dealer_welcome_modal'));
+            setGovernanceNotice({
+              title: '🎉 Welcome Back! Account Approved & Re-activated',
+              message: 'Your wholesale account has been approved and unlocked by corporate administration.',
+              time: new Date().toLocaleTimeString(),
+              isApproved: true
+            });
+          } else if (d.status === 'PENDING' || d.status === 'Pending') {
+            navigate('/login', { replace: true });
           }
+
           return {
             ...prev,
             ...d,
@@ -225,6 +258,17 @@ export default function DealerDashboard({ currentUser, onLogout }) {
             availableCredit: avail
           };
         });
+
+        // Sync latest status to saved plumbmart_user in localStorage
+        try {
+          const savedUserStr = localStorage.getItem('plumbmart_user');
+          if (savedUserStr) {
+            const su = JSON.parse(savedUserStr);
+            if (su && (su.id === targetId || su.role === 'Dealer')) {
+              localStorage.setItem('plumbmart_user', JSON.stringify({ ...su, status: d.status }));
+            }
+          }
+        } catch (e) {}
       }
     } catch (err) {
       console.warn('Failed to load dealer profile:', err);
@@ -419,11 +463,14 @@ export default function DealerDashboard({ currentUser, onLogout }) {
         };
       });
 
+      const targetId = currentUser?.id || currentUser?.mobile || dealerProfile.id || 'DLR-01';
       if (updates.status === 'Suspended') {
         setIsWelcomeBackActive(false);
         try {
           localStorage.removeItem('plumbmart_show_welcome_back');
           localStorage.removeItem('plumbmart_dealer_welcome_back');
+          localStorage.removeItem(`plumbmart_dealer_welcome_back_${targetId}`);
+          localStorage.removeItem(`plumbmart_welcome_dismissed_dealer_${targetId}`);
         } catch (e) {}
         setIsSuspendedModalOpen(true);
         setGovernanceNotice({
@@ -432,31 +479,38 @@ export default function DealerDashboard({ currentUser, onLogout }) {
           time: new Date().toLocaleTimeString(),
           isSuspended: true
         });
-      } else if (updates.status === 'Approved' || payload.isApproved || payload.isWelcomeBack) {
-        setIsSuspendedModalOpen(false);
-        setIsWelcomeBackActive(true);
-        try {
-          localStorage.setItem('plumbmart_show_welcome_back', 'true');
-        } catch (e) {}
-        window.dispatchEvent(new CustomEvent('open_dealer_welcome_modal'));
-        setGovernanceNotice({
-          title: '🎉 Welcome Back! Account Approved & Re-activated',
-          message: 'Your wholesale account has been approved and unlocked by corporate administration.',
-          time: new Date().toLocaleTimeString(),
-          isApproved: true
-        });
+      } else if (updates.status === 'Approved' || updates.status === 'ACTIVE' || payload.isApproved || payload.isWelcomeBack) {
+        const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_dealer_${targetId}`) === 'true';
+        if (!isDismissed) {
+          setIsSuspendedModalOpen(false);
+          setIsWelcomeBackActive(true);
+          try {
+            localStorage.setItem('plumbmart_show_welcome_back', 'true');
+          } catch (e) {}
+          window.dispatchEvent(new CustomEvent('open_dealer_welcome_modal'));
+          setGovernanceNotice({
+            title: '🎉 Welcome Back! Account Approved & Re-activated',
+            message: 'Your wholesale account has been approved and unlocked by corporate administration.',
+            time: new Date().toLocaleTimeString(),
+            isApproved: true
+          });
+        }
       }
       setTimeout(() => setGovernanceNotice(null), 6000);
       fetchDealerProfile();
     };
 
-    // Check if dealer was recently approved
+    // Check if dealer was recently approved and not dismissed
     try {
-      const wb = localStorage.getItem('plumbmart_dealer_welcome_back');
-      const showWb = localStorage.getItem('plumbmart_show_welcome_back');
-      if (wb || showWb === 'true') {
-        setIsSuspendedModalOpen(false);
-        setIsWelcomeBackActive(true);
+      const targetId = currentUser?.id || currentUser?.mobile || dealerProfile.id || 'DLR-01';
+      const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_dealer_${targetId}`) === 'true';
+      if (!isDismissed) {
+        const wb = localStorage.getItem('plumbmart_dealer_welcome_back');
+        const showWb = localStorage.getItem('plumbmart_show_welcome_back');
+        if (wb || showWb === 'true') {
+          setIsSuspendedModalOpen(false);
+          setIsWelcomeBackActive(true);
+        }
       }
     } catch (e) {}
 
@@ -532,9 +586,13 @@ export default function DealerDashboard({ currentUser, onLogout }) {
         } catch (err) {}
       }
       if (e.key === 'plumbmart_dealer_welcome_back' || (e.key === 'plumbmart_show_welcome_back' && e.newValue === 'true')) {
-        setIsSuspendedModalOpen(false);
-        setIsWelcomeBackActive(true);
-        window.dispatchEvent(new CustomEvent('open_dealer_welcome_modal'));
+        const targetId = currentUser?.id || currentUser?.mobile || dealerProfile.id || 'DLR-01';
+        const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_dealer_${targetId}`) === 'true';
+        if (!isDismissed) {
+          setIsSuspendedModalOpen(false);
+          setIsWelcomeBackActive(true);
+          window.dispatchEvent(new CustomEvent('open_dealer_welcome_modal'));
+        }
       }
       if (e.key === 'plumbmart_user') {
         fetchDealerProfile();
@@ -784,9 +842,19 @@ export default function DealerDashboard({ currentUser, onLogout }) {
                 </p>
               </div>
             </div>
-            <span className="self-end sm:self-auto text-[10px] sm:text-[11px] bg-black/25 px-2 py-0.5 rounded-md font-mono shrink-0">
-              {governanceNotice.time}
-            </span>
+            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+              <span className="text-[10px] sm:text-[11px] bg-black/25 px-2 py-0.5 rounded-md font-mono shrink-0">
+                {governanceNotice.time}
+              </span>
+              <button
+                type="button"
+                onClick={handleDismissWelcome}
+                className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition cursor-pointer"
+                title="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -847,7 +915,7 @@ export default function DealerDashboard({ currentUser, onLogout }) {
         )}
 
         {/* Welcome Back Celebration Banner (When Approved after Suspension) */}
-        {dealerProfile.status === 'Approved' && isWelcomeBackActive && (
+        {(dealerProfile.status === 'Approved' || dealerProfile.status === 'ACTIVE' || dealerProfile.status === 'Active') && isWelcomeBackActive && (
           <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 text-white p-4 sm:p-5 rounded-2xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-2 border-emerald-300 animate-in fade-in slide-in-from-top-3 duration-300 w-full min-w-0">
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
@@ -876,7 +944,10 @@ export default function DealerDashboard({ currentUser, onLogout }) {
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/dealer/products')}
+                onClick={() => {
+                  handleDismissWelcome();
+                  navigate('/dealer/products');
+                }}
                 className="px-4 py-2 rounded-xl bg-white text-emerald-800 font-bold text-xs hover:bg-emerald-50 transition shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
                 <span>Order Now</span>
@@ -884,13 +955,7 @@ export default function DealerDashboard({ currentUser, onLogout }) {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setIsWelcomeBackActive(false);
-                  try {
-                    localStorage.removeItem('plumbmart_show_welcome_back');
-                    localStorage.removeItem('plumbmart_dealer_welcome_back');
-                  } catch (e) {}
-                }}
+                onClick={handleDismissWelcome}
                 className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition cursor-pointer"
                 title="Dismiss"
               >

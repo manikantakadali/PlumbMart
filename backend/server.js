@@ -310,7 +310,6 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
       message: `Verification code sent to ${result.email}`,
       email: result.email,
       emailSentViaSmtp: result.emailSentViaSmtp,
-      devOtp: result.devOtp || '123456',
       detectedRole: assignedRole
     });
   } catch (err) {
@@ -2072,6 +2071,84 @@ app.get('/api/orders/:id', (req, res) => {
     return res.status(404).json({ success: false, message: 'Order not found' });
   }
   res.json({ success: true, data: order });
+});
+
+// Bulk delete delivered orders
+app.delete('/api/orders/bulk/delivered', async (req, res) => {
+  try {
+    const db = getDb();
+    const initialCount = (db.orders || []).length;
+    const deliveredIds = (db.orders || [])
+      .filter(o => (o.status || '').toLowerCase().trim() === 'delivered')
+      .map(o => o.id);
+
+    if (deliveredIds.length === 0) {
+      return res.json({ success: true, count: 0, message: 'No delivered orders found to remove' });
+    }
+
+    db.orders = (db.orders || []).filter(o => (o.status || '').toLowerCase().trim() !== 'delivered');
+    if (Array.isArray(db.notifications)) {
+      db.notifications = db.notifications.filter(n => !deliveredIds.includes(n.orderId));
+    }
+    saveDb(db);
+
+    // Sync to Supabase if available
+    try {
+      const { pool } = require('./db');
+      if (pool) {
+        await pool.query("DELETE FROM orders WHERE LOWER(TRIM(status)) = 'delivered'");
+      }
+    } catch (dbErr) {
+      console.warn('[Supabase Order Bulk Delete Warning]', dbErr.message);
+    }
+
+    res.json({
+      success: true,
+      count: deliveredIds.length,
+      deletedIds: deliveredIds,
+      message: `Successfully removed ${deliveredIds.length} delivered order(s)`
+    });
+  } catch (err) {
+    console.error('[Delete Delivered Orders Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to remove delivered orders', error: err.message });
+  }
+});
+
+// Delete single order by ID
+app.delete('/api/orders/:id', async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const db = getDb();
+    const index = (db.orders || []).findIndex(o => o.id === orderId);
+    if (index === -1) {
+      return res.status(404).json({ success: false, message: `Order #${orderId} not found` });
+    }
+
+    const removedOrder = db.orders.splice(index, 1)[0];
+    if (Array.isArray(db.notifications)) {
+      db.notifications = db.notifications.filter(n => n.orderId !== orderId && (!n.title || !n.title.includes(orderId)));
+    }
+    saveDb(db);
+
+    // Sync to Supabase if available
+    try {
+      const { pool } = require('./db');
+      if (pool) {
+        await pool.query('DELETE FROM orders WHERE id = $1', [orderId]);
+      }
+    } catch (dbErr) {
+      console.warn('[Supabase Order Delete Warning]', dbErr.message);
+    }
+
+    res.json({
+      success: true,
+      message: `Order #${orderId} deleted successfully`,
+      deletedOrder: removedOrder
+    });
+  } catch (err) {
+    console.error('[Delete Order Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to delete order', error: err.message });
+  }
 });
 
 // Settle / Pay credit invoice

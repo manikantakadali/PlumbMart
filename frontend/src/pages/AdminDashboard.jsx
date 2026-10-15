@@ -603,9 +603,15 @@ export default function AdminDashboard({ currentUser, onLogout }) {
           dealerName,
           timestamp: Date.now()
         }));
+        localStorage.setItem(`plumbmart_dealer_welcome_back_${dealerId}`, 'true');
+        localStorage.removeItem(`plumbmart_welcome_dismissed_dealer_${dealerId}`);
+        localStorage.removeItem('plumbmart_welcome_dismissed_dealer_DLR-01');
       } else if (updates.status === 'Suspended' || updates.status === 'REJECTED') {
         localStorage.removeItem('plumbmart_show_welcome_back');
         localStorage.removeItem('plumbmart_dealer_welcome_back');
+        localStorage.removeItem(`plumbmart_dealer_welcome_back_${dealerId}`);
+        localStorage.removeItem(`plumbmart_welcome_dismissed_dealer_${dealerId}`);
+        localStorage.removeItem('plumbmart_welcome_dismissed_dealer_DLR-01');
       }
     } catch (e) {}
 
@@ -787,6 +793,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
         if (viewingDealer && viewingDealer.id === approveModalDealer.id) {
           setViewingDealer(prev => ({ ...prev, status: 'ACTIVE', zohoVerified: true }));
         }
+        handleUpdateDealer(approveModalDealer.id, { status: 'ACTIVE', zohoVerified: true });
         setApproveModalDealer(null);
         setTimeout(() => setSyncToast(null), 4500);
       } else {
@@ -879,12 +886,21 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     const targetPlumber = plumbers.find(p => p.id === plumberId) || selectedPlumber;
     const targetMobile = targetPlumber?.mobile;
 
+    const isApprovedPlumber = updates.status === 'VERIFIED' || updates.status === 'ACTIVE' || updates.status === 'Active';
+
     // 1. Cross-tab Broadcast Channel
     const broadcastPayload = {
       plumberId,
       mobile: targetMobile,
-      updates,
+      updates: {
+        ...updates,
+        isApproved: isApprovedPlumber,
+        isWelcomeBack: isApprovedPlumber
+      },
       status: updates.status,
+      isApproved: isApprovedPlumber,
+      isWelcomeBack: isApprovedPlumber,
+      plumberName: targetPlumber?.name || 'Ramesh Kumar',
       timestamp: Date.now()
     };
 
@@ -897,6 +913,23 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     // 2. LocalStorage broadcast & plumbmart_user sync
     try {
       localStorage.setItem('plumbmart_plumber_status_broadcast', JSON.stringify(broadcastPayload));
+      if (isApprovedPlumber) {
+        localStorage.setItem('plumbmart_show_plumber_welcome_back', 'true');
+        localStorage.setItem(`plumbmart_plumber_welcome_back_${plumberId}`, 'true');
+        localStorage.removeItem(`plumbmart_welcome_dismissed_plumber_${plumberId}`);
+        localStorage.removeItem('plumbmart_welcome_dismissed_plumber_PLM-01');
+        if (targetMobile) {
+          localStorage.removeItem(`plumbmart_welcome_dismissed_plumber_${targetMobile}`);
+        }
+      } else if (updates.status === 'SUSPENDED' || updates.status === 'REJECTED') {
+        localStorage.removeItem('plumbmart_show_plumber_welcome_back');
+        localStorage.removeItem(`plumbmart_plumber_welcome_back_${plumberId}`);
+        localStorage.removeItem(`plumbmart_welcome_dismissed_plumber_${plumberId}`);
+        localStorage.removeItem('plumbmart_welcome_dismissed_plumber_PLM-01');
+        if (targetMobile) {
+          localStorage.removeItem(`plumbmart_welcome_dismissed_plumber_${targetMobile}`);
+        }
+      }
       const savedUserStr = localStorage.getItem('plumbmart_user');
       if (savedUserStr) {
         const savedUser = JSON.parse(savedUserStr);
@@ -1035,6 +1068,90 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     } catch (err) {
       playWarningSound();
       console.warn('Order status sync error:', err.message);
+    }
+  };
+
+  // Delete Order (Single)
+  const handleDeleteOrder = async (orderId, e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete Order #${orderId}? This cannot be undone.`)) {
+      return;
+    }
+
+    // 1. Optimistic UI update
+    setOrders(prev => prev.filter(o => o.id !== orderId));
+    if (selectedOrder && selectedOrder.id === orderId) {
+      setSelectedOrder(null);
+    }
+
+    // 2. Broadcast across tabs
+    try {
+      const ch = new BroadcastChannel('plumbmart_orders');
+      ch.postMessage({ type: 'ORDER_DELETED', orderId });
+      ch.close();
+    } catch (err) {}
+
+    // 3. Persist deletion to backend API
+    try {
+      let res;
+      try {
+        res = await fetch(`/api/orders/${orderId}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Proxy status: ' + res.status);
+      } catch (e1) {
+        try {
+          res = await fetch(`http://localhost:5000/api/orders/${orderId}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error('Port 5000 status: ' + res.status);
+        } catch (e2) {
+          res = await fetch(`http://localhost:4000/api/orders/${orderId}`, { method: 'DELETE' });
+        }
+      }
+      playSuccessSound();
+      setSyncToast(`Order #${orderId} deleted permanently.`);
+      setTimeout(() => setSyncToast(null), 3000);
+    } catch (err) {
+      playWarningSound();
+      console.warn('Failed to delete order from backend:', err.message);
+    }
+  };
+
+  // Bulk Delete All Delivered Orders
+  const handleClearDeliveredOrders = async () => {
+    const deliveredCount = orders.filter(o => (o.status || '').toLowerCase().trim() === 'delivered').length;
+    if (deliveredCount === 0) {
+      setSyncToast('No delivered orders found to remove.');
+      setTimeout(() => setSyncToast(null), 3000);
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to remove all ${deliveredCount} delivered order(s)?`)) {
+      return;
+    }
+
+    // Optimistic UI update
+    setOrders(prev => prev.filter(o => (o.status || '').toLowerCase().trim() !== 'delivered'));
+    if (selectedOrder && (selectedOrder.status || '').toLowerCase().trim() === 'delivered') {
+      setSelectedOrder(null);
+    }
+
+    try {
+      let res;
+      try {
+        res = await fetch('/api/orders/bulk/delivered', { method: 'DELETE' });
+        if (!res.ok) throw new Error('Proxy status: ' + res.status);
+      } catch (e1) {
+        try {
+          res = await fetch('http://localhost:5000/api/orders/bulk/delivered', { method: 'DELETE' });
+          if (!res.ok) throw new Error('Port 5000 status: ' + res.status);
+        } catch (e2) {
+          res = await fetch('http://localhost:4000/api/orders/bulk/delivered', { method: 'DELETE' });
+        }
+      }
+      playSuccessSound();
+      setSyncToast(`Successfully removed ${deliveredCount} delivered order(s).`);
+      setTimeout(() => setSyncToast(null), 3000);
+    } catch (err) {
+      playWarningSound();
+      console.warn('Failed to clear delivered orders:', err.message);
     }
   };
 
@@ -1913,92 +2030,165 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                 </div>
               </div>
 
-              {/* Customers Table */}
-              <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
-                      <tr>
-                        <th className="py-3 px-4">Customer</th>
-                        <th className="py-3 px-4">Contact</th>
-                        <th className="py-3 px-4">Orders &amp; Value</th>
-                        <th className="py-3 px-4">Account Status</th>
-                        <th className="py-3 px-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/80">
-                      {customers.filter(c => 
-                        (c.name || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
-                        (c.mobile || '').includes(customerSearch)
-                      ).length === 0 ? (
-                        <tr>
-                          <td colSpan="5" className="py-8 text-center text-slate-400">
-                            No registered customer accounts found.
-                          </td>
-                        </tr>
-                      ) : (
-                        customers
-                          .filter(c => 
-                            (c.name || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
-                            (c.mobile || '').includes(customerSearch)
-                          )
-                          .map(cust => (
-                            <tr key={cust.id} className="hover:bg-slate-900/50 transition">
-                              <td className="py-3.5 px-4">
-                                <div className="font-bold text-white text-xs">{cust.name}</div>
-                                <span className="text-[10px] text-slate-500 font-mono">ID: {cust.id} &bull; Reg: {cust.registeredDate}</span>
-                              </td>
-                              <td className="py-3.5 px-4 font-mono">
-                                <div className="text-slate-300">+91 {cust.mobile}</div>
-                                <div className="text-slate-500 text-[10px]">{cust.email}</div>
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <div className="font-bold text-white">{cust.totalOrders} Orders</div>
-                                <div className="text-slate-400 text-[10px]">₹{(cust.totalSpent || 0).toLocaleString('en-IN')} total spent</div>
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                                  cust.status === 'Active'
-                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                    : cust.status === 'Suspended'
-                                    ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                                    : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                                }`}>
-                                  {cust.status}
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-4 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
-                                  <button
-                                    onClick={() => setSelectedCustomer(cust)}
-                                    className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-blue-400 text-xs font-semibold border border-slate-800"
-                                  >
-                                    Profile
-                                  </button>
-                                  {cust.status !== 'Active' ? (
-                                    <button
-                                      onClick={() => handleUpdateCustomerStatus(cust.id, 'Active')}
-                                      className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[11px] font-bold border border-emerald-500/20"
-                                    >
-                                      Activate
-                                    </button>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleUpdateCustomerStatus(cust.id, 'Suspended')}
-                                      className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[11px] font-bold border border-rose-500/20"
-                                    >
-                                      Suspend
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
+              {/* Customers View: Mobile Cards (<md) & Desktop Table (>=md) */}
+              {(() => {
+                const filteredCustomers = customers.filter(c => 
+                  (c.name || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
+                  (c.mobile || '').includes(customerSearch) ||
+                  (c.email || '').toLowerCase().includes(customerSearch.toLowerCase())
+                );
+
+                if (filteredCustomers.length === 0) {
+                  return (
+                    <div className="bg-slate-950 rounded-2xl border border-slate-800 p-12 text-center text-slate-400">
+                      <Users className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                      <p className="text-sm font-bold text-slate-300">No registered customer accounts found</p>
+                      <p className="text-xs text-slate-500 mt-1">Try adjusting your search criteria.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <>
+                    {/* Mobile Card View */}
+                    <div className="block md:hidden space-y-3">
+                      {filteredCustomers.map(cust => (
+                        <div
+                          key={cust.id}
+                          className="bg-slate-950 rounded-2xl border border-slate-800 p-4 space-y-3 shadow-lg"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <h4 className="font-bold text-white text-sm">{cust.name}</h4>
+                              <span className="text-[10px] text-slate-500 font-mono">ID: {cust.id} &bull; Reg: {cust.registeredDate}</span>
+                            </div>
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${
+                              cust.status === 'Active'
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : cust.status === 'Suspended'
+                                ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            }`}>
+                              {cust.status}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 py-2 border-y border-slate-800/80 text-xs">
+                            <div>
+                              <span className="text-[10px] text-slate-500 uppercase font-bold block">Contact</span>
+                              <a href={`tel:+91${cust.mobile}`} className="text-blue-400 font-mono text-[11px] flex items-center gap-1 mt-0.5">
+                                <Phone className="w-2.5 h-2.5" />
+                                +91 {cust.mobile}
+                              </a>
+                              {cust.email && <span className="text-slate-400 text-[10px] truncate block">{cust.email}</span>}
+                            </div>
+                            <div className="text-right">
+                              <span className="text-[10px] text-slate-500 uppercase font-bold block">Orders / Spent</span>
+                              <span className="font-bold text-white block mt-0.5">{cust.totalOrders} Orders</span>
+                              <span className="text-emerald-400 font-mono text-[11px]">₹{(cust.totalSpent || 0).toLocaleString('en-IN')}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-1">
+                            <button
+                              onClick={() => setSelectedCustomer(cust)}
+                              className="flex-1 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-blue-400 text-xs font-semibold border border-slate-800 transition text-center cursor-pointer"
+                            >
+                              Profile
+                            </button>
+                            {cust.status !== 'Active' ? (
+                              <button
+                                onClick={() => handleUpdateCustomerStatus(cust.id, 'Active')}
+                                className="flex-1 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/20 transition cursor-pointer"
+                              >
+                                Activate
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleUpdateCustomerStatus(cust.id, 'Suspended')}
+                                className="flex-1 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold border border-rose-500/20 transition cursor-pointer"
+                              >
+                                Suspend
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs min-w-[700px]">
+                          <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
+                            <tr>
+                              <th className="py-3 px-4 whitespace-nowrap">Customer</th>
+                              <th className="py-3 px-4 whitespace-nowrap">Contact</th>
+                              <th className="py-3 px-4 whitespace-nowrap">Orders &amp; Value</th>
+                              <th className="py-3 px-4 whitespace-nowrap">Account Status</th>
+                              <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
                             </tr>
-                          ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/80">
+                            {filteredCustomers.map(cust => (
+                              <tr key={cust.id} className="hover:bg-slate-900/50 transition">
+                                <td className="py-3.5 px-4">
+                                  <div className="font-bold text-white text-xs">{cust.name}</div>
+                                  <span className="text-[10px] text-slate-500 font-mono">ID: {cust.id} &bull; Reg: {cust.registeredDate}</span>
+                                </td>
+                                <td className="py-3.5 px-4 font-mono">
+                                  <div className="text-slate-300">+91 {cust.mobile}</div>
+                                  <div className="text-slate-500 text-[10px]">{cust.email}</div>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <div className="font-bold text-white">{cust.totalOrders} Orders</div>
+                                  <div className="text-slate-400 text-[10px]">₹{(cust.totalSpent || 0).toLocaleString('en-IN')} total spent</div>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                    cust.status === 'Active'
+                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                      : cust.status === 'Suspended'
+                                      ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                      : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                  }`}>
+                                    {cust.status}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      onClick={() => setSelectedCustomer(cust)}
+                                      className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-blue-400 text-xs font-semibold border border-slate-800 cursor-pointer"
+                                    >
+                                      Profile
+                                    </button>
+                                    {cust.status !== 'Active' ? (
+                                      <button
+                                        onClick={() => handleUpdateCustomerStatus(cust.id, 'Active')}
+                                        className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[11px] font-bold border border-emerald-500/20 cursor-pointer"
+                                      >
+                                        Activate
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleUpdateCustomerStatus(cust.id, 'Suspended')}
+                                        className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[11px] font-bold border border-rose-500/20 cursor-pointer"
+                                      >
+                                        Suspend
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
             </div>
           )}
@@ -2521,7 +2711,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
                       {/* Orders Table */}
                       <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs">
+                        <table className="w-full text-left text-xs min-w-[650px]">
                           <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
                             <tr>
                               <th className="py-3 px-3">Order ID</th>
@@ -3051,29 +3241,42 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                 </div>
 
                 {/* Right Header Controls: Live Badge, Refresh, Search */}
-                <div className="flex items-center flex-wrap gap-2.5">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span>Live Auto-Sync</span>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full sm:w-auto">
+                  <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold shrink-0">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                      <span>Live Auto-Sync</span>
+                    </div>
+
+                    <button
+                      onClick={() => fetchOrders(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-semibold border border-slate-800 transition shrink-0 cursor-pointer"
+                      title="Force refresh orders"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingOrders ? 'animate-spin text-blue-400' : ''}`} />
+                      <span>Refresh</span>
+                    </button>
+
+                    {orders.some(o => (o.status || '').toLowerCase().trim() === 'delivered') && (
+                      <button
+                        onClick={handleClearDeliveredOrders}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/15 hover:bg-rose-600 text-rose-400 hover:text-white rounded-xl text-xs font-semibold border border-rose-500/30 transition shrink-0 cursor-pointer shadow-xs"
+                        title="Remove all delivered orders"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Remove Delivered</span>
+                      </button>
+                    )}
                   </div>
 
-                  <button
-                    onClick={() => fetchOrders(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-semibold border border-slate-800 transition"
-                    title="Force refresh orders"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingOrders ? 'animate-spin text-blue-400' : ''}`} />
-                    <span>Refresh</span>
-                  </button>
-
                   {/* Search */}
-                  <div className="relative max-w-xs w-full">
+                  <div className="relative w-full sm:w-64">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                     <input
                       type="text"
                       value={orderSearch}
                       onChange={e => setOrderSearch(e.target.value)}
-                      placeholder="Search by order ID or user..."
+                      placeholder="Search ID, client, mobile..."
                       className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                     />
                   </div>
@@ -3081,180 +3284,358 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Filter Tabs Bar */}
-              <div className="flex flex-wrap items-center gap-2 text-xs">
+              <div className="space-y-2 text-xs">
                 {/* Client filter */}
-                <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
-                  {['All', 'Customer', 'Dealer'].map(clientType => (
+                <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-x-auto no-scrollbar">
+                  {[
+                    { id: 'All', label: 'All Clients', count: orders.length },
+                    { id: 'Customer', label: 'Customers', count: orders.filter(o => o.clientType === 'Customer').length },
+                    { id: 'Dealer', label: 'Dealers', count: orders.filter(o => o.clientType === 'Dealer').length }
+                  ].map(tab => (
                     <button
-                      key={clientType}
-                      onClick={() => setOrderClientFilter(clientType)}
-                      className={`px-3 py-1 rounded-lg font-semibold transition ${
-                        orderClientFilter === clientType
-                          ? 'bg-blue-600 text-white'
+                      key={tab.id}
+                      onClick={() => setOrderClientFilter(tab.id)}
+                      className={`px-3 py-1.5 rounded-lg font-semibold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                        orderClientFilter === tab.id
+                          ? 'bg-blue-600 text-white shadow-xs'
                           : 'text-slate-400 hover:text-white'
                       }`}
                     >
-                      {clientType === 'All' ? 'All Clients' : clientType + 's'}
+                      <span>{tab.label}</span>
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                        orderClientFilter === tab.id ? 'bg-blue-700 text-white' : 'bg-slate-900 text-slate-500'
+                      }`}>
+                        {tab.count}
+                      </span>
                     </button>
                   ))}
                 </div>
 
-                {/* Status filter */}
-                <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-x-auto">
-                  {['All', 'Shipped', 'Out for Delivery', 'Delivered', 'Cancelled'].map(st => (
-                    <button
-                      key={st}
-                      onClick={() => setOrderStatusFilter(st)}
-                      className={`px-3 py-1 rounded-lg font-semibold whitespace-nowrap transition ${
-                        orderStatusFilter === st
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      {st}
-                    </button>
-                  ))}
+                {/* Status filter with smooth horizontal scroll and NO ugly scrollbar */}
+                <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-x-auto no-scrollbar scroll-smooth">
+                  {['All', 'Pending', 'Confirmed', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered', 'Cancelled'].map(st => {
+                    const count = st === 'All' 
+                      ? orders.filter(o => orderClientFilter === 'All' || o.clientType === orderClientFilter).length
+                      : orders.filter(o => (orderClientFilter === 'All' || o.clientType === orderClientFilter) && o.status === st).length;
+                    
+                    return (
+                      <button
+                        key={st}
+                        onClick={() => setOrderStatusFilter(st)}
+                        className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                          orderStatusFilter === st
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span>{st}</span>
+                        {count > 0 && (
+                          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                            orderStatusFilter === st ? 'bg-indigo-700 text-white' : 'bg-slate-900 text-slate-500'
+                          }`}>
+                            {count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Orders List Table */}
-              <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
-                      <tr>
-                        <th className="py-3 px-4">Order ID &amp; Date</th>
-                        <th className="py-3 px-4">Client</th>
-                        <th className="py-3 px-4">Payment Method</th>
-                        <th className="py-3 px-4">Total Amount</th>
-                        <th className="py-3 px-4">Fulfillment Status</th>
-                        <th className="py-3 px-4 text-center">Update Status</th>
-                        <th className="py-3 px-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/80">
-                      {orders.filter(o => {
-                        const matchClient = orderClientFilter === 'All' || o.clientType === orderClientFilter;
-                        const matchStatus = orderStatusFilter === 'All' || o.status === orderStatusFilter;
-                        const q = orderSearch.toLowerCase();
-                        const matchSearch = (o.id || '').toLowerCase().includes(q) || (o.clientName && o.clientName.toLowerCase().includes(q));
-                        return matchClient && matchStatus && matchSearch;
-                      }).length === 0 ? (
-                        <tr>
-                          <td colSpan="7" className="py-8 text-center text-slate-400">
-                            No orders found matching the filter criteria.
-                          </td>
-                        </tr>
-                      ) : (
-                        orders
-                          .filter(o => {
-                            const matchClient = orderClientFilter === 'All' || o.clientType === orderClientFilter;
-                            const matchStatus = orderStatusFilter === 'All' || o.status === orderStatusFilter;
-                            const q = orderSearch.toLowerCase();
-                            const matchSearch = (o.id || '').toLowerCase().includes(q) || (o.clientName && o.clientName.toLowerCase().includes(q));
-                            return matchClient && matchStatus && matchSearch;
-                          })
-                          .map(order => (
-                            <tr
-                              key={order.id}
-                              onClick={() => setSelectedOrder(order)}
-                              className="hover:bg-slate-900/80 cursor-pointer transition group"
-                              title="Click to view full order details"
-                            >
-                              <td className="py-3.5 px-4">
-                                <span className="font-mono font-bold text-white group-hover:text-blue-400 transition block">{order.id}</span>
-                                <span className="text-[10px] text-slate-500">{order.date || 'Recent'}</span>
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <span className="font-bold text-slate-200 block">{order.clientName}</span>
-                                <span className={`text-[10px] font-bold ${order.clientType === 'Dealer' ? 'text-indigo-400' : 'text-blue-400'}`}>
-                                  {order.clientType} &bull; +91 {order.clientMobile}
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-4 font-mono text-slate-300">
-                                {order.paymentMethod}
-                              </td>
-                              <td className="py-3.5 px-4 font-bold text-white">
-                                ₹{(order.total || 0).toLocaleString('en-IN')}
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                                  order.status === 'Delivered'
-                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                    : order.status === 'Cancelled'
-                                    ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                                    : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                                }`}>
-                                  {order.status}
-                                </span>
+              {/* Orders Data View: Mobile Cards (<md) & Desktop Table (>=md) */}
+              {(() => {
+                const filteredOrders = orders.filter(o => {
+                  const matchClient = orderClientFilter === 'All' || o.clientType === orderClientFilter;
+                  const matchStatus = orderStatusFilter === 'All' || o.status === orderStatusFilter;
+                  const q = orderSearch.toLowerCase();
+                  const matchSearch = (o.id || '').toLowerCase().includes(q) || 
+                                      (o.clientName && o.clientName.toLowerCase().includes(q)) ||
+                                      (o.clientMobile && o.clientMobile.includes(q));
+                  return matchClient && matchStatus && matchSearch;
+                });
 
-                                {/* Live Plumber Telemetry Response Badge */}
-                                {order.plumberStage === 'TASK_DONE' || order.plumberTaskDone ? (
-                                  <span className="flex items-center gap-1 mt-1 text-[9px] font-bold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-md border border-emerald-500/30 w-fit">
-                                    <CheckCircle2 className="w-2.5 h-2.5" />
-                                    <span>Plumber: Task Done &amp; Signed</span>
-                                  </span>
-                                ) : order.plumberStage === 'MATERIALS_RECEIVED' ? (
-                                  <span className="flex items-center gap-1 mt-1 text-[9px] font-bold text-amber-400 bg-amber-500/15 px-2 py-0.5 rounded-md border border-amber-500/30 w-fit">
-                                    <Check className="w-2.5 h-2.5" />
-                                    <span>Plumber: Materials Received</span>
-                                  </span>
-                                ) : null}
-                              </td>
-                              <td className="py-3.5 px-4 text-center">
-                                <select
-                                  value={order.status}
-                                  onClick={e => e.stopPropagation()}
-                                  onChange={e => {
-                                    e.stopPropagation();
-                                    handleUpdateOrderStatus(order.id, e.target.value);
-                                  }}
-                                  className="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                >
-                                  <option value="Pending">Pending</option>
-                                  <option value="Confirmed">Confirmed</option>
-                                  <option value="Processing">Processing</option>
-                                  <option value="Shipped">Shipped</option>
-                                  <option value="Out for Delivery">Out for Delivery</option>
-                                  <option value="Delivered">Delivered</option>
-                                  <option value="Cancelled">Cancelled</option>
-                                </select>
+                if (filteredOrders.length === 0) {
+                  return (
+                    <div className="bg-slate-950 rounded-2xl border border-slate-800 p-12 text-center text-slate-400">
+                      <Package className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                      <p className="text-sm font-bold text-slate-300">No orders found</p>
+                      <p className="text-xs text-slate-500 mt-1">No orders match the selected filters or search criteria.</p>
+                    </div>
+                  );
+                }
 
-                                {/* 1-Click Approve Task Completed button when plumber signed off */}
-                                {(order.plumberStage === 'TASK_DONE' || order.plumberTaskDone) && order.status !== 'Delivered' && (
-                                  <button
-                                    type="button"
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      handleUpdateOrderStatus(order.id, 'Delivered');
-                                    }}
-                                    className="mt-1.5 w-full px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] flex items-center justify-center gap-1 shadow-sm transition active:scale-95 cursor-pointer"
-                                    title="Verify plumber's field sign-off and mark task complete"
+                return (
+                  <>
+                    {/* MOBILE CARD VIEW: Designed specifically for small screens (360px - 767px) */}
+                    <div className="block md:hidden space-y-3">
+                      {filteredOrders.map(order => (
+                        <div
+                          key={order.id}
+                          onClick={() => setSelectedOrder(order)}
+                          className="bg-slate-950 rounded-2xl border border-slate-800 p-4 space-y-3 shadow-lg hover:border-slate-700 active:border-blue-500/50 transition cursor-pointer"
+                        >
+                          {/* Row 1: Order ID, Date & Fulfillment Status Badge */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <span className="font-mono font-bold text-sm text-blue-400 block">{order.id}</span>
+                              <span className="text-[10px] text-slate-500 font-mono">{order.date || 'Recent'}</span>
+                            </div>
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${
+                              order.status === 'Delivered'
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : order.status === 'Cancelled'
+                                ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                : order.status === 'Shipped' || order.status === 'Out for Delivery'
+                                ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                                : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                            }`}>
+                              {order.status}
+                            </span>
+                          </div>
+
+                          {/* Row 2: Client Details & Total Amount */}
+                          <div className="flex items-center justify-between gap-3 pt-2.5 border-t border-slate-800/80">
+                            <div className="min-w-0">
+                              <span className="font-bold text-slate-200 text-xs block truncate">{order.clientName}</span>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${order.clientType === 'Dealer' ? 'bg-indigo-500/15 text-indigo-400' : 'bg-blue-500/15 text-blue-400'}`}>
+                                  {order.clientType}
+                                </span>
+                                {order.clientMobile && (
+                                  <a
+                                    href={`tel:+91${order.clientMobile}`}
+                                    onClick={e => e.stopPropagation()}
+                                    className="text-[10px] font-mono text-slate-400 hover:text-white flex items-center gap-1 transition"
                                   >
-                                    <CheckCircle2 className="w-3 h-3" />
-                                    <span>Verify &amp; Close Task</span>
-                                  </button>
+                                    <Phone className="w-2.5 h-2.5 text-slate-500" />
+                                    <span>+91 {order.clientMobile}</span>
+                                  </a>
                                 )}
-                              </td>
-                              <td className="py-3.5 px-4 text-right">
-                                <button
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    setSelectedOrder(order);
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/15 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 transition text-xs font-semibold shadow-sm"
-                                >
-                                  <Eye className="w-3.5 h-3.5" />
-                                  <span>View</span>
-                                </button>
-                              </td>
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <span className="text-[10px] text-slate-400 block uppercase font-semibold">Total</span>
+                              <span className="font-mono font-extrabold text-white text-base">
+                                ₹{(order.total || 0).toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Row 3: Payment Method Pill */}
+                          <div className="flex items-center justify-between text-[11px] bg-slate-900/70 px-3 py-1.5 rounded-xl border border-slate-800/60">
+                            <span className="text-slate-400 flex items-center gap-1.5">
+                              <CreditCard className="w-3 h-3 text-slate-500" />
+                              <span>Payment:</span>
+                            </span>
+                            <span className="font-mono font-semibold text-slate-300 text-right truncate max-w-[200px]">
+                              {order.paymentMethod}
+                            </span>
+                          </div>
+
+                          {/* Plumber Live Telemetry Banner if recorded */}
+                          {(order.plumberStage === 'TASK_DONE' || order.plumberTaskDone) ? (
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 bg-emerald-500/15 px-2.5 py-1 rounded-xl border border-emerald-500/30">
+                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                              <span>Plumber Sign-Off: Task Done &amp; Signed</span>
+                            </div>
+                          ) : order.plumberStage === 'MATERIALS_RECEIVED' ? (
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-400 bg-amber-500/15 px-2.5 py-1 rounded-xl border border-amber-500/30">
+                              <Check className="w-3.5 h-3.5 shrink-0" />
+                              <span>Plumber: Materials Received On-Site</span>
+                            </div>
+                          ) : null}
+
+                          {/* Row 4: Touch Actions - Quick Status Select & Details Button */}
+                          <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2">
+                            <div className="flex-1">
+                              <select
+                                value={order.status}
+                                onClick={e => e.stopPropagation()}
+                                onChange={e => {
+                                  e.stopPropagation();
+                                  handleUpdateOrderStatus(order.id, e.target.value);
+                                }}
+                                className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                              >
+                                <option value="Pending">Pending</option>
+                                <option value="Confirmed">Confirmed</option>
+                                <option value="Processing">Processing</option>
+                                <option value="Shipped">Shipped</option>
+                                <option value="Out for Delivery">Out for Delivery</option>
+                                <option value="Delivered">Delivered</option>
+                                <option value="Cancelled">Cancelled</option>
+                              </select>
+                            </div>
+
+                            {(order.plumberStage === 'TASK_DONE' || order.plumberTaskDone) && order.status !== 'Delivered' && (
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  handleUpdateOrderStatus(order.id, 'Delivered');
+                                }}
+                                className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition active:scale-95 shrink-0 cursor-pointer"
+                                title="Verify plumber's field sign-off and mark task complete"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Verify</span>
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={e => {
+                                e.stopPropagation();
+                                setSelectedOrder(order);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 transition text-xs font-semibold shrink-0 cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Details</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={e => handleDeleteOrder(order.id, e)}
+                              className="p-1.5 rounded-xl bg-rose-600/15 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 transition shrink-0 cursor-pointer"
+                              title={`Delete Order #${order.id}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* DESKTOP TABLE VIEW: Shown on md screens and above */}
+                    <div className="hidden md:block bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs min-w-[850px]">
+                          <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
+                            <tr>
+                              <th className="py-3 px-4 whitespace-nowrap">Order ID &amp; Date</th>
+                              <th className="py-3 px-4 whitespace-nowrap">Client</th>
+                              <th className="py-3 px-4 whitespace-nowrap">Payment Method</th>
+                              <th className="py-3 px-4 whitespace-nowrap">Total Amount</th>
+                              <th className="py-3 px-4 whitespace-nowrap">Fulfillment Status</th>
+                              <th className="py-3 px-4 text-center whitespace-nowrap">Update Status</th>
+                              <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
                             </tr>
-                          ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/80">
+                            {filteredOrders.map(order => (
+                              <tr
+                                key={order.id}
+                                onClick={() => setSelectedOrder(order)}
+                                className="hover:bg-slate-900/80 cursor-pointer transition group"
+                                title="Click to view full order details"
+                              >
+                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                  <span className="font-mono font-bold text-white group-hover:text-blue-400 transition block">{order.id}</span>
+                                  <span className="text-[10px] text-slate-500 font-mono">{order.date || 'Recent'}</span>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className="font-bold text-slate-200 block">{order.clientName}</span>
+                                  <span className={`text-[10px] font-bold ${order.clientType === 'Dealer' ? 'text-indigo-400' : 'text-blue-400'}`}>
+                                    {order.clientType} &bull; +91 {order.clientMobile}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 font-mono text-slate-300">
+                                  {order.paymentMethod}
+                                </td>
+                                <td className="py-3.5 px-4 font-bold text-white whitespace-nowrap font-mono">
+                                  ₹{(order.total || 0).toLocaleString('en-IN')}
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                    order.status === 'Delivered'
+                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                      : order.status === 'Cancelled'
+                                      ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                      : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                  }`}>
+                                    {order.status}
+                                  </span>
+
+                                  {/* Live Plumber Telemetry Response Badge */}
+                                  {order.plumberStage === 'TASK_DONE' || order.plumberTaskDone ? (
+                                    <span className="flex items-center gap-1 mt-1 text-[9px] font-bold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-md border border-emerald-500/30 w-fit">
+                                      <CheckCircle2 className="w-2.5 h-2.5" />
+                                      <span>Plumber: Task Done &amp; Signed</span>
+                                    </span>
+                                  ) : order.plumberStage === 'MATERIALS_RECEIVED' ? (
+                                    <span className="flex items-center gap-1 mt-1 text-[9px] font-bold text-amber-400 bg-amber-500/15 px-2 py-0.5 rounded-md border border-amber-500/30 w-fit">
+                                      <Check className="w-2.5 h-2.5" />
+                                      <span>Plumber: Materials Received</span>
+                                    </span>
+                                  ) : null}
+                                </td>
+                                <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                                  <select
+                                    value={order.status}
+                                    onClick={e => e.stopPropagation()}
+                                    onChange={e => {
+                                      e.stopPropagation();
+                                      handleUpdateOrderStatus(order.id, e.target.value);
+                                    }}
+                                    className="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                                  >
+                                    <option value="Pending">Pending</option>
+                                    <option value="Confirmed">Confirmed</option>
+                                    <option value="Processing">Processing</option>
+                                    <option value="Shipped">Shipped</option>
+                                    <option value="Out for Delivery">Out for Delivery</option>
+                                    <option value="Delivered">Delivered</option>
+                                    <option value="Cancelled">Cancelled</option>
+                                  </select>
+
+                                  {/* 1-Click Approve Task Completed button when plumber signed off */}
+                                  {(order.plumberStage === 'TASK_DONE' || order.plumberTaskDone) && order.status !== 'Delivered' && (
+                                    <button
+                                      type="button"
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        handleUpdateOrderStatus(order.id, 'Delivered');
+                                      }}
+                                      className="mt-1.5 w-full px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] flex items-center justify-center gap-1 shadow-sm transition active:scale-95 cursor-pointer"
+                                      title="Verify plumber's field sign-off and mark task complete"
+                                    >
+                                      <CheckCircle2 className="w-3 h-3" />
+                                      <span>Verify &amp; Close Task</span>
+                                    </button>
+                                  )}
+                                </td>
+                                <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        setSelectedOrder(order);
+                                      }}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/15 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 transition text-xs font-semibold shadow-sm cursor-pointer"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>View</span>
+                                    </button>
+                                    <button
+                                      onClick={e => handleDeleteOrder(order.id, e)}
+                                      className="inline-flex items-center justify-center p-1.5 rounded-xl bg-rose-600/15 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 transition shadow-sm cursor-pointer"
+                                      title={`Delete Order #${order.id}`}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
             </div>
           )}
@@ -3356,7 +3737,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-left text-xs min-w-[700px]">
                     <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
                       <tr>
                         <th className="py-2.5 px-3">SKU &amp; Product</th>
@@ -3433,7 +3814,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-left text-xs min-w-[760px]">
                     <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
                       <tr>
                         <th className="py-3 px-3">Dealer</th>
@@ -3503,65 +3884,123 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
-                      <tr>
-                        <th className="py-3 px-3">Txn ID</th>
-                        <th className="py-3 px-3">Order ID</th>
-                        <th className="py-3 px-3">Client</th>
-                        <th className="py-3 px-3">Method</th>
-                        <th className="py-3 px-3">Gateway Ref</th>
-                        <th className="py-3 px-3">Amount</th>
-                        <th className="py-3 px-3">Status</th>
-                        <th className="py-3 px-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/80">
-                      {payments.filter(p => paymentStatusFilter === 'All' || p.status === paymentStatusFilter).length === 0 ? (
-                        <tr>
-                          <td colSpan="8" className="py-8 text-center text-slate-400">
-                            No payment transactions recorded yet.
-                          </td>
-                        </tr>
-                      ) : (
-                        payments
-                          .filter(p => paymentStatusFilter === 'All' || p.status === paymentStatusFilter)
-                          .map(pay => (
-                            <tr key={pay.id} className="hover:bg-slate-900/50 transition">
-                              <td className="py-3 px-3 font-mono text-slate-300">{pay.id}</td>
-                              <td className="py-3 px-3 font-mono font-bold text-white">{pay.orderId}</td>
-                              <td className="py-3 px-3 text-slate-200">{pay.clientName}</td>
-                              <td className="py-3 px-3 text-slate-400">{pay.method}</td>
-                              <td className="py-3 px-3 font-mono text-[10px] text-blue-400">{pay.gatewayRef}</td>
-                              <td className="py-3 px-3 font-bold text-white">₹{(pay.amount || 0).toLocaleString('en-IN')}</td>
-                              <td className="py-3 px-3">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  pay.status === 'Successful'
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                    : pay.status === 'Refunded'
-                                    ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                }`}>
-                                  {pay.status}
+                {(() => {
+                  const filteredPayments = payments.filter(p => paymentStatusFilter === 'All' || p.status === paymentStatusFilter);
+
+                  if (filteredPayments.length === 0) {
+                    return (
+                      <div className="py-8 text-center text-slate-400">
+                        No payment transactions recorded yet.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <>
+                      {/* Mobile Cards View */}
+                      <div className="block md:hidden space-y-3">
+                        {filteredPayments.map(pay => (
+                          <div key={pay.id} className="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800 space-y-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <span className="font-mono text-xs text-blue-400 font-bold block">{pay.id}</span>
+                                <span className="text-[10px] text-slate-500 font-mono">Order: {pay.orderId}</span>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                pay.status === 'Successful'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  : pay.status === 'Refunded'
+                                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              }`}>
+                                {pay.status}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/60">
+                              <div>
+                                <span className="text-slate-200 font-semibold block">{pay.clientName}</span>
+                                <span className="text-[10px] text-slate-400">{pay.method}</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-bold text-white font-mono text-sm block">
+                                  ₹{(pay.amount || 0).toLocaleString('en-IN')}
                                 </span>
-                              </td>
-                              <td className="py-3 px-3 text-right">
-                                {pay.status === 'Successful' && (
-                                  <button
-                                    onClick={() => handleProcessRefund(pay.id)}
-                                    className="px-2 py-1 rounded bg-slate-900 hover:bg-rose-950 text-rose-400 text-[10px] font-bold border border-rose-900/40"
-                                  >
-                                    Refund
-                                  </button>
+                                {pay.gatewayRef && (
+                                  <span className="font-mono text-[9px] text-slate-500 block truncate max-w-[120px]">
+                                    {pay.gatewayRef}
+                                  </span>
                                 )}
-                              </td>
+                              </div>
+                            </div>
+
+                            {pay.status === 'Successful' && (
+                              <div className="pt-1.5 border-t border-slate-800/60 text-right">
+                                <button
+                                  onClick={() => handleProcessRefund(pay.id)}
+                                  className="px-3 py-1 rounded-lg bg-slate-900 hover:bg-rose-950 text-rose-400 text-xs font-bold border border-rose-900/40 cursor-pointer"
+                                >
+                                  Refund
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Desktop Table View */}
+                      <div className="hidden md:block overflow-x-auto">
+                        <table className="w-full text-left text-xs min-w-[780px]">
+                          <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
+                            <tr>
+                              <th className="py-3 px-3 whitespace-nowrap">Txn ID</th>
+                              <th className="py-3 px-3 whitespace-nowrap">Order ID</th>
+                              <th className="py-3 px-3 whitespace-nowrap">Client</th>
+                              <th className="py-3 px-3 whitespace-nowrap">Method</th>
+                              <th className="py-3 px-3 whitespace-nowrap">Gateway Ref</th>
+                              <th className="py-3 px-3 whitespace-nowrap">Amount</th>
+                              <th className="py-3 px-3 whitespace-nowrap">Status</th>
+                              <th className="py-3 px-3 text-right whitespace-nowrap">Actions</th>
                             </tr>
-                          ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/80">
+                            {filteredPayments.map(pay => (
+                              <tr key={pay.id} className="hover:bg-slate-900/50 transition">
+                                <td className="py-3 px-3 font-mono text-slate-300">{pay.id}</td>
+                                <td className="py-3 px-3 font-mono font-bold text-white">{pay.orderId}</td>
+                                <td className="py-3 px-3 text-slate-200">{pay.clientName}</td>
+                                <td className="py-3 px-3 text-slate-400">{pay.method}</td>
+                                <td className="py-3 px-3 font-mono text-[10px] text-blue-400">{pay.gatewayRef}</td>
+                                <td className="py-3 px-3 font-bold text-white font-mono">₹{(pay.amount || 0).toLocaleString('en-IN')}</td>
+                                <td className="py-3 px-3">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    pay.status === 'Successful'
+                                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                      : pay.status === 'Refunded'
+                                      ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                  }`}>
+                                    {pay.status}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 text-right">
+                                  {pay.status === 'Successful' && (
+                                    <button
+                                      onClick={() => handleProcessRefund(pay.id)}
+                                      className="px-2 py-1 rounded bg-slate-900 hover:bg-rose-950 text-rose-400 text-[10px] font-bold border border-rose-900/40 cursor-pointer"
+                                    >
+                                      Refund
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
 
             </div>
@@ -4069,8 +4508,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       {/* MODAL 1: CUSTOMER PROFILE & ORDER HISTORY               */}
       {/* ======================================================== */}
       {selectedCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
-          <div className="bg-slate-900 rounded-3xl max-w-lg w-full p-6 border border-slate-800 shadow-2xl relative space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-slate-900 rounded-2xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-6 border border-slate-800 shadow-2xl relative space-y-4 my-auto max-h-[92vh] overflow-y-auto">
             <button
               onClick={() => setSelectedCustomer(null)}
               className="absolute top-5 right-5 text-slate-400 hover:text-white"
@@ -4136,8 +4575,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       {/* MODAL 2: EDIT DEALER CREDIT LIMIT                        */}
       {/* ======================================================== */}
       {selectedDealer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
-          <div className="bg-slate-900 rounded-3xl max-w-md w-full p-6 border border-slate-800 shadow-2xl relative space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-slate-900 rounded-2xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 border border-slate-800 shadow-2xl relative space-y-4 my-auto max-h-[92vh] overflow-y-auto">
             <button
               onClick={() => setSelectedDealer(null)}
               className="absolute top-5 right-5 text-slate-400 hover:text-white"
@@ -4222,8 +4661,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       {/* MODAL 3: PLUMBER ACTIVITIES & VERIFICATION               */}
       {/* ======================================================== */}
       {selectedPlumber && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
-          <div className="bg-slate-900 rounded-3xl max-w-lg w-full p-6 border border-slate-800 shadow-2xl relative space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-slate-900 rounded-2xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-6 border border-slate-800 shadow-2xl relative space-y-4 my-auto max-h-[92vh] overflow-y-auto">
             <button
               onClick={() => setSelectedPlumber(null)}
               className="absolute top-5 right-5 text-slate-400 hover:text-white"
@@ -4317,8 +4756,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       {/* MODAL 4: BROADCAST NOTIFICATION MODAL                    */}
       {/* ======================================================== */}
       {broadcastModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
-          <form onSubmit={handleSendBroadcast} className="bg-slate-900 rounded-3xl max-w-md w-full p-6 border border-slate-800 shadow-2xl relative space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">
+          <form onSubmit={handleSendBroadcast} className="bg-slate-900 rounded-2xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 border border-slate-800 shadow-2xl relative space-y-4 my-auto max-h-[92vh] overflow-y-auto">
             <button
               type="button"
               onClick={() => setBroadcastModalOpen(false)}
@@ -4395,10 +4834,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       {/* MODAL 5: COMPLETE ORDER DETAILS & FULFILLMENT BREAKDOWN  */}
       {/* ======================================================== */}
       {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-slate-900 rounded-3xl max-w-3xl w-full border border-slate-800 shadow-2xl relative my-8 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-slate-900 rounded-2xl sm:rounded-3xl max-w-3xl w-full border border-slate-800 shadow-2xl relative my-auto sm:my-8 overflow-hidden max-h-[92vh] flex flex-col">
             {/* Header */}
-            <div className="p-6 border-b border-slate-800 bg-slate-950/60 flex items-start justify-between gap-4">
+            <div className="p-4 sm:p-6 border-b border-slate-800 bg-slate-950/60 flex items-start justify-between gap-4 shrink-0">
               <div>
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
@@ -4433,15 +4872,23 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => window.print()}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                   title="Print Order Invoice"
                 >
                   <Printer className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Print</span>
                 </button>
                 <button
+                  onClick={() => handleDeleteOrder(selectedOrder.id)}
+                  className="px-3 py-1.5 rounded-xl bg-rose-600/15 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                  title="Delete Order"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Delete</span>
+                </button>
+                <button
                   onClick={() => setSelectedOrder(null)}
-                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -4449,7 +4896,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 space-y-6 max-h-[calc(85vh-160px)] overflow-y-auto">
+            <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
               
               {/* Quick Status Bar & Controls */}
               <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -4556,8 +5003,63 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                   </span>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                {/* Mobile View: Clean, zero-scroll line items card list */}
+                <div className="block md:hidden">
+                  <div className="p-3.5 space-y-3 divide-y divide-slate-800/80">
+                    {selectedOrder.items && selectedOrder.items.length > 0 ? (
+                      selectedOrder.items.map((item, idx) => {
+                        const unitPrice = item.price || (selectedOrder.total / (item.qty || 1));
+                        const lineTotal = (item.qty || 1) * unitPrice;
+                        return (
+                          <div key={idx} className="pt-3 first:pt-0 space-y-1.5">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <span className="font-bold text-slate-100 text-xs block leading-snug">{item.name}</span>
+                                {item.sku && (
+                                  <span className="text-[10px] text-slate-400 font-mono block mt-0.5">{item.sku}</span>
+                                )}
+                              </div>
+                              <span className="font-mono font-bold text-white text-xs shrink-0">
+                                ₹{(lineTotal || 0).toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
+                              <span className="flex items-center gap-1.5">
+                                <span className="bg-slate-900 px-1.5 py-0.5 rounded text-slate-300 font-mono font-semibold">Qty: {item.qty}</span>
+                                <span>× ₹{(unitPrice || 0).toLocaleString('en-IN')}</span>
+                              </span>
+                              <span className="text-[10px] text-emerald-400 font-medium">18% GST incl.</span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="py-4 text-center text-slate-400 text-xs">
+                        {selectedOrder.itemsCount || 1} Plumbing Item(s) included &bull; ₹{(selectedOrder.total || 0).toLocaleString('en-IN')}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mobile Totals Summary Box */}
+                  <div className="bg-slate-900/90 p-3.5 border-t border-slate-800 space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>Subtotal:</span>
+                      <span className="font-mono text-slate-200">₹{(selectedOrder.total || 0).toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>GST / Taxes:</span>
+                      <span className="font-mono text-emerald-400 text-[11px]">Inclusive (18% GST)</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 font-bold">
+                      <span className="text-white text-sm">Grand Total:</span>
+                      <span className="font-mono text-blue-400 text-base">₹{(selectedOrder.total || 0).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Desktop View: Full Table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left text-xs min-w-[500px]">
                     <thead className="bg-slate-950/80 border-b border-slate-800/80 text-slate-400 font-semibold uppercase text-[10px]">
                       <tr>
                         <th className="py-2.5 px-4">#</th>
@@ -4626,10 +5128,10 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Zoho Fulfillment & Dispatch Stepper */}
-              <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
-                <div className="flex items-center justify-between">
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <div className="flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-amber-400" />
+                    <Truck className="w-4 h-4 text-amber-400 shrink-0" />
                     <h4 className="text-xs font-bold text-white uppercase tracking-wider">
                       Live Zoho Fulfillment &amp; Dispatch Pipeline
                     </h4>
@@ -4639,30 +5141,30 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 sm:grid sm:grid-cols-5">
                   {[
                     { step: 1, label: 'Order Confirmed', statusMatch: ['Confirmed', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered'] },
-                    { step: 2, label: 'Zoho Inventory Reserved', statusMatch: ['Confirmed', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered'] },
+                    { step: 2, label: 'Zoho Reserved', statusMatch: ['Confirmed', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered'] },
                     { step: 3, label: 'Packed & Invoiced', statusMatch: ['Processing', 'Shipped', 'Out for Delivery', 'Delivered'] },
-                    { step: 4, label: 'Dispatched / In Transit', statusMatch: ['Shipped', 'Out for Delivery', 'Delivered'] },
+                    { step: 4, label: 'Dispatched / Transit', statusMatch: ['Shipped', 'Out for Delivery', 'Delivered'] },
                     { step: 5, label: 'Delivered', statusMatch: ['Delivered'] }
                   ].map((st, i) => {
                     const isCompleted = st.statusMatch.includes(selectedOrder.status);
                     return (
                       <div
                         key={i}
-                        className={`p-3 rounded-xl border flex flex-col items-center text-center transition ${
+                        className={`p-2.5 sm:p-3 rounded-xl border flex flex-col items-center text-center transition shrink-0 min-w-[125px] sm:min-w-0 ${
                           isCompleted
                             ? 'bg-blue-950/30 border-blue-600/40 text-blue-200'
                             : 'bg-slate-900/40 border-slate-800 text-slate-500'
                         }`}
                       >
-                        <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs mb-1.5 ${
+                        <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center font-bold text-xs mb-1.5 ${
                           isCompleted
                             ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                             : 'bg-slate-800 text-slate-500'
                         }`}>
-                          {isCompleted ? <Check className="w-4 h-4" /> : st.step}
+                          {isCompleted ? <Check className="w-3.5 h-3.5" /> : st.step}
                         </div>
                         <span className={`text-[11px] font-bold leading-tight ${isCompleted ? 'text-white' : 'text-slate-400'}`}>
                           {st.label}
@@ -4677,27 +5179,28 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Field Plumber Verification & Sign-Off Card */}
-              <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
                   <div className="flex items-center gap-2">
-                    <Wrench className="w-4 h-4 text-amber-400" />
+                    <Wrench className="w-4 h-4 text-amber-400 shrink-0" />
                     <h4 className="text-xs font-bold text-white uppercase tracking-wider">
                       Field Plumber Verification &amp; Stage Response
                     </h4>
                   </div>
                   {selectedOrder.plumberStage === 'TASK_DONE' || selectedOrder.plumberTaskDone ? (
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                      <span>Plumber Signed Off (Task 100% Done)</span>
+                    <span className="self-start sm:self-auto px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 whitespace-nowrap">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span>Plumber Signed Off (Task Done)</span>
                     </span>
                   ) : selectedOrder.plumberStage === 'MATERIALS_RECEIVED' ? (
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1">
-                      <Check className="w-3 h-3 text-amber-400" />
-                      <span>Materials Received &amp; Inspected</span>
+                    <span className="self-start sm:self-auto px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1.5 whitespace-nowrap">
+                      <Check className="w-3 h-3 text-amber-400 shrink-0" />
+                      <span>Materials Received On-Site</span>
                     </span>
                   ) : (
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400">
-                      Awaiting Plumber Response
+                    <span className="self-start sm:self-auto px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-900 text-slate-400 border border-slate-800 flex items-center gap-1.5 whitespace-nowrap">
+                      <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                      <span>Awaiting Plumber Response</span>
                     </span>
                   )}
                 </div>
@@ -4725,29 +5228,48 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-400">
-                    No plumber response recorded yet. When the plumber on site inspects materials or completes the installation, their sign-off and test report will appear here.
-                  </p>
+                  <div className="p-3.5 rounded-xl bg-slate-900/40 border border-slate-800/80 text-xs text-slate-400 flex items-start gap-2.5">
+                    <Clock className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="font-semibold text-slate-300">No field response recorded yet</p>
+                      <p className="text-[11px] text-slate-500">
+                        When the plumber on site inspects materials or completes the installation, their digital sign-off and field test report will appear here.
+                      </p>
+                    </div>
+                  </div>
                 )}
 
-                {/* Admin Close Button if Plumber Signed Off */}
-                {selectedOrder.status !== 'Delivered' && (
-                  <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-slate-800/80">
-                    <span className="text-[11px] text-slate-400">
-                      {selectedOrder.plumberStage === 'TASK_DONE'
-                        ? 'Plumber has submitted full sign-off. Admin approval will close this order.'
-                        : 'You can verify and finalize this order once ready.'}
-                    </span>
+                {/* Plumber Signed-Off Approval Action */}
+                {(selectedOrder.plumberStage === 'TASK_DONE' || selectedOrder.plumberTaskDone) && selectedOrder.status !== 'Delivered' ? (
+                  <div className="pt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-slate-800/80 bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/20">
+                    <div className="flex items-center gap-2 text-emerald-400 text-xs">
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>Plumber signed off on-site. Admin verification required to close task.</span>
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'Delivered')}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer"
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer active:scale-95"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Approve Plumber Sign-Off &amp; Close Task</span>
                     </button>
                   </div>
-                )}
+                ) : selectedOrder.status !== 'Delivered' ? (
+                  <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 border-t border-slate-800/80">
+                    <span className="text-[11px] text-slate-500">
+                      You can also advance status directly via the Update Status dropdown above.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateOrderStatus(selectedOrder.id, 'Delivered')}
+                      className="w-full sm:w-auto px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-semibold border border-slate-800 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Mark Delivered Manually</span>
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
             </div>
@@ -4770,6 +5292,15 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteOrder(selectedOrder.id)}
+                  className="px-4 py-2 rounded-xl bg-rose-600/15 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  title="Delete Order"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => handleSendOrderReceipt(selectedOrder)}
@@ -4848,8 +5379,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
       {/* Admin Quick Profile Info Modal with Edit Capability */}
       {isAdminProfileModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 space-y-5 text-white relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/75 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl p-5 sm:p-6 space-y-5 text-white relative my-auto max-h-[92vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
@@ -5002,22 +5533,22 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       {/* 1. Sleek In-App Modal: Reject Dealer Registration        */}
       {/* ======================================================== */}
       {rejectModalDealer && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 relative">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 relative my-auto flex flex-col max-h-[92vh] sm:max-h-[88vh]">
             {/* Top Red Gradient Accent Bar */}
-            <div className="h-1.5 bg-gradient-to-r from-rose-600 via-red-500 to-amber-500 w-full" />
+            <div className="h-1.5 bg-gradient-to-r from-rose-600 via-red-500 to-amber-500 w-full shrink-0" />
 
             {/* Header */}
-            <div className="p-6 pb-4 flex items-start justify-between gap-4 border-b border-slate-800/80">
+            <div className="p-4 sm:p-6 pb-3 sm:pb-4 flex items-start justify-between gap-4 border-b border-slate-800/80 shrink-0 bg-slate-900">
               <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0 shadow-lg shadow-rose-950/40">
-                  <XCircle className="w-6 h-6" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0 shadow-lg shadow-rose-950/40">
+                  <XCircle className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-white tracking-tight">
+                  <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
                     Reject Dealer Application
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
                     Decline registration &amp; deny wholesale portal access
                   </p>
                 </div>
@@ -5026,14 +5557,14 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               <button
                 type="button"
                 onClick={() => setRejectModalDealer(null)}
-                className="w-8 h-8 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer"
+                className="w-8 h-8 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Body */}
-            <div className="p-6 space-y-4 text-xs">
+            <div className="p-4 sm:p-6 space-y-4 text-xs overflow-y-auto flex-1 overscroll-contain">
               {/* Dealer Profile Summary Pill */}
               <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800/90 space-y-2">
                 <div className="flex items-center justify-between">
@@ -5111,7 +5642,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
             </div>
 
             {/* Footer */}
-            <div className="p-4 bg-slate-950/70 border-t border-slate-800/80 flex items-center justify-end gap-2.5">
+            <div className="p-3.5 sm:p-4 bg-slate-950/90 border-t border-slate-800/80 flex items-center justify-end gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setRejectModalDealer(null)}
@@ -5147,22 +5678,22 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       {/* 2. Sleek In-App Modal: Approve & Activate Dealer         */}
       {/* ======================================================== */}
       {approveModalDealer && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 relative">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 relative my-auto flex flex-col max-h-[92vh] sm:max-h-[88vh]">
             {/* Top Emerald Gradient Accent Bar */}
-            <div className="h-1.5 bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-500 w-full" />
+            <div className="h-1.5 bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-500 w-full shrink-0" />
 
             {/* Header */}
-            <div className="p-6 pb-4 flex items-start justify-between gap-4 border-b border-slate-800/80">
+            <div className="p-4 sm:p-6 pb-3 sm:pb-4 flex items-start justify-between gap-4 border-b border-slate-800/80 shrink-0 bg-slate-900">
               <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0 shadow-lg shadow-emerald-950/40">
-                  <ShieldCheck className="w-6 h-6" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0 shadow-lg shadow-emerald-950/40">
+                  <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-white tracking-tight">
+                  <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
                     Approve &amp; Activate Dealer
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
                     Authorize full B2B wholesale ordering &amp; activate credit facility
                   </p>
                 </div>
@@ -5171,16 +5702,16 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               <button
                 type="button"
                 onClick={() => setApproveModalDealer(null)}
-                className="w-8 h-8 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer"
+                className="w-8 h-8 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Body */}
-            <div className="p-6 space-y-4 text-xs">
+            <div className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 text-xs overflow-y-auto flex-1 overscroll-contain touch-pan-y">
               {/* Dealer Profile Summary */}
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5">
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-[11px] text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
@@ -5248,7 +5779,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
             </div>
 
             {/* Footer */}
-            <div className="p-4 bg-slate-950/70 border-t border-slate-800/80 flex items-center justify-end gap-2.5">
+            <div className="p-3.5 sm:p-4 bg-slate-950/90 border-t border-slate-800/80 flex items-center justify-end gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setApproveModalDealer(null)}
@@ -5284,22 +5815,22 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       {/* 3. Sleek In-App Modal: Zoho Inventory Required Alert     */}
       {/* ======================================================== */}
       {zohoRequiredModalDealer && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 relative">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 relative my-auto flex flex-col max-h-[92vh] sm:max-h-[88vh]">
             {/* Top Amber Gradient Accent Bar */}
-            <div className="h-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 w-full" />
+            <div className="h-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 w-full shrink-0" />
 
             {/* Header */}
-            <div className="p-6 pb-4 flex items-start justify-between gap-4 border-b border-slate-800/80">
+            <div className="p-4 sm:p-6 pb-3 sm:pb-4 flex items-start justify-between gap-4 border-b border-slate-800/80 shrink-0 bg-slate-900">
               <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 shadow-lg shadow-amber-950/40">
-                  <AlertTriangle className="w-6 h-6" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 shadow-lg shadow-amber-950/40">
+                  <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-white tracking-tight">
+                  <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
                     Zoho Linking Required
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
                     Customer record must be linked in Zoho Inventory before activation
                   </p>
                 </div>
@@ -5308,15 +5839,15 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               <button
                 type="button"
                 onClick={() => setZohoRequiredModalDealer(null)}
-                className="w-8 h-8 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer"
+                className="w-8 h-8 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Body */}
-            <div className="p-6 space-y-4 text-xs">
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+            <div className="p-4 sm:p-6 space-y-4 text-xs overflow-y-auto flex-1 overscroll-contain">
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
                   Target Dealer:
                 </span>
@@ -5345,7 +5876,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
             </div>
 
             {/* Footer */}
-            <div className="p-4 bg-slate-950/70 border-t border-slate-800/80 flex items-center justify-end gap-2.5">
+            <div className="p-3.5 sm:p-4 bg-slate-950/90 border-t border-slate-800/80 flex items-center justify-end gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setZohoRequiredModalDealer(null)}

@@ -41,8 +41,10 @@ import {
   Printer,
   Send,
   CheckSquare,
-  FileCheck
+  FileCheck,
+  PartyPopper
 } from 'lucide-react';
+import PlumberWelcomeBackModal from '../components/PlumberWelcomeBackModal';
 
 const INITIAL_JOBS = [
   {
@@ -406,6 +408,61 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
   const isSuspended = plumber && (plumber.status === 'SUSPENDED' || plumber.verificationStatus === 'SUSPENDED');
   const [isSuspendedModalOpen, setIsSuspendedModalOpen] = useState(false);
 
+  const [isWelcomeBackActive, setIsWelcomeBackActive] = useState(() => {
+    try {
+      let saved = null;
+      try {
+        saved = JSON.parse(localStorage.getItem('plumbmart_user') || '{}');
+      } catch {}
+      const pid = currentUser?.id || currentUser?.mobile || saved?.id || 'PLM-01';
+      if (localStorage.getItem(`plumbmart_welcome_dismissed_plumber_${pid}`) === 'true') {
+        return false;
+      }
+      return localStorage.getItem('plumbmart_show_plumber_welcome_back') === 'true' ||
+             Boolean(localStorage.getItem(`plumbmart_plumber_welcome_back_${pid}`));
+    } catch {
+      return false;
+    }
+  });
+
+  const [isWelcomeBackModalOpen, setIsWelcomeBackModalOpen] = useState(() => {
+    try {
+      let saved = null;
+      try {
+        saved = JSON.parse(localStorage.getItem('plumbmart_user') || '{}');
+      } catch {}
+      const pid = currentUser?.id || currentUser?.mobile || saved?.id || 'PLM-01';
+      if (localStorage.getItem(`plumbmart_welcome_dismissed_plumber_${pid}`) === 'true') {
+        return false;
+      }
+      return localStorage.getItem('plumbmart_show_plumber_welcome_back') === 'true' ||
+             Boolean(localStorage.getItem(`plumbmart_plumber_welcome_back_${pid}`));
+    } catch {
+      return false;
+    }
+  });
+
+  const handleDismissWelcome = () => {
+    const pid = plumber?.id || currentUser?.id || 'PLM-01';
+    setIsWelcomeBackActive(false);
+    setIsWelcomeBackModalOpen(false);
+    try {
+      localStorage.setItem(`plumbmart_welcome_dismissed_plumber_${pid}`, 'true');
+      localStorage.removeItem('plumbmart_show_plumber_welcome_back');
+      localStorage.removeItem(`plumbmart_plumber_welcome_back_${pid}`);
+    } catch (e) {}
+    window.dispatchEvent(new CustomEvent('close_plumber_welcome_modal'));
+  };
+
+  useEffect(() => {
+    const handleClose = () => {
+      setIsWelcomeBackActive(false);
+      setIsWelcomeBackModalOpen(false);
+    };
+    window.addEventListener('close_plumber_welcome_modal', handleClose);
+    return () => window.removeEventListener('close_plumber_welcome_modal', handleClose);
+  }, []);
+
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
@@ -461,11 +518,42 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
         setPlumber(prev => {
           const isNowSuspended = foundPlumber.status === 'SUSPENDED' || foundPlumber.verificationStatus === 'SUSPENDED';
           const wasSuspended = prev.status === 'SUSPENDED' || prev.verificationStatus === 'SUSPENDED';
-          if (isNowSuspended && !wasSuspended) {
-            setIsSuspendedModalOpen(true);
+          const isNowActive = ['VERIFIED', 'ACTIVE', 'Active'].includes(foundPlumber.status) || ['VERIFIED', 'ACTIVE', 'Active'].includes(foundPlumber.verificationStatus);
+          const pid = foundPlumber.id || prev.id || 'PLM-01';
+          const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_plumber_${pid}`) === 'true';
+
+          if (isNowSuspended) {
+            setIsWelcomeBackActive(false);
+            setIsWelcomeBackModalOpen(false);
+            try {
+              localStorage.removeItem('plumbmart_show_plumber_welcome_back');
+              localStorage.removeItem(`plumbmart_plumber_welcome_back_${pid}`);
+              localStorage.removeItem(`plumbmart_welcome_dismissed_plumber_${pid}`);
+            } catch (e) {}
+            if (!wasSuspended) {
+              setIsSuspendedModalOpen(true);
+            }
+          } else if (wasSuspended && isNowActive && !isDismissed) {
+            setIsSuspendedModalOpen(false);
+            setIsWelcomeBackActive(true);
+            setIsWelcomeBackModalOpen(true);
+            try {
+              localStorage.setItem('plumbmart_show_plumber_welcome_back', 'true');
+            } catch (e) {}
           }
           return { ...prev, ...foundPlumber };
         });
+
+        // Sync latest status to saved plumbmart_user in localStorage
+        try {
+          const savedUserStr = localStorage.getItem('plumbmart_user');
+          if (savedUserStr) {
+            const su = JSON.parse(savedUserStr);
+            if (su && (su.role === 'Plumber' || su.id === foundPlumber.id)) {
+              localStorage.setItem('plumbmart_user', JSON.stringify({ ...su, status: foundPlumber.status, verificationStatus: foundPlumber.verificationStatus }));
+            }
+          }
+        } catch (e) {}
       }
     } catch (err) {
       console.warn('Error loading plumber profile:', err);
@@ -480,6 +568,22 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
 
   // Real-time synchronization listeners across tabs & admin actions
   useEffect(() => {
+    const pid = plumber?.id || currentUser?.id || 'PLM-01';
+
+    // Mount check: check if plumber was recently approved and not dismissed
+    try {
+      const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_plumber_${pid}`) === 'true';
+      if (!isDismissed) {
+        const showWb = localStorage.getItem('plumbmart_show_plumber_welcome_back');
+        const pidWb = localStorage.getItem(`plumbmart_plumber_welcome_back_${pid}`);
+        if (showWb === 'true' || pidWb === 'true') {
+          setIsSuspendedModalOpen(false);
+          setIsWelcomeBackActive(true);
+          setIsWelcomeBackModalOpen(true);
+        }
+      }
+    } catch (e) {}
+
     let ch;
     try {
       ch = new BroadcastChannel('plumbmart_plumbers');
@@ -496,15 +600,36 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
             (data.plumber && (data.plumber.id === plumber.id || data.plumber.mobile === plumber.mobile));
 
           if (isMatch && targetStatus) {
+            const isNowSuspended = targetStatus === 'SUSPENDED';
+            const isNowActive = ['VERIFIED', 'ACTIVE', 'Active'].includes(targetStatus);
+            const currentPid = targetId || plumber.id || 'PLM-01';
+            const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_plumber_${currentPid}`) === 'true';
+
             setPlumber(prev => ({
               ...prev,
               status: targetStatus,
               verificationStatus: targetStatus,
               ...(data.updates || {})
             }));
-            if (targetStatus === 'SUSPENDED') {
+
+            if (isNowSuspended) {
+              setIsWelcomeBackActive(false);
+              setIsWelcomeBackModalOpen(false);
+              try {
+                localStorage.removeItem('plumbmart_show_plumber_welcome_back');
+                localStorage.removeItem(`plumbmart_plumber_welcome_back_${currentPid}`);
+                localStorage.removeItem(`plumbmart_welcome_dismissed_plumber_${currentPid}`);
+              } catch (e) {}
               setIsSuspendedModalOpen(true);
               showToast('⚠️ Plumber Account has been SUSPENDED by Administration');
+            } else if ((data.isApproved || data.isWelcomeBack || isNowActive) && !isDismissed) {
+              setIsSuspendedModalOpen(false);
+              setIsWelcomeBackActive(true);
+              setIsWelcomeBackModalOpen(true);
+              try {
+                localStorage.setItem('plumbmart_show_plumber_welcome_back', 'true');
+              } catch (e) {}
+              showToast('🎉 Welcome Back! Plumber Account Re-Activated & Verified');
             } else {
               showToast(`Plumber Account status updated: ${targetStatus}`);
             }
@@ -519,15 +644,39 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
           const stored = JSON.parse(e.newValue);
           if (stored) {
             const newStatus = stored.status || stored.updates?.status;
+            const currentPid = stored.plumberId || plumber.id || 'PLM-01';
+            const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_plumber_${currentPid}`) === 'true';
             if (newStatus) {
               setPlumber(prev => ({ ...prev, status: newStatus, verificationStatus: newStatus }));
               if (newStatus === 'SUSPENDED') {
+                setIsWelcomeBackActive(false);
+                setIsWelcomeBackModalOpen(false);
+                try {
+                  localStorage.removeItem('plumbmart_show_plumber_welcome_back');
+                  localStorage.removeItem(`plumbmart_plumber_welcome_back_${currentPid}`);
+                  localStorage.removeItem(`plumbmart_welcome_dismissed_plumber_${currentPid}`);
+                } catch (e) {}
                 setIsSuspendedModalOpen(true);
+              } else if ((stored.isApproved || stored.isWelcomeBack) && !isDismissed) {
+                setIsSuspendedModalOpen(false);
+                setIsWelcomeBackActive(true);
+                setIsWelcomeBackModalOpen(true);
+                try {
+                  localStorage.setItem('plumbmart_show_plumber_welcome_back', 'true');
+                } catch (e) {}
               }
             }
           }
         } catch {}
         fetchPlumberProfile();
+      }
+      if (e.key === 'plumbmart_show_plumber_welcome_back' && e.newValue === 'true') {
+        const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_plumber_${pid}`) === 'true';
+        if (!isDismissed) {
+          setIsSuspendedModalOpen(false);
+          setIsWelcomeBackActive(true);
+          setIsWelcomeBackModalOpen(true);
+        }
       }
     };
     window.addEventListener('storage', handleStorage);
@@ -535,10 +684,26 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
     const handleCustomUpdate = (e) => {
       if (e.detail) {
         const newStatus = e.detail.status || e.detail.updates?.status;
+        const currentPid = e.detail.plumberId || plumber.id || 'PLM-01';
+        const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_plumber_${currentPid}`) === 'true';
         if (newStatus) {
           setPlumber(prev => ({ ...prev, status: newStatus, verificationStatus: newStatus }));
           if (newStatus === 'SUSPENDED') {
+            setIsWelcomeBackActive(false);
+            setIsWelcomeBackModalOpen(false);
+            try {
+              localStorage.removeItem('plumbmart_show_plumber_welcome_back');
+              localStorage.removeItem(`plumbmart_plumber_welcome_back_${currentPid}`);
+              localStorage.removeItem(`plumbmart_welcome_dismissed_plumber_${currentPid}`);
+            } catch (e) {}
             setIsSuspendedModalOpen(true);
+          } else if ((e.detail.isApproved || e.detail.isWelcomeBack) && !isDismissed) {
+            setIsSuspendedModalOpen(false);
+            setIsWelcomeBackActive(true);
+            setIsWelcomeBackModalOpen(true);
+            try {
+              localStorage.setItem('plumbmart_show_plumber_welcome_back', 'true');
+            } catch (e) {}
           }
         }
       }
@@ -548,6 +713,15 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
 
     const handleOpenModal = () => setIsSuspendedModalOpen(true);
     window.addEventListener('open_plumber_suspended_modal', handleOpenModal);
+
+    const handleOpenWelcome = () => {
+      const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_plumber_${pid}`) === 'true';
+      if (!isDismissed) {
+        setIsWelcomeBackActive(true);
+        setIsWelcomeBackModalOpen(true);
+      }
+    };
+    window.addEventListener('open_plumber_welcome_modal', handleOpenWelcome);
 
     // Continuous 2s polling for instant sync with database
     const poll = setInterval(() => {
@@ -559,6 +733,7 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('plumbmart_plumber_updated', handleCustomUpdate);
       window.removeEventListener('open_plumber_suspended_modal', handleOpenModal);
+      window.removeEventListener('open_plumber_welcome_modal', handleOpenWelcome);
       clearInterval(poll);
     };
   }, [plumber.id, plumber.mobile, activeMobile]);
@@ -895,6 +1070,44 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
                 )}
               </div>
             </div>
+
+            {/* Welcome Back Celebration Banner (When Approved after Suspension) */}
+            {!isSuspended && isWelcomeBackActive && (
+              <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 text-white p-4 sm:p-5 rounded-2xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-2 border-emerald-300 animate-in fade-in slide-in-from-top-3 duration-300 w-full min-w-0">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
+                    <PartyPopper className="w-6 h-6 text-white animate-bounce" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-black uppercase tracking-wider text-emerald-100 flex items-center gap-2">
+                      <span>🎉 Welcome Back, {plumber.name}!</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-white text-emerald-800 font-extrabold uppercase">Approved &amp; Active</span>
+                    </h4>
+                    <p className="text-xs text-emerald-100 mt-0.5">
+                      Your plumber account has been officially approved &amp; re-activated by Administration. All job bookings, on-site task completions, and field dispatches are completely unlocked!
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsWelcomeBackModalOpen(true)}
+                    className="px-3.5 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs transition flex items-center gap-1.5 cursor-pointer backdrop-blur-xs"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>View Details</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDismissWelcome}
+                    className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                    title="Dismiss"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Account Suspended Alert Banner in Activities */}
             {isSuspended && (
@@ -2446,6 +2659,19 @@ export default function PlumberDashboard({ currentUser, onLogout }) {
             </div>
           </div>
         )}
+
+        {/* Universal Plumber Welcome Back Modal on Approval */}
+        <PlumberWelcomeBackModal
+          isOpen={!isSuspended && isWelcomeBackModalOpen}
+          onClose={handleDismissWelcome}
+          plumberName={plumber.name}
+          license={plumber.license}
+          rating={plumber.rating}
+          onStartWork={() => {
+            handleDismissWelcome();
+            setActiveTab('activities');
+          }}
+        />
 
         {/* DISTRIBUTOR ORDER / MATERIAL PACKING SLIP MODAL         */}
         {/* ======================================================== */}

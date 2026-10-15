@@ -26,12 +26,14 @@ export default function RegisterPage({ onRegisterSuccess }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const redirectTarget = searchParams.get('redirect'); // e.g. 'checkout'
-  const { verifiedMobile, idToken: stateIdToken } = location.state || {};
+  const redirectTarget = searchParams.get('redirect') || location.state?.redirect;
+  const { verifiedMobile, idToken: stateIdToken, role: stateRole } = location.state || {};
 
   const urlRole = searchParams.get('role');
   const validRoles = ['Customer', 'Dealer', 'Plumber'];
-  const initialRole = validRoles.includes(urlRole) ? urlRole : 'Customer';
+  const initialRole = validRoles.includes(stateRole)
+    ? stateRole
+    : (validRoles.includes(urlRole) ? urlRole : 'Customer');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -40,6 +42,16 @@ export default function RegisterPage({ onRegisterSuccess }) {
     role: initialRole,
     city: 'Bengaluru'
   });
+
+  // Automatically remove ?role= from browser address bar so URL remains clean as /register
+  useEffect(() => {
+    if (searchParams.has('role')) {
+      const cleanParams = new URLSearchParams(searchParams);
+      cleanParams.delete('role');
+      const cleanQuery = cleanParams.toString();
+      navigate(cleanQuery ? `/register?${cleanQuery}` : '/register', { replace: true, state: { ...location.state, role: initialRole } });
+    }
+  }, [searchParams, navigate, initialRole, location.state]);
 
   const [idToken, setIdToken] = useState(stateIdToken || null);
   const [isPhoneVerified, setIsPhoneVerified] = useState(Boolean(verifiedMobile));
@@ -106,9 +118,19 @@ export default function RegisterPage({ onRegisterSuccess }) {
         })
       });
 
-      const data = await response.json();
+      const raw = await response.text();
+      let data = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        data = { success: false, message: 'Unable to communicate with authentication server.' };
+      }
+
       if (!response.ok || !data.success) {
-        setError(data.message || 'Failed to dispatch verification code to email');
+        const fallbackMsg = response.status >= 500
+          ? 'Authentication server was restarting or temporarily unavailable. Please try again.'
+          : 'Failed to dispatch verification code to email';
+        setError(data.message || data.error || fallbackMsg);
         setLoading(false);
         return;
       }

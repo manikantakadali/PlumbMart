@@ -112,6 +112,14 @@ export default function DealerLayout({ children, currentUser, onLogout, products
   const [isAppealModalOpen, setIsAppealModalOpen] = useState(false);
   const [isWelcomeBackModalOpen, setIsWelcomeBackModalOpen] = useState(() => {
     try {
+      let saved = null;
+      try {
+        saved = JSON.parse(localStorage.getItem('plumbmart_user') || '{}');
+      } catch {}
+      const targetId = currentUser?.id || currentUser?.mobile || saved?.id || 'DLR-01';
+      if (localStorage.getItem(`plumbmart_welcome_dismissed_dealer_${targetId}`) === 'true') {
+        return false;
+      }
       return localStorage.getItem('plumbmart_show_welcome_back') === 'true' ||
              Boolean(localStorage.getItem('plumbmart_dealer_welcome_back'));
     } catch {
@@ -120,9 +128,9 @@ export default function DealerLayout({ children, currentUser, onLogout, products
   });
 
   useEffect(() => {
+    const targetId = currentUser?.id || currentUser?.mobile || dealer.id || 'DLR-01';
     const fetchProfile = async () => {
       try {
-        const targetId = currentUser?.id || currentUser?.mobile || dealer.id || 'DLR-01';
         let res = await fetch(`/api/dealers/${targetId}`);
         if (!res || !res.ok) res = await fetch(`http://localhost:5000/api/dealers/${targetId}`);
         if (!res || !res.ok) res = await fetch(`http://localhost:4000/api/dealers/${targetId}`);
@@ -141,8 +149,12 @@ export default function DealerLayout({ children, currentUser, onLogout, products
               return;
             }
             setDealer(prev => {
-              // Detect approval change
-              if (prev.status === 'Suspended' && (d.status === 'Approved' || d.status === 'Active')) {
+              // Detect approval change from Suspended to Active only
+              const wasSuspended = prev.status === 'Suspended' || prev.status === 'SUSPENDED';
+              const isNowActive = ['Approved', 'ACTIVE', 'Active'].includes(d.status);
+              const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_dealer_${targetId}`) === 'true';
+
+              if (wasSuspended && isNowActive && !isDismissed) {
                 setIsWelcomeBackModalOpen(true);
                 try {
                   localStorage.setItem('plumbmart_show_welcome_back', 'true');
@@ -164,12 +176,15 @@ export default function DealerLayout({ children, currentUser, onLogout, products
 
     fetchProfile();
 
-    // Check if dealer was recently approved
+    // Check if dealer was recently approved and not dismissed
     try {
-      const wb = localStorage.getItem('plumbmart_dealer_welcome_back');
-      const showWb = localStorage.getItem('plumbmart_show_welcome_back');
-      if (wb || showWb === 'true') {
-        setIsWelcomeBackModalOpen(true);
+      const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_dealer_${targetId}`) === 'true';
+      if (!isDismissed) {
+        const wb = localStorage.getItem('plumbmart_dealer_welcome_back');
+        const showWb = localStorage.getItem('plumbmart_show_welcome_back');
+        if (wb || showWb === 'true') {
+          setIsWelcomeBackModalOpen(true);
+        }
       }
     } catch (e) {}
 
@@ -182,7 +197,8 @@ export default function DealerLayout({ children, currentUser, onLogout, products
       chDealers = new BroadcastChannel('plumbmart_dealers');
       chDealers.onmessage = (event) => {
         if (event.data?.type === 'DEALER_GOVERNANCE_UPDATED') {
-          if (event.data.isApproved || event.data.isWelcomeBack || event.data.updates?.status === 'Approved') {
+          const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_dealer_${targetId}`) === 'true';
+          if ((event.data.isApproved || event.data.isWelcomeBack || event.data.updates?.status === 'Approved' || event.data.updates?.status === 'ACTIVE') && !isDismissed) {
             setIsWelcomeBackModalOpen(true);
             try {
               localStorage.setItem('plumbmart_show_welcome_back', 'true');
@@ -192,6 +208,7 @@ export default function DealerLayout({ children, currentUser, onLogout, products
             try {
               localStorage.removeItem('plumbmart_show_welcome_back');
               localStorage.removeItem('plumbmart_dealer_welcome_back');
+              localStorage.removeItem(`plumbmart_welcome_dismissed_dealer_${targetId}`);
             } catch (e) {}
           }
           if (event.data.updates?.status) {
@@ -206,7 +223,8 @@ export default function DealerLayout({ children, currentUser, onLogout, products
       chOrders = new BroadcastChannel('plumbmart_orders');
       chOrders.onmessage = (event) => {
         if (event.data?.type === 'DEALER_GOVERNANCE_UPDATED') {
-          if (event.data.isApproved || event.data.isWelcomeBack || event.data.updates?.status === 'Approved') {
+          const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_dealer_${targetId}`) === 'true';
+          if ((event.data.isApproved || event.data.isWelcomeBack || event.data.updates?.status === 'Approved' || event.data.updates?.status === 'ACTIVE') && !isDismissed) {
             setIsWelcomeBackModalOpen(true);
             try {
               localStorage.setItem('plumbmart_show_welcome_back', 'true');
@@ -216,6 +234,7 @@ export default function DealerLayout({ children, currentUser, onLogout, products
             try {
               localStorage.removeItem('plumbmart_show_welcome_back');
               localStorage.removeItem('plumbmart_dealer_welcome_back');
+              localStorage.removeItem(`plumbmart_welcome_dismissed_dealer_${targetId}`);
             } catch (e) {}
           }
           if (event.data.updates?.status) {
@@ -227,16 +246,17 @@ export default function DealerLayout({ children, currentUser, onLogout, products
     } catch (e) {}
 
     const handleStorage = (e) => {
-      if (e.key === 'plumbmart_show_welcome_back' && e.newValue === 'true') {
+      const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_dealer_${targetId}`) === 'true';
+      if (e.key === 'plumbmart_show_welcome_back' && e.newValue === 'true' && !isDismissed) {
         setIsWelcomeBackModalOpen(true);
       }
-      if (e.key === 'plumbmart_dealer_welcome_back' && e.newValue) {
+      if (e.key === 'plumbmart_dealer_welcome_back' && e.newValue && !isDismissed) {
         setIsWelcomeBackModalOpen(true);
       }
       if (e.key === 'plumbmart_dealer_governance_broadcast' || e.key === 'plumbmart_dealer_status_broadcast' || e.key === 'plumbmart_user') {
         try {
           const payload = JSON.parse(e.newValue);
-          if (payload?.isApproved || payload?.isWelcomeBack || payload?.updates?.status === 'Approved') {
+          if ((payload?.isApproved || payload?.isWelcomeBack || payload?.updates?.status === 'Approved' || payload?.updates?.status === 'ACTIVE') && !isDismissed) {
             setIsWelcomeBackModalOpen(true);
             try {
               localStorage.setItem('plumbmart_show_welcome_back', 'true');
@@ -246,6 +266,7 @@ export default function DealerLayout({ children, currentUser, onLogout, products
             try {
               localStorage.removeItem('plumbmart_show_welcome_back');
               localStorage.removeItem('plumbmart_dealer_welcome_back');
+              localStorage.removeItem(`plumbmart_welcome_dismissed_dealer_${targetId}`);
             } catch (e) {}
           }
           if (payload?.updates?.status) {
@@ -258,7 +279,8 @@ export default function DealerLayout({ children, currentUser, onLogout, products
     window.addEventListener('storage', handleStorage);
 
     const handleCustom = (e) => {
-      if (e.detail?.isApproved || e.detail?.isWelcomeBack || e.detail?.updates?.status === 'Approved') {
+      const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_dealer_${targetId}`) === 'true';
+      if ((e.detail?.isApproved || e.detail?.isWelcomeBack || e.detail?.updates?.status === 'Approved' || e.detail?.updates?.status === 'ACTIVE') && !isDismissed) {
         setIsWelcomeBackModalOpen(true);
         try {
           localStorage.setItem('plumbmart_show_welcome_back', 'true');
@@ -268,6 +290,7 @@ export default function DealerLayout({ children, currentUser, onLogout, products
         try {
           localStorage.removeItem('plumbmart_show_welcome_back');
           localStorage.removeItem('plumbmart_dealer_welcome_back');
+          localStorage.removeItem(`plumbmart_welcome_dismissed_dealer_${targetId}`);
         } catch (e) {}
       }
       if (e.detail?.updates?.status) {
@@ -277,8 +300,18 @@ export default function DealerLayout({ children, currentUser, onLogout, products
     };
     window.addEventListener('plumbmart_dealer_updated', handleCustom);
 
-    const handleOpenWelcome = () => setIsWelcomeBackModalOpen(true);
+    const handleOpenWelcome = () => {
+      const isDismissed = localStorage.getItem(`plumbmart_welcome_dismissed_dealer_${targetId}`) === 'true';
+      if (!isDismissed) {
+        setIsWelcomeBackModalOpen(true);
+      }
+    };
     window.addEventListener('open_dealer_welcome_modal', handleOpenWelcome);
+
+    const handleCloseWelcome = () => {
+      setIsWelcomeBackModalOpen(false);
+    };
+    window.addEventListener('close_dealer_welcome_modal', handleCloseWelcome);
 
     return () => {
       clearInterval(pollTimer);
@@ -287,6 +320,7 @@ export default function DealerLayout({ children, currentUser, onLogout, products
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('plumbmart_dealer_updated', handleCustom);
       window.removeEventListener('open_dealer_welcome_modal', handleOpenWelcome);
+      window.removeEventListener('close_dealer_welcome_modal', handleCloseWelcome);
     };
   }, []);
 
@@ -908,10 +942,14 @@ export default function DealerLayout({ children, currentUser, onLogout, products
         isOpen={isWelcomeBackModalOpen}
         onClose={() => {
           setIsWelcomeBackModalOpen(false);
+          const tId = currentUser?.id || currentUser?.mobile || dealer.id || 'DLR-01';
           try {
+            localStorage.setItem(`plumbmart_welcome_dismissed_dealer_${tId}`, 'true');
             localStorage.removeItem('plumbmart_show_welcome_back');
             localStorage.removeItem('plumbmart_dealer_welcome_back');
+            localStorage.removeItem(`plumbmart_dealer_welcome_back_${tId}`);
           } catch (e) {}
+          window.dispatchEvent(new CustomEvent('close_dealer_welcome_modal'));
         }}
         dealerName={dealer.name || 'Sri Venkateswara Distributors'}
         creditLimit={dealer.creditLimit || '₹5,00,000'}
@@ -919,10 +957,14 @@ export default function DealerLayout({ children, currentUser, onLogout, products
         hubName={getDealerHub(dealer)}
         onExploreCatalog={() => {
           setIsWelcomeBackModalOpen(false);
+          const tId = currentUser?.id || currentUser?.mobile || dealer.id || 'DLR-01';
           try {
+            localStorage.setItem(`plumbmart_welcome_dismissed_dealer_${tId}`, 'true');
             localStorage.removeItem('plumbmart_show_welcome_back');
             localStorage.removeItem('plumbmart_dealer_welcome_back');
+            localStorage.removeItem(`plumbmart_dealer_welcome_back_${tId}`);
           } catch (e) {}
+          window.dispatchEvent(new CustomEvent('close_dealer_welcome_modal'));
           navigate('/dealer/products');
         }}
       />
