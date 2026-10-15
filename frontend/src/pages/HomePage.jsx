@@ -124,10 +124,20 @@ export default function HomePage({
       <section className="py-6 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto relative rounded-3xl overflow-hidden border border-slate-200 shadow-lg min-h-[380px] sm:min-h-[420px] flex items-center">
           
-          {/* Background Image across the entire card */}
+          {/* Background Image across the entire card with responsive srcset and high fetchPriority */}
           <img
-            src="https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=1800&q=85"
+            src="https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=900&q=75"
+            srcSet="
+              https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=480&q=70 480w,
+              https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=900&q=75 900w,
+              https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=1400&q=80 1400w
+            "
+            sizes="(max-width: 640px) 480px, (max-width: 1024px) 900px, 1400px"
             alt="Plumbing Supplies Background"
+            fetchPriority="high"
+            decoding="async"
+            width="1280"
+            height="420"
             className="absolute inset-0 w-full h-full object-cover"
           />
 
@@ -639,6 +649,10 @@ export default function HomePage({
                     <img
                       src={cardImage}
                       alt={catItem.cat}
+                      loading="lazy"
+                      decoding="async"
+                      width="200"
+                      height="144"
                       onError={(e) => {
                         e.currentTarget.onerror = null;
                         e.currentTarget.src = catItem.defaultImg;

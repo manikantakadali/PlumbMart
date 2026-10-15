@@ -1,21 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import CustomerDashboard from './pages/CustomerDashboard';
-import PlumberDashboard from './pages/PlumberDashboard';
-import AdminLoginPage from './pages/AdminLoginPage';
-import AdminDashboard from './pages/AdminDashboard';
-import DealerDashboard from './pages/DealerDashboard';
-import DealerProductsPage from './pages/DealerProductsPage';
-import DealerCartPage from './pages/DealerCartPage';
-import DealerCheckoutPage from './pages/DealerCheckoutPage';
-import DealerOrdersPage from './pages/DealerOrdersPage';
-import CustomerProductsPage from './pages/CustomerProductsPage';
-import CustomerCartPage from './pages/CustomerCartPage';
-import CustomerCheckoutPage from './pages/CustomerCheckoutPage';
-import CustomerOrdersPage from './pages/CustomerOrdersPage';
+
+// Route-level code splitting: lazy load all non-homepage pages for ultra-fast initial bundle & FCP
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const CustomerDashboard = lazy(() => import('./pages/CustomerDashboard'));
+const PlumberDashboard = lazy(() => import('./pages/PlumberDashboard'));
+const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const DealerDashboard = lazy(() => import('./pages/DealerDashboard'));
+const DealerProductsPage = lazy(() => import('./pages/DealerProductsPage'));
+const DealerCartPage = lazy(() => import('./pages/DealerCartPage'));
+const DealerCheckoutPage = lazy(() => import('./pages/DealerCheckoutPage'));
+const DealerOrdersPage = lazy(() => import('./pages/DealerOrdersPage'));
+const CustomerProductsPage = lazy(() => import('./pages/CustomerProductsPage'));
+const CustomerCartPage = lazy(() => import('./pages/CustomerCartPage'));
+const CustomerCheckoutPage = lazy(() => import('./pages/CustomerCheckoutPage'));
+const CustomerOrdersPage = lazy(() => import('./pages/CustomerOrdersPage'));
+
+function PageRouteLoader() {
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+      <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
+      <span className="text-xs font-semibold text-slate-500 tracking-wide">Loading PlumbMart...</span>
+    </div>
+  );
+}
 import { CheckCircle2 } from 'lucide-react';
 import { 
   getCustomerCart, 
@@ -369,7 +380,8 @@ export default function App() {
         </div>
       )}
 
-      <Routes>
+      <Suspense fallback={<PageRouteLoader />}>
+        <Routes>
         {/* Home Page at URL '/' */}
         <Route
           path="/"
@@ -532,6 +544,7 @@ export default function App() {
         {/* Fallback to Home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+    </Suspense>
     </BrowserRouter>
   );
 }
