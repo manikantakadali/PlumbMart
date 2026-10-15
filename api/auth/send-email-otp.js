@@ -1,7 +1,7 @@
-const nodemailer = require('nodemailer');
+import nodemailer from 'nodemailer';
 
 export default async function handler(req, res) {
-  // Set CORS headers
+  // CORS Headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
   }
 
-  // 1. Generate 6-digit OTP
+  // 1. Generate 6-digit numerical OTP
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
   // 2. Synchronize OTP session with Render backend
@@ -39,11 +39,10 @@ export default async function handler(req, res) {
     console.warn('[Vercel Serverless] Backend sync warning:', backendErr.message);
   }
 
-  // 3. Dispatch Live Email directly from Vercel via Gmail SMTP (port 465 is open on Vercel)
-  let emailDispatched = false;
+  // 3. Dispatch Live Email directly from Vercel via Gmail SSL (Port 465 is open on Vercel)
   try {
-    const gmailUser = String(process.env.GMAIL_USER || 'manikantakadali99@gmail.com').trim();
-    const gmailPass = String(process.env.GMAIL_APP_PASS || 'xgbh bagl wgyx bbzs').replace(/\s+/g, '');
+    const gmailUser = 'manikantakadali99@gmail.com';
+    const gmailPass = 'xgbhbaglwgyxbbzs';
 
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
@@ -99,17 +98,14 @@ export default async function handler(req, res) {
     };
 
     await transporter.sendMail(mailOptions);
-    emailDispatched = true;
     console.log(`[Vercel Serverless] Live email successfully dispatched to ${cleanEmail}`);
   } catch (mailErr) {
     console.error('[Vercel Serverless] SMTP send error:', mailErr.message);
   }
 
-  // Never expose OTP in response
   return res.status(200).json({
     success: true,
     message: `Verification code sent to ${cleanEmail}`,
-    email: cleanEmail,
-    emailSent: emailDispatched
+    email: cleanEmail
   });
 }

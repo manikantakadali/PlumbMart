@@ -6,28 +6,28 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const DB_FILE = path.join(__dirname, 'data', 'database.json');
 
 // Supabase PostgreSQL Connection Pool
-let pool = null;
-if (process.env.DATABASE_URL) {
-  pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-    max: 10,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000
-  });
+const defaultDbUrl = 'postgresql://postgres:manikanta2003@db.llcsnbixfqbjboricsqs.supabase.co:5432/postgres';
+const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || defaultDbUrl;
 
-  pool.on('error', (err) => {
-    console.error('[Supabase PostgreSQL Pool Error]', err.message);
-  });
-}
+const pool = new Pool({
+  connectionString,
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000
+});
 
-// Direct query wrapper for Supabase with 8s timeout guarantee
+pool.on('error', (err) => {
+  console.error('[Supabase PostgreSQL Pool Error]', err.message);
+});
+
+// Direct query wrapper for Supabase with 15s timeout guarantee
 async function query(text, params) {
   if (!pool) {
     throw new Error('Supabase database connection pool not initialized.');
   }
   const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Supabase query timed out')), 8000)
+    setTimeout(() => reject(new Error('Supabase query timed out')), 15000)
   );
   return Promise.race([pool.query(text, params), timeoutPromise]);
 }
