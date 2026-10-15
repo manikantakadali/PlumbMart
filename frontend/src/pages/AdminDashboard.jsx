@@ -222,6 +222,7 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   const [productCatFilter, setProductCatFilter] = useState('All');
   const [zohoSyncMeta, setZohoSyncMeta] = useState({
     state: 'Synced Live',
+    isLive: true,
     workbookId: 'WB-ZOHO-PLUMB-2026',
     sheet: 'Master_Inventory_Live',
     lastSyncedAt: new Date().toLocaleTimeString() + ' Today',
@@ -361,16 +362,43 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       }
     });
 
-    // 3. Fetch Products
-    resilientFetch('/api/products').then(data => {
-      if (data && data.success && Array.isArray(data.data)) {
-        setProducts(data.data);
+    // 3. Fetch Products & dynamically check Zoho Live connection
+    const checkZohoStatusAndProducts = async () => {
+      try {
+        const [prodData, zohoStatus] = await Promise.all([
+          resilientFetch('/api/products'),
+          resilientFetch('/api/zoho/status')
+        ]);
+        
+        const isLive = Boolean(prodData && prodData.isZohoLive) || Boolean(zohoStatus && zohoStatus.isConnected && zohoStatus.isTokenActive);
+        
+        if (prodData && prodData.success && Array.isArray(prodData.data)) {
+          setProducts(prodData.data);
+          setZohoSyncMeta(prev => ({
+            ...prev,
+            isLive: isLive,
+            state: isLive ? 'Synced Live' : 'Disconnected',
+            totalSkus: prodData.data.length,
+            errorsCount: isLive ? 0 : 1
+          }));
+        } else {
+          setZohoSyncMeta(prev => ({
+            ...prev,
+            isLive: isLive,
+            state: isLive ? 'Synced Live' : 'Disconnected',
+            errorsCount: isLive ? 0 : 1
+          }));
+        }
+      } catch (err) {
         setZohoSyncMeta(prev => ({
           ...prev,
-          totalSkus: data.data.length
+          isLive: false,
+          state: 'Disconnected',
+          errorsCount: 1
         }));
       }
-    });
+    };
+    checkZohoStatusAndProducts();
 
     // 4. Initial Orders Fetch
     fetchOrders(false);
@@ -447,31 +475,62 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   const handleTriggerZohoSync = async () => {
     setIsSyncingZoho(true);
     try {
-      const res = await fetch('http://localhost:4000/api/admin/zoho-sync', { method: 'POST' });
-      const data = await res.json();
-      if (data && data.success) {
+      let data = null;
+      try {
+        const res = await fetch('http://localhost:4000/api/admin/zoho-sync', { method: 'POST' });
+        data = await res.json();
+      } catch (e1) {
+        try {
+          const res = await fetch('http://localhost:5000/api/admin/zoho-sync', { method: 'POST' });
+          data = await res.json();
+        } catch (e2) {
+          const res = await fetch('/api/admin/zoho-sync', { method: 'POST' });
+          data = await res.json();
+        }
+      }
+
+      if (data && data.success && data.isZohoLive) {
         setZohoSyncMeta({
+          isLive: true,
           state: 'Synced Live',
-          workbookId: data.workbookId,
-          sheet: data.sheet,
-          lastSyncedAt: data.lastSyncedAt,
+          workbookId: data.workbookId || 'WB-ZOHO-PLUMB-2026',
+          sheet: data.sheet || 'Master_Inventory_Live',
+          lastSyncedAt: data.lastSyncedAt || (new Date().toLocaleTimeString() + ' Today'),
           totalSkus: data.totalSkusSynced || products.length,
           latencyMs: data.latencyMs || 142,
           errorsCount: 0
         });
         playSuccessSound();
         setSyncToast('Zoho Master Workbook successfully synchronized! 0 sync errors.');
+        
+        // Refresh products
+        resilientFetch('/api/products?refresh=true').then(pData => {
+          if (pData && pData.success && Array.isArray(pData.data)) {
+            setProducts(pData.data);
+          }
+        });
+      } else {
+        setZohoSyncMeta(prev => ({
+          ...prev,
+          isLive: false,
+          state: 'Disconnected',
+          errorsCount: 1,
+          lastSyncedAt: (data?.lastSyncedAt || new Date().toLocaleTimeString()) + ' Today'
+        }));
+        playWarningSound();
+        setSyncToast(data?.message || 'Zoho synchronization failed: Disconnected or No Data.');
       }
     } catch {
       const now = new Date();
       setZohoSyncMeta(prev => ({
         ...prev,
-        state: 'Synced Live',
+        isLive: false,
+        state: 'Disconnected',
         lastSyncedAt: now.toLocaleTimeString() + ' Today',
-        latencyMs: 135
+        errorsCount: 1
       }));
-      playSuccessSound();
-      setSyncToast('Zoho Master Workbook synchronized locally (Live Stream Active).');
+      playWarningSound();
+      setSyncToast('Zoho connection error: Unable to reach Zoho Workbook.');
     } finally {
       setIsSyncingZoho(false);
       setTimeout(() => setSyncToast(null), 3500);
@@ -1579,11 +1638,17 @@ export default function AdminDashboard({ currentUser, onLogout }) {
           {/* Zoho Sync Live Badge */}
           <div 
             onClick={handleTriggerZohoSync}
-            className="cursor-pointer hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs transition"
-            title="Click to force sync with Zoho Workbook"
+            className={`cursor-pointer hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border text-xs transition ${
+              zohoSyncMeta.isLive 
+                ? 'border-slate-800 hover:border-slate-700' 
+                : 'border-rose-900/60 hover:border-rose-700'
+            }`}
+            title={zohoSyncMeta.isLive ? "Click to force sync with Zoho Workbook (Live Connected)" : "Zoho Disconnected / Not Receiving Data - Click to retry"}
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-[11px] font-mono text-slate-300">Zoho Live: {zohoSyncMeta.state}</span>
+            <span className={`w-2 h-2 rounded-full ${zohoSyncMeta.isLive ? 'bg-emerald-500 animate-pulse' : 'bg-red-500 animate-pulse'}`}></span>
+            <span className={`text-[11px] font-mono ${zohoSyncMeta.isLive ? 'text-slate-300' : 'text-rose-400 font-semibold'}`}>
+              Zoho Live: {zohoSyncMeta.state}
+            </span>
             <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${isSyncingZoho ? 'animate-spin text-blue-400' : ''}`} />
           </div>
 
@@ -1899,18 +1964,20 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                 >
                   <div className="flex items-center justify-between text-slate-400">
                     <span className="text-xs font-semibold">Zoho Synchronization</span>
-                    <Layers className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                    <Layers className={`w-4 h-4 ${zohoSyncMeta.isLive ? 'text-emerald-400' : 'text-rose-400'} group-hover:scale-110 transition-transform`} />
                   </div>
                   <div className="flex items-baseline justify-between">
-                    <span className="text-2xl font-black text-emerald-400">
+                    <span className={`text-2xl font-black ${zohoSyncMeta.isLive ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {zohoSyncMeta.totalSkus} SKUs
                     </span>
-                    <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                      0 Errors
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      zohoSyncMeta.isLive ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'
+                    }`}>
+                      {zohoSyncMeta.isLive ? '0 Errors' : 'Disconnected'}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 truncate">
-                    {zohoSyncMeta.sheet} &bull; {zohoSyncMeta.latencyMs}ms
+                    {zohoSyncMeta.sheet} &bull; {zohoSyncMeta.isLive ? `${zohoSyncMeta.latencyMs}ms` : 'Offline'}
                   </p>
                 </div>
 
@@ -3668,16 +3735,24 @@ export default function AdminDashboard({ currentUser, onLogout }) {
               </div>
 
               {/* Zoho Synchronization Status Banner */}
-              <div className="bg-gradient-to-r from-emerald-950/60 to-slate-950 rounded-2xl border border-emerald-500/30 p-5 space-y-3">
+              <div className={`rounded-2xl border p-5 space-y-3 transition-colors ${
+                zohoSyncMeta.isLive 
+                  ? 'bg-gradient-to-r from-emerald-950/60 to-slate-950 border-emerald-500/30' 
+                  : 'bg-gradient-to-r from-rose-950/60 to-slate-950 border-rose-500/30'
+              }`}>
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></div>
+                    <div className={`w-3 h-3 rounded-full ${zohoSyncMeta.isLive ? 'bg-emerald-500 animate-ping' : 'bg-red-500'}`}></div>
                     <span className="font-bold text-sm text-white">
-                      Zoho Workbook Live Data Stream Active
+                      {zohoSyncMeta.isLive ? 'Zoho Workbook Live Data Stream Active' : 'Zoho Workbook Data Stream Offline / Disconnected'}
                     </span>
                   </div>
-                  <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
-                    Sync Latency: {zohoSyncMeta.latencyMs} ms
+                  <span className={`text-xs font-mono px-2.5 py-1 rounded-lg border ${
+                    zohoSyncMeta.isLive 
+                      ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' 
+                      : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                  }`}>
+                    {zohoSyncMeta.isLive ? `Sync Latency: ${zohoSyncMeta.latencyMs} ms` : 'Status: Disconnected / Fallback'}
                   </span>
                 </div>
 
@@ -3696,7 +3771,9 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase block">Sync Error Count</span>
-                    <span className="font-bold text-emerald-400">{zohoSyncMeta.errorsCount} Errors (All SKUs Healthy)</span>
+                    <span className={`font-bold ${zohoSyncMeta.isLive ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {zohoSyncMeta.errorsCount} Errors ({zohoSyncMeta.isLive ? 'All SKUs Healthy' : 'Zoho Disconnected'})
+                    </span>
                   </div>
                 </div>
 
@@ -3769,8 +3846,12 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                               <span className="font-mono font-bold text-white">{prod.stock} Units</span>
                             </td>
                             <td className="py-2.5 px-3">
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                Synced
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                zohoSyncMeta.isLive && (prod.isFromZoho !== false)
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                  : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                              }`}>
+                                {zohoSyncMeta.isLive && (prod.isFromZoho !== false) ? 'Synced' : 'Not Synced'}
                               </span>
                             </td>
                           </tr>
