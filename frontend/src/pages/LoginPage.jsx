@@ -742,19 +742,6 @@ export default function LoginPage({ onLoginSuccess }) {
                     </>
                   )}
                 </button>
-
-                {/* Quick 1-Click Dev Bypass */}
-                {devModeSkipOtp && (
-                  <button
-                    type="button"
-                    onClick={() => handleQuickLogin()}
-                    disabled={loading}
-                    className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] transition flex items-center justify-center gap-1.5 border border-slate-200 cursor-pointer"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    <span>⚡ Quick Dev Login ({role})</span>
-                  </button>
-                )}
               </div>
             </form>
           ) : (
