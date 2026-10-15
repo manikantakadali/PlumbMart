@@ -52,16 +52,70 @@ async function checkConnection() {
 
 // Local Database File Cache (Fallback)
 function getDb() {
+  let data = { admins: [], customers: [], dealers: [], plumbers: [], orders: [] };
   try {
-    if (!fs.existsSync(DB_FILE)) {
-      return { admins: [], customers: [], dealers: [], plumbers: [], orders: [] };
+    if (fs.existsSync(DB_FILE)) {
+      const raw = fs.readFileSync(DB_FILE, 'utf-8');
+      data = JSON.parse(raw);
     }
-    const raw = fs.readFileSync(DB_FILE, 'utf-8');
-    return JSON.parse(raw);
   } catch (err) {
     console.error('Error reading local database file:', err);
-    return { admins: [], customers: [], dealers: [], plumbers: [], orders: [] };
   }
+
+  // Ensure default super admin always exists
+  if (!Array.isArray(data.admins) || data.admins.length === 0) {
+    data.admins = [
+      {
+        id: "ADM-01",
+        name: "Super Administrator",
+        email: "kadalimanikanta2003@gmail.com",
+        password: "mani@2003",
+        pin: "507172",
+        passkey: "507172",
+        role: "Admin",
+        accessLevel: "SuperAdmin"
+      }
+    ];
+    saveDb(data);
+  }
+
+  // Ensure default dealer exists
+  if (!Array.isArray(data.dealers) || data.dealers.length === 0) {
+    data.dealers = [
+      {
+        id: "DLR-7598",
+        name: "Ravi Kumar",
+        contactPerson: "Ravi Kumar",
+        mobile: "9347486117",
+        email: "manikantakadali47@gmail.com",
+        role: "Dealer",
+        gstin: "29ABCDE3923F1Z5",
+        status: "ACTIVE",
+        zohoVerified: true,
+        city: "Bengaluru"
+      }
+    ];
+    saveDb(data);
+  }
+
+  // Ensure default plumber exists
+  if (!Array.isArray(data.plumbers) || data.plumbers.length === 0) {
+    data.plumbers = [
+      {
+        id: "PLB-01",
+        name: "plumber",
+        contactPerson: "plumber",
+        mobile: "9347486117",
+        email: "manikantakadali6117@gmail.com",
+        role: "Plumber",
+        status: "VERIFIED",
+        city: "Bengaluru"
+      }
+    ];
+    saveDb(data);
+  }
+
+  return data;
 }
 
 function saveDb(data) {
